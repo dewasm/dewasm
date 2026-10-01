@@ -6,7 +6,7 @@ module SQLite3
   class Exception < ::StandardError
     attr_reader :code
     # The real gem exposes the SQL and error offset on newer versions; Rails feature-detects them.
-    # So plain readers returning nil-ish defaults are enough to keep it happy.
+    # So plain readers that return `nil` by default are enough to keep it happy.
     attr_reader :sql, :sql_offset
 
     def initialize(message = nil, code: nil, sql: nil, sql_offset: nil)

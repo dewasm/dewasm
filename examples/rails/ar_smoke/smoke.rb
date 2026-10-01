@@ -1,6 +1,6 @@
 # ActiveRecord on the dewasm sqlite3 shim, without Rails.
 # It covers migration, CRUD, transactions, type round-trips, and joins.
-# Run: bundle exec ruby smoke.rb
+# Run: `bundle exec ruby smoke.rb`
 require "active_record"
 require "fileutils"
 require "logger"
@@ -74,7 +74,7 @@ assert reloaded.author == alice, "belongs_to"
 # Prepared-statement cache reuse (same SQL executed repeatedly)
 10.times { |i| assert Post.where(title: "Hello dewasm").count == 1, "stmt cache #{i}" if i == 9 }
 
-# Update / delete counters
+# `update`/`delete` counters
 post.update!(rating: 5.0)
 assert Post.find(post.id).rating == 5.0, "update"
 assert Post.where("rating >= ?", 5.0).count == 1, "where with bind"
@@ -96,7 +96,7 @@ rescue ActiveRecord::RecordNotUnique
   puts "ok: RecordNotUnique"
 end
 
-# NOT NULL violation
+# NOT NULL constraint failure
 begin
   Author.create!(name: nil)
   raise "FAIL: expected NotNullViolation"
@@ -104,7 +104,7 @@ rescue ActiveRecord::NotNullViolation
   puts "ok: NotNullViolation"
 end
 
-# Foreign-key violation (pragma foreign_keys=ON is a DEFAULT_PRAGMA)
+# Foreign-key constraint failure (`PRAGMA foreign_keys=ON` is a DEFAULT_PRAGMA)
 begin
   Post.create!(author_id: 999_999, title: "orphan")
   raise "FAIL: expected InvalidForeignKey"
@@ -116,7 +116,7 @@ end
 assert Author.joins(:posts).where(posts: { rating: 5.0 }).first&.name == "alice", "join"
 assert Post.maximum(:rating) == 5.0, "aggregate"
 
-# insert_all (multi-row) & pluck
+# `insert_all` (multi-row) & `pluck`
 Author.insert_all([{ name: "dave" }, { name: "erin" }])
 assert Author.order(:name).pluck(:name) == %w[alice bob dave erin], "insert_all + pluck"
 
@@ -124,7 +124,7 @@ assert Author.order(:name).pluck(:name) == %w[alice bob dave erin], "insert_all 
 bob.destroy!
 assert Author.where(name: "bob").count == 0, "destroy"
 
-# Schema introspection (Rails reads sqlite_master / table_info heavily)
+# Schema reads (Rails reads `sqlite_master` / `table_info` heavily)
 assert (%w[authors posts] - ActiveRecord::Base.connection.tables).empty?, "tables"
 cols = ActiveRecord::Base.connection.columns(:posts).map(&:name)
 assert cols.include?("thumbnail"), "columns introspection"

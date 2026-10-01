@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Regenerate the dewasm-generated NES library and syntax-check the frontend.
-# nes_gen.sh is generated code and is gitignored.
-# So this step has to run before main.sh can source it from a clean checkout.
-# There's no compile step for bash; `bash -n` stands in for one.
+# `nes_gen.sh` is generated code and is ignored by Git.
+# So this step has to run before `main.sh` can source it from a clean checkout.
+# There's no compile step for Bash; `bash -n` stands in for one.
 set -euo pipefail
 
 if (( BASH_VERSINFO[0] < 5 )); then

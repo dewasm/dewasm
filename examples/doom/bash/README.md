@@ -20,7 +20,8 @@ This is an existence-proof example, not a playable game, and the numbers say so 
 Both were measured on an Apple Silicon laptop, headless.
 DOOM's internal tic rate is 35Hz, 34,000x faster than what this frontend delivers.
 Rendering itself does not limit the speed.
-Sampling and drawing one frame into the terminal costs well under a second, discussed below.
+That is because sampling and drawing one frame into the terminal costs well under a second.
+That cost is discussed below.
 The wasm execution is Bash interpreting the shareware episode's game logic and software renderer.
 It runs line by line, with no JIT and no compiled fast path.
 That execution is the entire cost, and it is a large one:
@@ -67,7 +68,7 @@ That makes one 19MB script that runs anywhere with Bash >= 5, with no dewasm rep
 A prebuilt copy is published as a **[Gist](https://gist.github.com/makenowjust/b1e9c2a585183f41a5f8f61b4bc9924c)**.
 
 It is a Gist rather than a file in this repository on purpose.
-dewasm is MIT, but the built artifact embeds the GPL-2.0 DOOM engine and the shareware WAD.
+That is because dewasm is MIT, but the artifact embeds the GPL-2.0 DOOM engine and shareware WAD.
 The engine is `doomgeneric`, via `jacobenget/doom.wasm`.
 The artifact is therefore distributed separately under the engine's terms.
 Its header carries the attribution and license notes.
@@ -93,7 +94,7 @@ A repeated SGR escape is still skipped, which reduces output a lot on DOOM's fla
 
 Terminals deliver key *presses* only, never releases.
 At 34 seconds a tick, a timer-based hold (`../ruby`'s approach) doesn't map onto anything meaningful.
-Instead, the keys pressed since the last tick get a `reportKeyDown` immediately before `tickGame`.
+So instead, the keys pressed since the last tick get a `reportKeyDown` immediately before `tickGame`.
 A matching `reportKeyUp` follows immediately after, one tick of "held down."
 That is as fine-grained as input can possibly get at this frame rate.
 

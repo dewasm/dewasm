@@ -59,7 +59,7 @@ The change has these parts:
   `a` plus the `, ` between the arguments replaces the ` + ` with the same byte count.
   That is decision 75's naming rule.
 - A constant add operand keeps the one-argument unit (`i32_load(l0 + 4)`).
-  The unit's reduction of the site's sum already implements the wrap.
+  That is because the unit's reduction of the site's sum already implements the wrap.
   The constant must not migrate into an offset argument, whose addition does not wrap.
 - A dynamic add under a nonzero IR offset keeps the `o` shape (`i32_loado(x + y, off)`).
   The sum wraps at the site's kept mask or inside the unit's base reduction.
@@ -89,7 +89,7 @@ On `merman` it gets smaller by 0.09% and 0.12%.
 
 - **Reusing the `o` units for dynamic adds.**
   Unsound in both directions, as in the context.
-  The offset addition must not wrap and the dynamic addition must.
+  That is because the offset addition must not wrap and the dynamic addition must.
 - **A per-site `& 0xffffffff` around the sum.**
   That is the shape decision 76 just removed.
   The unit already reduces its address, so the site's wrap is extra work resident at every site.

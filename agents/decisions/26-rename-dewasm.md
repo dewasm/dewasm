@@ -14,7 +14,7 @@ Decision 0 named the project `dewasmify` ("strips the wasm out").
 In use, the name is four syllables and hard to say.
 The `-ify` suffix adds no meaning that `de-` doesn't already carry.
 A rename only gets more expensive.
-After 0.1 the name is in release artifacts, user scripts, and (potentially) crates.io.
+That is because after 0.1 the name is in releases, user scripts, and (potentially) crates.io.
 
 Availability was checked on 2026-07-25.
 No `dewasm` crate exists on crates.io (the API returns 404).
@@ -39,7 +39,7 @@ The 0.1 checklist owns that call.
 - **Keep `dewasmify`**: avoids one commit that touches everything.
   The friction is then paid on every future mention of the project.
 - **Rename after 0.1**: strictly more expensive.
-  Released artifacts, tags, and external references would then also need aliases.
+  That is because released artifacts, tags, and external references would then also need aliases.
 
 ## Consequences
 

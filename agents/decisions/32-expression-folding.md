@@ -72,7 +72,7 @@ Also spill the pendings whose trap must fire first, per statement kind:
   So values that cross a control boundary stay materialized.
   The `if` condition is folded into the frame first.
 - `select`: `cond` folds freely, but a trapping `then`/`els` arm is spilled.
-  wasm always evaluates both arms.
+  That is because wasm always evaluates both arms.
   Ruby/Java/Python/Bash lower `select` to a conditionally-evaluated ternary, though.
   So only trap-free arms may be inlined.
 - `drop`: a trapping pending is spilled (its trap must fire); a pure one is dropped.
@@ -85,7 +85,7 @@ It also bounds the worst-case growth of the text in some backends.
 Those are backends whose inline lowerings repeat an operand.
 
 Two backend adjustments were needed.
-Folded expressions now reach code that assumed plain-variable operands:
+That is because folded expressions now reach code that assumed plain-variable operands:
 
 - **Go** rejects a compile-time constant conversion outside the destination range.
   An example is `int32(uint32(4294967231))`.

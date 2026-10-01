@@ -46,7 +46,7 @@ So `a + b & 0xffffffff` is the i32 wrap, correctly, and `a & b | c` is `(a & b) 
 
 **The table is conservative wherever Ruby's grammar is not plainly on our side.**
 The reason is that [decision 1](1-ir-design.md) puts correctness of generated code above its readability.
-This change buys only bytes.
+That is also because this change buys only bytes.
 The conservative rules are these:
 
 - The comparison and equality families are non-associative.
@@ -58,7 +58,7 @@ The conservative rules are these:
   The exception is `& | ^` with the identical operator.
   There, integer associativity makes the flattening exact.
   `+` and `*` are excluded from that exception on purpose.
-  They carry floats here, and float addition is not associative.
+  That is because they carry floats here, and float addition is not associative.
 - A negative numeric literal binds like a unary expression, not like an atom.
   So it is put in parentheses in receiver position.
 - The ternary is right-associative: only its else-branch may hold another one without parentheses.
@@ -119,6 +119,6 @@ Where the table has no clear answer, the parentheses stay.
   The specification harness ([decision 3](3-testing-strategy.md)) is what says the shapes are right.
 - The other backends still put parentheses around every expression.
   Each follows in its own change, against its own language's table.
-  The differences that matter here are exactly the ones that differ per language.
+  That is because the differences that matter here are exactly the ones that differ per language.
   Those are `&` versus comparisons, and non-associative equality.
   So a shared framework would have to take as input everything that makes it correct.

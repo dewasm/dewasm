@@ -78,4 +78,4 @@ The held-button bit mask `setInput` wants every tick falls out of them directly.
 | F1 | Show or hide the on-screen status bar |
 | q / Escape | Exit |
 
-The bundled ROM is [Alter Ego](https://forums.nesdev.org/viewtopic.php?t=7999) by Shiru, released into the public domain.
+The example ROM is [Alter Ego](https://forums.nesdev.org/viewtopic.php?t=7999) by Shiru, released into the public domain.

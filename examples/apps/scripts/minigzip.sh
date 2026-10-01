@@ -2,22 +2,22 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# minigzip: zlib's stdio (de)compression demo, built with wasi-sdk.
-# It is built from the pinned zlib source release.
-# It is integer-only and tiny, with binary stdin/stdout.
+# `minigzip`: the stdio compression and decompression example of `zlib`, built with `wasi-sdk`.
+# It is built from the `zlib` source release at a fixed version.
+# It is integer-only and tiny, with binary `stdin`/`stdout`.
 # That is the byte-exact-stdio stress that runs under BOTH backends.
-# No upstream distributes a wasm32-wasi minigzip, so it is compiled locally.
-# The gz stream zlib writes here is deterministic (mtime 0, OS byte 3).
-# So wasmtime's output and the converted backends' output are byte-identical.
+# No upstream distributes a wasm32-wasi `minigzip`, so it is compiled locally.
+# The `gzip` stream `zlib` writes here is deterministic (`mtime` 0, OS byte 3).
+# So the output of `wasmtime` and the converted backends' output are byte-identical.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 ZLIB_URL="https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz"
 ZLIB_SHA256="9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23"
 ZLIB_DIR="zlib-1.3.1"
-# The zlib translation units minigzip.c needs.
-# Z_HAVE_UNISTD_H makes the shipped zconf.h include <unistd.h>, so lseek is declared.
-# wasi-libc has it; without the define, clang errors on the implicit declaration.
+# The `zlib` translation units minigzip.c needs.
+# Z_HAVE_UNISTD_H makes the shipped zconf.h include <unistd.h>, so `lseek` is declared.
+# `wasi-libc` has it; without the define, `clang` errors on the implicit declaration.
 ZLIB_SRCS=(
   adler32.c compress.c crc32.c deflate.c gzclose.c gzlib.c gzread.c gzwrite.c
   infback.c inffast.c inflate.c inftrees.c trees.c uncompr.c zutil.c
@@ -40,7 +40,7 @@ tar xzf "$tmp/zlib.tar.gz" -C "$tmp"
 echo "minigzip: building minigzip.wasm (wasi-sdk clang)"
 srcs=()
 for s in "${ZLIB_SRCS[@]}"; do srcs+=("$tmp/$ZLIB_DIR/$s"); done
-# --strip-debug drops the DWARF wasm-opt cannot parse.
+# --strip-debug drops the DWARF `wasm-opt` cannot parse.
 wasi_sdk_clang -O2 -DZ_HAVE_UNISTD_H -I "$tmp/$ZLIB_DIR" -Wl,--strip-debug \
   "${srcs[@]}" "$tmp/$ZLIB_DIR/test/minigzip.c" \
   -o cache/minigzip.wasm

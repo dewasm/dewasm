@@ -71,12 +71,12 @@ The reasoning started from two facts.
 Results come back through global variables, and the exit status is the trap channel.
 So a thunk had nowhere to live that a call site did not already read.
 That was wrong, and it is corrected here rather than quietly dropped.
-The thunk lives exactly where results already live.
+That is because the thunk lives exactly where results already live.
 No call site reads it, because the entry consumes it before returning.
 Bash parks the target and its arguments in `<p>tlfn`/`<p>tlargs`.
 The entry's trampoline runs the chain.
 So the entry keeps the name, arity, `R<i>` results, and exit status its callers already use.
-Nothing outside a tail-calling function changes.
+So nothing outside a tail-calling function changes.
 
 Two things make it easier there than in the backends that got the feature first:
 - The table stores function *names*, so `return_call_indirect` needs no closure.
@@ -97,7 +97,7 @@ The two are not the same shape of change.
 Treating them as one is what produced the wrong call.
 
 `return_call_ref` stays rejected.
-It belongs to the function-references proposal, which no app in the app list needs.
+The reason: it belongs to the function-references proposal, which no app in the app list needs.
 
 Code this governs:
 - `crates/dewasm-core/src/{ir,func,module}.rs`.
@@ -118,7 +118,7 @@ Code this governs:
   Each such stack change is tuned by hand, and each is a silent CI failure away from breaking.
 - **Rewrite tail calls into ordinary calls in the core IR, so no backend has to change.**
   Correct results, wrong space.
-  The mutual recursion in the conformance suite overflows every backend's host stack.
+  That is because the mutual recursion in the conformance suite overflows every backend's host stack.
   The whole point of the proposal is the space guarantee.
 - **A self-tail-call to loop rewrite in the core IR as the mechanism.**
   It covers direct self-recursion only, and the suite's `even`/`odd` pair is mutual.

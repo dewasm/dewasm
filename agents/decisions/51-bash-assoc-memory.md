@@ -10,7 +10,7 @@ It now finishes in ~3.3 minutes.
 ## Context
 
 Bash indexed arrays are linked lists with a last-reference cursor.
-Element access then costs O(distance from the previous access).
+So element access costs O(distance from the previous access).
 Measured with 4M elements set:
 - ~100k operations/sec in order;
 - ~767 operations/sec random;
@@ -39,7 +39,7 @@ Consequences of the representation, fixed here:
   The invariant is stated in `runtime/bash/units/mem/check.sh`.
 - Sparse reads still default to 0 (no `set -u` anywhere in the backend or harness).
 - Data segments and tables **stay indexed**.
-  Their elements sit next to each other, and (for segments) they are immutable staging data.
+  That is because their elements are contiguous and (for segments) immutable staging data.
   There the linked list with cursor is optimal.
 - The emitter declares memory with `declare -gA <p>mem=()`.
   This both forces the associative kind and empties a re-instantiated prefix.
@@ -57,7 +57,7 @@ Consequences of the representation, fixed here:
   Data-segment loading is a third.
   The byte-wise WASI stdio is [decision 12](12-bash-wasi.md)'s.
   Left as a possible later decision on top of this one.
-  The complexity is not needed to make real modules run.
+  That is because the complexity is not needed to make real modules run.
 - **Inline the bounds check / load-store bodies into generated code.**
   Attacks function-call overhead (~4.8x available).
   It does not attack the access-complexity class that actually blocked DOOM.

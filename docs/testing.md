@@ -27,7 +27,7 @@ The following tools and set-up steps are required to run all tests correctly:
 - **Testsuite submodules**: initialize them once with `git submodule update --init`.
 - **The `.wasm` apps cache**: initialize it once with `examples/apps/setup.sh`.
   Re-run it after pulling a change that moves an app to a new version.
-  A cached copy of the previous version is a different program.
+  That is because a cached copy of the previous version is a different program.
   `examples/apps/setup.sh --check` names any that are out of date without fetching.
   * Cached `.wasm` files are located in `examples/apps/cache`.
   * Building some apps from source needs more:

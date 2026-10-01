@@ -13,8 +13,8 @@ module SQLite3
 
     def initialize
       # Preopening "/" at "/" makes guest paths identical to host paths.
-      # So the database file lands wherever Rails configured it.
-      # Sandbox caveats are accepted: this is a demo embedding, not a sandbox.
+      # So the database file lands wherever the Rails configuration puts it.
+      # The loss of sandboxing is accepted: this is an example embedding, not a sandbox.
       @mod = Sqlite3Wasm.new({}, preopens: { "/" => "/" })
       @mod.invoke("_initialize")
       @mem = @mod.memory
@@ -46,10 +46,10 @@ module SQLite3
       p
     end
 
-    # Copy raw bytes (no terminator) into the guest.
+    # Copy raw bytes (no NUL at the end) into the guest.
     # Caller frees.
-    # Returns [ptr, bytesize]; ptr is 0 only for the empty string.
-    # In that case a 1-byte allocation still gives sqlite a non-NULL base pointer.
+    # Returns `[ptr, bytesize]`; `ptr` is 0 only for the empty string.
+    # In that case a 1-byte allocation still gives SQLite a non-NULL base pointer.
     def bytes_in(str)
       bytes = str.to_s.b
       size = bytes.bytesize
@@ -72,7 +72,7 @@ module SQLite3
       @mem.read_string(ptr, len).b
     end
 
-    # NUL-terminated string; scans in chunks rather than per byte.
+    # Reads a NUL-terminated string, scanning in chunks rather than per byte.
     def read_cstr(ptr)
       return nil if ptr.zero?
       buf = @mem.buffer

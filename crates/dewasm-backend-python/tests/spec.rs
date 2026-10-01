@@ -16,7 +16,7 @@
 //!   The error is mapped to `call stack exhausted`.
 //!   This is the guest-side counterpart of the harness's `convert_on_big_stack`.
 //!   `check_exhaust` lowers the limit around itself.
-//!   There the limit is not a margin but the entire cost of the check.
+//!   That is because the limit there is not a margin but the entire cost of the check.
 //!   See the comment on `_EXHAUST_RECURSION_LIMIT`.
 
 use std::collections::BTreeSet;
@@ -36,14 +36,25 @@ use wast::{WastArg, WastRet};
 /// `Rt.check_import_kind` validates the *kind* of a resolved import but not its finer wasm type.
 /// That type is a global's mutability, a table/memory's limits, or a function's signature.
 /// So the `assert_unlinkable` cases that test those stay known gaps.
-/// So do the two `linking`-tagged cases that observe out-of-date state.
-/// They are downstream of a declared-unsupported feature.
-/// That feature is multi-memory, in a module that also happens to `register`.
+/// So do the two `linking`-tagged cases, described below.
 /// `imports.wast` moved 28 -> 59 for the same reason it did for Ruby (decision 19).
 /// Its "test" fixture module exports a tag, so it did not convert before exception handling landed.
 /// Now that it does, every `assert_unlinkable` case downstream of it runs into the same gap.
 /// Those cases check function signatures, global types, and tag parameter types.
 /// It is the same kind-not-type gap, with no new mechanism.
+///
+/// `linking` (`linking0`, `load1`): out-of-date state left by a module that never converts.
+/// The module that calls `register` is not the one that uses multi-memory.
+/// `linking0` registers `$Mt`, which has one table and no memory.
+/// `load1` registers `$M`, which exports its one memory.
+/// A later module imports that table or memory and writes into it as it instantiates.
+/// That later module declares several memories, and multi-memory is declared unsupported.
+/// So it never converts, and its writes never happen.
+/// A later assertion against the registered module then observes out-of-date state.
+/// In `linking0`, slot 7 of `$Mt`'s table stays null (1 failure).
+/// The write must persist there although the writing module's instantiation then traps.
+/// In `load1`, bytes 20 to 24 of `$M`'s memory stay zero (5 failures).
+/// This is not a gap in cross-module linking itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 59, "import-limits"),
     ("imports2", 2, "import-limits"),

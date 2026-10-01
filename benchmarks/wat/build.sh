@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# Assemble the hand-written .wat microbenchmarks into benchmarks/cache/wat/<id>.wasm.
+# Assemble the hand-written `.wat` microbenchmarks into `benchmarks/cache/wat/<id>.wasm`.
 # So every runner in the suite consumes byte-identical modules.
 #
-# The .wat sources are checked in; the built .wasm is not, like everything else under cache/.
+# The `.wat` sources are checked in; the built `.wasm` is not, like everything else under `cache/`.
 # Run this after editing one, or via `benchmarks/setup.sh`.
-# That script calls it together with the C family's benchmarks/c/build.sh.
+# That script calls it together with the C family's `benchmarks/c/build.sh`.
 #
 # Idempotent, and cheap enough that it just rebuilds unconditionally.
 
@@ -23,13 +23,13 @@ require_tool() {
 
 require_tool wat2wasm "install wabt (brew install wabt / apt install wabt)"
 
-# wabt turns the post-baseline proposals on by default.
+# WABT turns the post-baseline proposals on by default.
 # 1.0.42 dropped the --enable-exceptions spelling entirely.
 # So each case turns them all off and re-enables only the proposal it names.
 # The universally-emitted baseline stays on everywhere, since every backend accepts it.
-# It is sign extension, saturating float-to-int, multi-value, bulk memory, and mutable globals.
-# reference-types is absent: wabt encodes an exception tag through it.
-# So disabling it fails the eh_* cases.
+# It is sign extension, saturating float-to-integer, multi-value, bulk memory, and mutable globals.
+# `reference-types` is missing: WABT encodes an exception tag through it.
+# So disabling it fails the `eh_*` cases.
 post_baseline=(
   --disable-exceptions
   --disable-tail-call

@@ -16,7 +16,8 @@ static final int WASI_IO = 29;
 static final int WASI_NOSYS = 52;
 static final int WASI_SPIPE = 70;
 // NOTCAPABLE lives in the prelude, which is always bundled (not in `errno_fs`).
-// The per-descriptor rights model returns it from core `fd_read`/`fd_write`/`fd_seek` too.
+// That is because the per-descriptor rights model returns it from core calls too.
+// Those are `fd_read`/`fd_write`/`fd_seek`.
 // It is not only returned from the `path_*` units that pull in `errno_fs`.
 static final int WASI_NOTCAPABLE = 76;
 

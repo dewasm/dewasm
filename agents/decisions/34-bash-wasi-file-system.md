@@ -32,7 +32,7 @@ That left a 15-function gap versus Ruby.
 It closed noting that a Bash file system backend "would need its own decision".
 This is it.
 Bash makes the design different in kind, not degree, from Ruby's `File`-backed descriptors.
-Bash has no random-access file object, no `openat`, and no `realpath`/`readlink`/`stat` builtin.
+That is because Bash has no random-access file object, no `openat`, no `realpath`/`readlink`/`stat` builtin.
 Under [decision 5](5-bash-softfloat.md)'s dependency criterion it has no license to shell out for them either.
 The decisions below are what that leaves possible.
 
@@ -78,7 +78,7 @@ That is read, write, `stat` by test builtins, and listing by globbing.
 Runtime units are bundled per import ([decision 6](6-runtime-units.md)).
 So a module that imports none of the four carries none of these commands.
 It stays a pure Bash artifact.
-[Decision 5](5-bash-softfloat.md)'s promise then still holds for every program that does not need namespace mutation.
+So [decision 5](5-bash-softfloat.md)'s promise still holds for every program that does not need namespace mutation.
 That is the property worth protecting.
 
 ### D3: Sandboxing by physical resolution plus containment per directory descriptor
@@ -96,7 +96,8 @@ With no `readlink`, a **file** symbolic link as the final path component cannot 
 It resolves to `ELOOP`, stricter than Ruby, which follows it.
 A **directory** symbolic link is still followed because `cd -P` resolves it.
 Decision 14's check-then-open TOCTOU limit carries over unchanged.
-This is a single-process research and example runtime, not a sandbox host shared by many users.
+That is because this is a single-process research and example runtime.
+It is not a sandbox host shared by many users.
 
 ### D4: `poll_oneoff` waits in pure Bash
 
@@ -145,7 +146,7 @@ They are the file system equivalent of decision 12's clock fallback.
   Honest to decision 5, but it leaves the surface permanently unable to create and remove files.
   SQLite's journal/WAL life cycle (decision 14's stated goal) needs those files and directories.
   The impossibility argument (D2) tips it.
-  This is the one capability pure Bash *cannot* provide.
+  That is because this is the one capability pure Bash *cannot* provide.
   So it is the one place the criterion earns a narrow exception.
 - **Loadable builtins (`enable -f mkdir.so`).**
   A platform-specific `.so` is a heavier and less portable dependency than a POSIX command.
@@ -155,7 +156,7 @@ They are the file system equivalent of decision 12's clock fallback.
   The standalone `--dir` snapshots, captured under Wasmtime (decision 9), would not match.
 - **General external-command use for the rest of the surface** (`od`/`dd` for bytes, `stat` for status).
   Rejected as decision 5 always rejected them.
-  Those capabilities *can* be expressed in pure Bash (byte-wise `read`/`printf`, test builtins).
+  That is because those *can* be expressed in pure Bash (byte-wise `read`/`printf`, test builtins).
   So there is no impossibility to license the exception.
 
 ## Consequences

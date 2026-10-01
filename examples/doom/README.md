@@ -12,7 +12,7 @@ Its host interface has ten functions.
 - [`ruby/gui/`](ruby/gui/): the same generated Ruby library in a window, with [Gosu](https://www.libgosu.org/).
   The 640x400 framebuffer is DOOM's native 320x200, scaled up by 2.
   It therefore sends a quarter of the pixels to the GPU.
-  The render cost does not grow with the window.
+  So the render cost does not grow with the window.
 - [`codon/`](codon/): [Codon](https://github.com/exaloop/codon), the same terminal renderer with the terminal driven through `libc`.
   Codon is a statically typed Python dialect compiled ahead of time.
   The tick rate is unmeasured, since the `--smoke` sample is too short to quote.

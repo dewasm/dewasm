@@ -38,7 +38,7 @@ Every gem feature that would need a guest→host callback is re-expressed on gue
 Each `SQLite3::Database` instantiates its own wasm module (isolated heap).
 A mutex lets one thread enter at a time.
 So a connection-pool entry is an isolated SQLite.
-Thread-safety then never depends on guest-global state.
+So thread-safety never depends on guest-global state.
 The C surface this requires is exported by extending `SQLITE_EXPORTS` in `examples/apps/setup.sh`.
 The stamp now covers the export lists, so edits retrigger the build.
 

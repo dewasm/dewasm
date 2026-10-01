@@ -2,35 +2,38 @@
 
 # Shared helpers for the per-app fetch/build scripts in this directory.
 #
-# Every scripts/<name>.sh sources this file.
+# Every `scripts/<name>.sh` sources this file.
 # Then it gets its wasm in one of two ways:
-# - download a pinned, checksum-verified prebuilt wasm;
-# - build one from a pinned source release.
-# Third-party artifacts are never committed: everything lands in examples/apps/cache/ (gitignored).
-# The apps e2e test fails loudly when the cache is absent.
+# - fetch a prebuilt wasm at a fixed version, and verify it against a fixed checksum;
+# - build one from a source release at a fixed version.
+# Third-party artifacts are never committed: everything lands in `examples/apps/cache/`.
+# That directory is ignored by Git.
+# The apps e2e test fails loudly when the cache is missing.
 #
-# Sourcing this file cd's to examples/apps and ensures cache/ exists.
-# So cache/ and src/ resolve the same way whether a script is run directly or via setup.sh.
+# Sourcing this file changes directory to `examples/apps` and ensures `cache/` exists.
+# So `cache/` and `src/` resolve the same way whether a script is run directly or via `setup.sh`.
 
 set -euo pipefail
 
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mkdir -p cache
 
-# Every download goes through fetch_url.
-# The pinned hosts (GitHub, sqlite.org, tcpdump.org, wasmer.io) return transient 5xx often.
+# Every fetch goes through `fetch_url`.
+# The hosts of the fixed sources (GitHub, sqlite.org, tcpdump.org, wasmer.io) often return 5xx.
+# Those errors are temporary.
 # Without retries that would kill a cold CI run (issue #17).
-# curl retries 408/429/5xx and refused connections.
+# `curl` retries 408/429/5xx and refused connections.
 fetch_url() {
   curl -fsSL --retry 5 --retry-delay 2 --retry-connrefused -o "$2" "$1"
 }
 
-# fetch_verified <url> <sha256> <out> [mirror...]: download and fail unless the bytes match the pin.
-# A mirror is tried only when the preceding source fails to download at all.
-# That means the host is gone, not merely flaky: fetch_url has already retried.
-# The sha256 pin is what makes a mirror safe to accept.
-# So bytes that download but do not match fail here instead of falling through.
-# That is a re-pin, not an outage.
+# `fetch_verified <url> <sha256> <out> [mirror...]`: fetch, and fail unless the bytes match.
+# The bytes are compared with the fixed SHA-256 checksum `<sha256>`.
+# A mirror is tried only when the preceding source fails to fetch at all.
+# That means the host is gone, not merely unreliable: `fetch_url` has already retried.
+# The fixed SHA-256 checksum is what makes a mirror safe to accept.
+# So bytes that are fetched but do not match fail here instead of falling through.
+# The fix is a new checksum; the host is not down.
 fetch_verified() {
   local url="$1" sha256="$2" out="$3"
   shift 3
@@ -45,7 +48,7 @@ fetch_verified() {
   exit 1
 }
 
-# require_tool <app> <cmd> [install-hint]: fail loudly when a build prerequisite is missing.
+# `require_tool <app> <cmd> [install-hint]`: fail loudly when a tool the build needs is missing.
 # The message names the app and, when given, how to install it.
 require_tool() {
   command -v "$2" >/dev/null && return
@@ -57,21 +60,21 @@ require_tool() {
   exit 1
 }
 
-# new_tmpdir: create a scratch dir in $tmp, removed when the script exits.
-# Each script is its own process, so the EXIT trap suffices: no manual cleanup/trap-reset needed.
+# `new_tmpdir`: create a scratch directory in `$tmp`, removed when the script exits.
+# Each script is its own process, so the `EXIT` trap is enough: no manual removal or trap reset.
 new_tmpdir() {
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' EXIT
 }
 
-# is_cached <stamp> <key> <output...>: true when every output exists and the stamp matches key.
-# The stamp records which pinned inputs the cached copy came from.
-# A re-pin refetches/rebuilds instead of silently keeping a stale copy.
-# A stale copy would fail the snapshot comparison inscrutably.
+# `is_cached <stamp> <key> <output...>`: true when every output exists and the stamp matches key.
+# The stamp records which fixed-version inputs the cached copy came from.
+# A new version or checksum refetches or rebuilds instead of silently keeping an out-of-date copy.
+# An out-of-date copy would fail the snapshot comparison with no clear cause.
 #
 # Under DEWASM_APPS_CHECK a mismatch is reported and the script exits 2 rather than fetching.
 # That is what `setup.sh --check` runs and what a consumer calls before reading the cache.
-# Hooking it here rather than in each script is deliberate.
+# Hooking it here rather than in each script is on purpose.
 # Every path that decides whether to rebuild goes through this one call, `fetch_app`'s included.
 is_cached() {
   local stamp="$1" key="$2"
@@ -88,28 +91,28 @@ is_cached() {
   [ "$fresh" = 0 ]
 }
 
-# write_stamp <stamp> <key>: record the pin the fresh artifacts came from.
+# `write_stamp <stamp> <key>`: record the fixed-version inputs the fresh artifacts came from.
 write_stamp() {
   printf '%s\n' "$2" >"$1"
 }
 
-# --- wasm-opt -O2 preprocessing for the locally-built modules.
+# --- The `wasm-opt -O2` pass over the locally-built modules.
 # Every module built from source here is post-processed.
-# Those are sqlite3, minigzip, libpcap, tree-sitter, and ripgrep.
-# The DWARF fixture is not, since it needs its debug info.
-# The pass shrinks the modules.
-# It also normalizes the overlong call_indirect immediates the LLVM toolchain emits.
+# Those are `sqlite3`, `minigzip`, `libpcap`, `tree-sitter`, and `ripgrep`.
+# The DWARF fixture is not, since it needs its debug information.
+# The pass makes the modules smaller.
+# It also normalizes the overlong `call_indirect` immediates the LLVM toolchain emits.
 # So the converter sees pure baseline wasm.
-# Baseline features only (never SIMD/atomics/EH) and no wasm-ctor-eval.
+# Baseline features only (never SIMD/atomics/EH) and no `wasm-ctor-eval`.
 # The stamp for each such module includes `wasm-opt --version`.
-# So a wasm-opt upgrade re-triggers the build.
+# So a new `wasm-opt` version re-triggers the build.
 WASM_OPT_FEATURES=(
   --enable-bulk-memory --enable-sign-ext --enable-nontrapping-float-to-int
   --enable-mutable-globals --enable-multivalue --enable-reference-types
 )
-# wasm_opt_inplace <wasm> [extra-flag...]: the shared pass, plus any flags one app needs.
-# sqlite3's mod build passes its inlining and stripping flags here.
-# The extra flags precede -O2: wasm-opt applies an option only to the passes named after it.
+# `wasm_opt_inplace <wasm> [extra-flag...]`: the shared pass, plus any flags one app needs.
+# The `sqlite3-mod` build passes its inlining and stripping flags here.
+# The extra flags precede -O2: `wasm-opt` applies an option only to the passes named after it.
 # So a flag placed after -O2 is accepted and does nothing.
 wasm_opt_inplace() {
   local w="$1"
@@ -117,14 +120,14 @@ wasm_opt_inplace() {
   wasm-opt "${WASM_OPT_FEATURES[@]}" "$@" -O2 "$w" -o "$w"
 }
 # The version string folded into a locally-built module's stamp.
-# It is empty when wasm-opt is absent, so the cache misses and the loud prereq check fires.
+# It is empty when `wasm-opt` is missing, so the cache misses and the loud tool check fires.
 wasm_opt_version() { wasm-opt --version 2>/dev/null || true; }
 
-# --- The C toolchain for the locally-compiled modules: wasi-sdk, located through WASI_SDK_PATH.
-# Local dev and CI use wasi-sdk-34; keep .github/workflows/ci.yml in sync.
+# --- The C toolchain for the locally-compiled modules: `wasi-sdk`, located through WASI_SDK_PATH.
+# Local development and CI use `wasi-sdk-34`; keep `.github/workflows/ci.yml` in sync.
 WASI_SDK_HINT="download wasi-sdk (local dev and CI use wasi-sdk-34, https://github.com/WebAssembly/wasi-sdk/releases) and set WASI_SDK_PATH to its root"
 
-# require_wasi_sdk <app>: fail loudly unless WASI_SDK_PATH points at a wasi-sdk root.
+# `require_wasi_sdk <app>`: fail loudly unless WASI_SDK_PATH points at a `wasi-sdk` root.
 require_wasi_sdk() {
   if [ -z "${WASI_SDK_PATH-}" ] || [ ! -x "$WASI_SDK_PATH/bin/clang" ]; then
     echo "$1: WASI_SDK_PATH does not point at a wasi-sdk root: $WASI_SDK_HINT" >&2
@@ -132,32 +135,34 @@ require_wasi_sdk() {
   fi
 }
 
-# wasi_sdk_clang <args...>: wasi-sdk's clang for the wasm32-wasip1 target.
+# `wasi_sdk_clang <args...>`: the `clang` of `wasi-sdk` for the `wasm32-wasip1` target.
 # It passes the flags every locally-compiled module shares.
-# Per-app choices (the reactor exec model, -O level, includes, --strip-debug) stay at the call site.
-# --no-wasm-opt: when a wasm-opt is on PATH, the driver otherwise runs it on the linked module.
-# That is an uncontrolled pass ahead of wasm_opt_inplace's pinned one.
+# Per-app choices stay at the call site.
+# Those are the reactor execution model, the -O level, includes, and --strip-debug.
+# `--no-wasm-opt`: when a `wasm-opt` is on PATH, the driver otherwise runs it on the linked module.
+# That is an uncontrolled pass ahead of the controlled one in `wasm_opt_inplace`.
 # It also drops the name section the sqlite3-mod build needs.
-# And it drops the DWARF the dwarf-fixture exists to carry.
+# And it drops the DWARF the `dwarf-fixture` exists to carry.
 wasi_sdk_clang() {
   "$WASI_SDK_PATH/bin/clang" --target=wasm32-wasip1 --no-wasm-opt "$@"
 }
 
 # The token every locally-built module's stamp folds in, so a toolchain switch retriggers the build.
 # It names the toolchain, not its version: artifact bytes may vary across toolchain versions.
-# That is fine because the snapshots pin program behavior, which the pinned sources fix.
+# That is fine because the snapshots check program behavior, which the fixed source versions set.
 wasi_sdk_stamp() { echo "cc:wasi-sdk"; }
 
-# wl_exports <sym...>: emit one -Wl,--export=<sym> per line.
-# The output is for mapfile into a clang argument array.
+# `wl_exports <sym...>`: emit one `-Wl,--export=<sym>` per line.
+# The output is for `mapfile` into a `clang` argument array.
 wl_exports() {
   local e
   for e in "$@"; do printf -- '-Wl,--export=%s\n' "$e"; done
 }
 
-# fetch_app <name> <url> <sha256> [wasm_path_in_tarball]: download a pinned prebuilt wasm.
-# It is a standalone .wasm asset when wasm_path is empty, else the named entry inside a .tar.gz.
-# Stamp = the source sha.
+# `fetch_app <name> <url> <sha256> [wasm_path_in_tarball]`: fetch a prebuilt wasm.
+# The wasm is at a fixed version and is checked against the fixed checksum `<sha256>`.
+# It is a standalone .wasm asset when `wasm_path` is empty, else the named entry inside a .tar.gz.
+# Stamp = the SHA-256 checksum of the source.
 fetch_app() {
   local name="$1" url="$2" sha256="$3" wasm_path="${4:-}"
   local out="cache/$name.wasm" stamp="cache/$name.src-sha256"
@@ -180,11 +185,11 @@ fetch_app() {
   echo "$name: -> $out"
 }
 
-# archive_extract_file <archive> <kind> <inner> <dest>: extract the single member <inner>.
-# The archive is a .zip / .tar.gz, and the member goes to <dest>.
-# The member goes through stdout (unzip -p / tar -O), so only that one member is unpacked.
+# `archive_extract_file <archive> <kind> <inner> <dest>`: extract the single member `<inner>`.
+# The archive is a `.zip` / `.tar.gz`, and the member goes to `<dest>`.
+# The member goes through `stdout` (`unzip -p` / `tar -O`), so only that one member is unpacked.
 # There is no scratch tree, and none of the bulk.
-# cruby's tarball carries a multi-hundred-MB static lib we never want on disk.
+# The CRuby tarball carries a static library of several hundred MB we never want on disk.
 archive_extract_file() {
   case "$2" in
     zip) unzip -p "$1" "$3" >"$4" ;;
@@ -192,12 +197,12 @@ archive_extract_file() {
   esac
 }
 
-# archive_extract_tree <archive> <kind> <inner> <destdir> [strip]: extract the subtree <inner>.
-# The archive is a .zip / .tar.gz, and the subtree goes into a fresh <destdir>.
-# <strip> leading path components are dropped, so it lands at <destdir>/<inner-minus-strip>.
-# Only <inner> is unpacked, not the whole archive.
-# zip has no strip flag, so the zip path only supports strip=0 (all it is asked for).
-# A strip>0 zip would need extend-and-relocate, added when something needs it.
+# `archive_extract_tree <archive> <kind> <inner> <destdir> [strip]`: extract the tree `<inner>`.
+# The archive is a `.zip` / `.tar.gz`, and the tree goes into a fresh `<destdir>`.
+# `<strip>` leading path components are dropped, so it lands at `<destdir>/<inner-minus-strip>`.
+# Only `<inner>` is unpacked, not the whole archive.
+# `unzip` has no strip flag, so the `zip` path only supports `strip=0` (all it is asked for).
+# A `zip` with `strip>0` would need extend-and-relocate, added when something needs it.
 # Until then it fails; it does not guess.
 archive_extract_tree() {
   local ar="$1" kind="$2" inner="$3" dest="$4" strip="${5:-0}"
@@ -217,19 +222,19 @@ archive_extract_tree() {
   esac
 }
 
-# fetch_runtime_with_stdlib <name> <url> <sha256> <wasm_inner> <tree_inner> [strip]
-# The prebuilt language-runtime pattern (cpython, cruby) uses a checksum-pinned archive.
-# From it we take the interpreter binary (<wasm_inner> -> cache/<name>.wasm).
-# We also take the stdlib tree it reads at startup.
-# That is <tree_inner>, minus <strip> leading components -> cache/<name>-lib/.
-# The archive kind is inferred from the URL, so callers stay format-agnostic.
-# Stamp = the sha.
-# It skips on a cache hit: the wasm and the stdlib-tree marker present, stamp matching.
+# `fetch_runtime_with_stdlib <name> <url> <sha256> <wasm_inner> <tree_inner> [strip]`
+# The prebuilt language-runtime pattern (CPython, CRuby) uses an archive with a fixed checksum.
+# From it we take the interpreter binary (`<wasm_inner>` -> `cache/<name>.wasm`).
+# We also take the standard library tree it reads at start.
+# That is `<tree_inner>`, minus `<strip>` leading components -> `cache/<name>-lib/`.
+# The archive kind is taken from the URL, so callers need not know the format.
+# Stamp = the SHA-256 checksum.
+# It skips on a cache hit: the wasm and the marker of the library tree present, stamp matching.
 fetch_runtime_with_stdlib() {
   local name="$1" url="$2" sha256="$3" wasm_inner="$4" tree_inner="$5" strip="${6:-0}"
   local wasm="cache/$name.wasm" lib="cache/$name-lib"
-  # Marker = where the stdlib tree lands.
-  # That is tree_inner with `strip` leading components removed, under cache/<name>-lib/.
+  # Marker = where the standard library tree lands.
+  # That is `tree_inner` with `strip` leading components removed, under `cache/<name>-lib/`.
   local stripped="$tree_inner" n="$strip"
   while ((n-- > 0)); do stripped="${stripped#*/}"; done
   local marker="$lib/$stripped" stamp="cache/$name.src-sha256"

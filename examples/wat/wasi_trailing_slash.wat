@@ -1,12 +1,13 @@
-;; Trailing-slash shapes across the path_* family (issue #42).
-;; WASI leaves them unspecified, so they are pinned to wasmtime 47 as measured on macOS and Linux.
+;; Trailing-slash shapes across the `path_*` family (issue #42).
+;; WASI leaves them unspecified, so they follow Wasmtime 47 as measured on macOS and Linux.
 ;; Each probe prints "<tag><errno as two decimal digits>\n".
-;; Per-probe intent is commented at each call; expectations live in the shared WASI_CASES entry.
-;; Setup provides a file "file", a file "file2", and a directory "dir".
-;; Probe k is wasmtime's own host split: EINVAL on macOS, EISDIR on Linux.
-;; Left unpinned: nofollow filestat of "file/", since wasmtime's two hosts disagree.
-;; Also unpinned: unlink/rename-of-directory errnos.
-;; Those are a host split, covered per host by the strict wasi-testsuite.
+;; The aim of each probe is commented at its call; expectations live in the shared WASI_CASES entry.
+;; The set-up provides a file "file", a file "file2", and a directory "dir".
+;; Probe k is a host split of Wasmtime itself: EINVAL on macOS, EISDIR on Linux.
+;; Left unchecked: the `filestat` of "file/" without SYMLINK_FOLLOW.
+;; The two hosts of Wasmtime disagree there.
+;; Also unchecked: the `errno` values of `unlink` and of `rename` on a directory.
+;; Those are a host split, covered per host by the strict `wasi-testsuite`.
 (module
   (import "wasi_snapshot_preview1" "path_rename"
     (func $path_rename (param i32 i32 i32 i32 i32 i32) (result i32)))
@@ -25,8 +26,8 @@
   (import "wasi_snapshot_preview1" "fd_write"
     (func $fd_write (param i32 i32 i32 i32) (result i32)))
   (memory (export "memory") 1)
-  ;; Prefix reuse: "file/" also serves "file" (len 4), "dir/" serves "dir"
-  ;; (len 3), "file2/" serves "file2" (len 5).
+  ;; Prefix reuse: "file/" also serves "file" (length 4), "dir/" serves "dir" (length 3).
+  ;; "file2/" serves "file2" (length 5).
   (data (i32.const 0) "file/")
   (data (i32.const 8) "renamed")
   (data (i32.const 16) "dir/")
@@ -37,8 +38,9 @@
   (data (i32.const 56) "newd/")
   (data (i32.const 64) "newf/")
   (data (i32.const 72) "newdir/")
-  ;; 96: opened-fd cell, 128..191: filestat buffer, 200: 4-byte message,
-  ;; 208: message iovec, 216: message nwritten cell.
+  ;; Memory layout, by offset:
+  ;; 96: cell for the opened `fd`, 128..191: `filestat` buffer, 200: 4-byte message.
+  ;; 208: message `iovec`, 216: message `nwritten` cell.
   (func $report (param $tag i32) (param $errno i32)
     (i32.store8 (i32.const 200) (local.get $tag))
     (i32.store8 (i32.const 201)
@@ -67,7 +69,7 @@
     ;; Missing beats the slash: ENOENT.
     (call $report (i32.const 100)
       (call $path_unlink_file (i32.const 3) (i32.const 32) (i32.const 8)))
-    ;; e: filestat_get("file/") with SYMLINK_FOLLOW.
+    ;; e: `filestat_get("file/")` with SYMLINK_FOLLOW.
     (call $report (i32.const 101)
       (call $path_filestat_get (i32.const 3) (i32.const 1)
         (i32.const 0) (i32.const 5) (i32.const 128)))
@@ -75,7 +77,7 @@
     (call $report (i32.const 102)
       (call $path_open (i32.const 3) (i32.const 0) (i32.const 0) (i32.const 5)
         (i32.const 0) (i64.const 0x2) (i64.const 0) (i32.const 0) (i32.const 96)))
-    ;; g: remove_directory("file/").
+    ;; g: `remove_directory("file/")`.
     (call $report (i32.const 103)
       (call $path_remove_directory (i32.const 3) (i32.const 0) (i32.const 5)))
     ;; h: link("file/", "lnk").
@@ -88,33 +90,32 @@
       (call $path_rename (i32.const 3) (i32.const 32) (i32.const 8)
         (i32.const 3) (i32.const 40) (i32.const 1)))
     ;; j: rename("file2", "newd/").
-    ;; A nonexistent slash-suffixed destination:
-    ;; the slash is stripped and the rename proceeds (wasmtime).
+    ;; A nonexistent slash-suffixed destination: the slash is stripped and the rename proceeds.
+    ;; That is what Wasmtime does.
     (call $report (i32.const 106)
       (call $path_rename (i32.const 3) (i32.const 24) (i32.const 5)
         (i32.const 3) (i32.const 56) (i32.const 5)))
     ;; k: open("newf/", O_CREAT, rights FD_READ|FD_WRITE).
-    ;; Must not create;
-    ;; EINVAL on macOS, EISDIR on Linux (wasmtime's own split).
+    ;; Must not create; EINVAL on macOS, EISDIR on Linux (a host split of Wasmtime itself).
     (call $report (i32.const 107)
       (call $path_open (i32.const 3) (i32.const 0) (i32.const 64) (i32.const 5)
         (i32.const 0x1) (i64.const 0x42) (i64.const 0) (i32.const 0) (i32.const 96)))
-    ;; l: create_directory("file/").
+    ;; l: `create_directory("file/")`.
     ;; EEXIST, uniformly.
     (call $report (i32.const 108)
       (call $path_create_directory (i32.const 3) (i32.const 0) (i32.const 5)))
-    ;; m: create_directory("newdir/").
-    ;; The slash is legal on mkdir.
+    ;; m: `create_directory("newdir/")`.
+    ;; The slash is legal on `mkdir`.
     (call $report (i32.const 109)
       (call $path_create_directory (i32.const 3) (i32.const 72) (i32.const 7)))
-    ;; n: remove_directory("missing/").
+    ;; n: `remove_directory("missing/")`.
     (call $report (i32.const 110)
       (call $path_remove_directory (i32.const 3) (i32.const 32) (i32.const 8)))
-    ;; o: remove_directory("dir/").
+    ;; o: `remove_directory("dir/")`.
     ;; EINVAL, and "dir" survives.
     (call $report (i32.const 111)
       (call $path_remove_directory (i32.const 3) (i32.const 16) (i32.const 4)))
-    ;; p: remove_directory("dir").
-    ;; The bare name still removes it.
+    ;; p: `remove_directory("dir")`.
+    ;; The name without a slash still removes it.
     (call $report (i32.const 112)
       (call $path_remove_directory (i32.const 3) (i32.const 16) (i32.const 3)))))

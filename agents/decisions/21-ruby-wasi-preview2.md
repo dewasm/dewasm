@@ -33,7 +33,7 @@ That is enough to run real `wasm32-wasip2` binaries; `sockets`/`http` and 0.3 `a
   There is one runtime unit per function.
   So the support matrix derives from `has_unit` exactly like Preview 1.
   **An unimplemented `wasi:*` function binds to a lambda that traps at call time**, not a link error.
-  Adapter modules import every function a binary *references*.
+  That is because adapter modules import every function a binary *references*.
   Real binaries reference far more than they call (`terminal-*`, `metadata-hash`).
 - **A blocking host is always "ready"**.
   `pollable.block` returns immediately, and `poll` reports every pollable ready.

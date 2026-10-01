@@ -6,7 +6,7 @@
 // It never touches java.awt.event/javax.swing, so it can run without a display.
 //
 // Everything the wasm host interface needs lives in DoomEngine.
-// That is the imports map, save-file I/O, and framebuffer blit.
+// That is the imports map, save-file I/O, and the framebuffer copy.
 // Main only connects it to either a window or a fixed tick count.
 
 import java.awt.Color;
@@ -47,12 +47,12 @@ public class Main {
         }
     }
 
-    // Headless self-test: init + a fixed number of ticks with no window.
+    // Headless self-test: `init()` plus a fixed number of ticks with no window.
     // It uses no KeyListener and no JFrame.
     // It uses only BufferedImage/ImageIO, which render in software and need no display.
-    // A handful of Enter presses are injected along the way.
+    // A few Enter presses are injected along the way.
     // They drive DOOM from its title/legal screens through the menu defaults into a loaded level.
-    // So the final frame is real 3D gameplay (varied per-wall diminished lighting).
+    // So the final frame is a real 3D view of a level, with varied per-wall diminished lighting.
     // It is not a flat, low-color title card.
     // That's what the distinct-color sanity check below is actually probing for.
     private static void runSmoke() throws IOException {
@@ -87,7 +87,7 @@ public class Main {
             }
         }
         System.out.println("smoke: " + colors.size() + " distinct colors in final frame");
-        // DOOM's renderer shades a 256-entry palette through a few light-diminish levels.
+        // DOOM's renderer shades a 256-entry palette through a few levels of diminished lighting.
         // So even a busy 3D scene tops out at a few hundred distinct colors per frame.
         // A first-level view with HUD, water, and a blood decal measured ~150.
         // 1000 is unreachable by construction.
@@ -101,20 +101,20 @@ public class Main {
         System.out.println("smoke: OK");
     }
 
-    // Shown as an on-screen overlay (mirrors mapKey).
-    // There's no other discoverability path for a window app.
+    // Drawn on screen over the frame (mirrors `mapKey`).
+    // That is because there's no other discoverability path for a window app.
     private static final String CONTROLS_TEXT =
         "arrows move  ctrl fire  space use  shift run  tab automap  ,/. strafe  1-7 weapon  esc menu";
 
     private static final String WINDOW_TITLE = "DOOM (dewasm)";
 
-    // Interactive window: a JFrame whose panel blits the engine's current BufferedImage.
+    // Interactive window: a JFrame whose panel draws the engine's current BufferedImage.
     // The image is scaled to the panel size.
-    // A KeyListener queues key events for the game thread to drain.
+    // A KeyListener puts key events on a queue for the game thread to drain.
     // DOOM ticks on its own dedicated thread, while Swing delivers input on the EDT.
-    // The thread is dedicated since reportKeyDown/Up/tickGame are not thread-safe.
+    // The thread is dedicated since `reportKeyDown`/`Up`/`tickGame` are not thread-safe.
     // They must all be called from one thread.
-    // The ConcurrentLinkedQueue is the handoff between the two.
+    // The ConcurrentLinkedQueue passes the events from one to the other.
     private static void runGui() throws IOException {
         JFrame window = new JFrame(WINDOW_TITLE);
         DoomPanel panel = new DoomPanel();
@@ -160,8 +160,8 @@ public class Main {
         Thread gameThread = new Thread(() -> {
             engine.init();
             // FPS is measured over ~1s windows (tick counting), not one tick at a time.
-            // A per-tick instantaneous rate would be too noisy to read.
-            // DOOM's own 35Hz pacing plus JIT warmup jitter make it so.
+            // A rate for one tick would be too noisy to read.
+            // DOOM's own 35Hz pacing plus timing noise while the JIT warms up make it so.
             long fpsWindowStart = System.nanoTime();
             int fpsWindowTicks = 0;
             while (!Thread.currentThread().isInterrupted()) {
@@ -198,7 +198,7 @@ public class Main {
     }
 
     // Special keys route through the exported KEY_* globals.
-    // Everything else is the ASCII value of the unmodified lowercase character.
+    // Everything else is the ASCII value of the unmodified character in lower case.
     // That covers letters and digits.
     // DOOM reads those directly for menu text entry and weapon selection.
     // Returns null for keys with no DOOM mapping.
@@ -242,7 +242,7 @@ public class Main {
     }
 
     // Draws the engine's current frame scaled to the panel, preserving aspect ratio.
-    // Black bars letterbox the short axis.
+    // Black bars fill the space left on the short axis.
     private static final class DoomPanel extends JPanel {
         volatile DoomEngine engine;
         volatile double fps;
@@ -274,9 +274,9 @@ public class Main {
             drawHud(g2, dx, dy + dh);
         }
 
-        // Overlays the FPS and control scheme on a fixed-color dark bar.
+        // Draws the FPS and control scheme over the frame, on a fixed-color dark bar.
         // The bar runs along the bottom edge of the rendered frame.
-        // So both stay legible against the game's own (highly variable) palette.
+        // So both stay readable against the game's own (highly variable) palette.
         // Without the bar, the panel's plain black background would bleed through.
         private void drawHud(Graphics2D g2, int frameLeft, int frameBottom) {
             String text = String.format("%.0f FPS  |  %s", fps, controlsText);
@@ -289,9 +289,10 @@ public class Main {
         }
     }
 
-    // Connects the wasm host interface (console/gameSaving/runtimeControl/ui/loading) to the JVM.
+    // Connects the wasm host interface to the JVM.
+    // Its parts are `console`, `gameSaving`, `runtimeControl`, `ui`, and `loading`.
     // It owns the Doom instance plus the current framebuffer.
-    // The constructor's onResize/onFrame callbacks are null in the headless smoke path.
+    // The constructor's `onResize`/`onFrame` callbacks are null in the headless smoke path.
     // They are real callbacks in the GUI path.
     private static final class DoomEngine {
         final Doom doom;
@@ -314,11 +315,11 @@ public class Main {
             this.onFrame = onFrame;
             Files.createDirectories(Path.of(".savegame"));
 
-            // Doom's constructor resolves imports eagerly but never invokes them.
+            // The `Doom` constructor resolves imports during construction but never calls them.
             // So this holder lets the Doom.Rt.Fn lambdas below close over the instance.
             // That instance doesn't exist yet.
             // It's filled in immediately after construction.
-            // It is read only from within tick()/init(), never during the constructor.
+            // It is read only from within `tick()`/`init()`, never during the constructor.
             Doom[] holder = new Doom[1];
 
             Doom.Rt.Fn onErrorMessage = a -> {
@@ -377,8 +378,8 @@ public class Main {
                 height = (Integer) a[1];
                 // TYPE_INT_RGB, not ARGB.
                 // The wasm framebuffer's top byte is not guaranteed to be 0xff.
-                // An ARGB raster would show whatever that byte happens to hold as alpha.
-                // That could mean all-transparent.
+                // An ARGB image would show whatever that byte happens to hold as alpha.
+                // That could mean an alpha of 0 for every pixel.
                 frame = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
                 if (onResize != null) {
                     onResize.run();
@@ -401,9 +402,9 @@ public class Main {
             imports.computeIfAbsent("loading", k -> new HashMap<>()).put("onGameInit", onGameInit);
 
             // This module has no WASI imports.
-            // Doom's constructor never reads args/env/preopens.
+            // The `Doom` constructor never reads arguments, environment variables, or preopens.
             // This was verified against the generated source.
-            // So null is tolerated for all three.
+            // So passing null for all three is safe.
             this.doom = new Doom(imports, null, null, null);
             holder[0] = doom;
 
@@ -431,7 +432,7 @@ public class Main {
             System.arraycopy(doom.memory.d, off, bytes, 0, len);
             String s = new String(bytes, StandardCharsets.UTF_8);
             try {
-                // Doom's messages carry no trailing newline.
+                // DOOM's messages carry no trailing newline.
                 // The reference embedder prints one per message.
                 out.append(s).append('\n');
             } catch (IOException e) {
@@ -443,9 +444,9 @@ public class Main {
             initGameFn.invoke(new Object[0]);
         }
 
-        // Drains queued key events (from the KeyListener, on the EDT) and ticks the game.
+        // Drains the key events on the queue (from the KeyListener, on the EDT) and ticks the game.
         // Both must happen on the same thread.
-        // reportKeyDown/Up and tickGame are not thread-safe in the generated code.
+        // `reportKeyDown`/`Up` and `tickGame` are not thread-safe in the generated code.
         void tick() {
             int[] ev;
             while ((ev = keyEvents.poll()) != null) {

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# End-to-end demo: Rails on SQLite converted from wasm to pure Ruby by dewasm.
+# End-to-end example: Rails on SQLite converted from wasm to pure Ruby by dewasm.
 #
 # 1. build the converted SQLite library (build.sh)
 # 2. shim unit smoke (sqlite3 gem API surface)
 # 3. ActiveRecord standalone smoke
 # 4. the Rails app: bundle, migrate, boot, drive it over HTTP
 #
-# Requires: ruby >= 3.4 with the rails gem installed.
-# Also requires wasi-sdk with WASI_SDK_PATH set (for the wasm build).
+# Requires: Ruby >= 3.4 with the `rails` gem installed.
+# Also requires `wasi-sdk` with WASI_SDK_PATH set (for the wasm build).
 # The first bundle install needs network access.
 set -euo pipefail
 cd "$(dirname "$0")"

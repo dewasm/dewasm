@@ -26,7 +26,7 @@ Only real loops become `while True:`.
 | library | `--module-name` unchanged | `--module-name` + `Rt` |
 
 A standalone artifact is a program, so its internal names are fixed.
-Its bytes never depend on `--module-name`.
+So its bytes never depend on `--module-name`.
 A library name must be a single identifier (`[A-Za-z_][A-Za-z0-9_]*`).
 Anything else is rejected at conversion time, not rewritten.
 The per-artifact runtime class is what isolates one artifact from another.

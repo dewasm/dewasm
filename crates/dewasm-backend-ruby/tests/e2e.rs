@@ -171,7 +171,8 @@ print "bundled wasi constructed: ", !inst.instance_variable_get(:@wasi).nil?, "\
 "#;
 
 /// The `wasi_stdio_capture` glue: redirect `$stdout` to a StringIO before instantiation.
-/// This is the standard Ruby way to capture output, so the module's output flows into it.
+/// The redirect is the standard Ruby way to capture output.
+/// The module's output then flows into the StringIO.
 /// Then print the captured string to the real `stdout`.
 const RUBY_STDIO_CAPTURE_GLUE: &str = r#"
 require "stringio"
@@ -244,8 +245,8 @@ rescue Cruby::Rt::Exit
 end
 "#;
 
-/// The whole app cache is preopened at `/apps`.
 /// The guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
+/// So the whole app cache is preopened at `/apps`.
 const RUBY_TOYWASM_GLUE: &str = r#"inst = Toywasm.new({}, args: ["toywasm", "--wasi", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"], env: {}, preopens: {"/apps" => "{cache}"})
 begin
   inst.invoke("_start")
@@ -610,12 +611,11 @@ $stdout.write(rgb.pack("C*"))
 "#;
 
 /// NES (issue #114, mirrors the DOOM glue above).
-/// Load the ROM into `allocRom`'s buffer, and tick `{frames}` times with no input.
-/// The ROM is checked against a fixed checksum.
+/// Load the example ROM into `allocRom`'s buffer, and tick `{frames}` times with no input.
 /// Compose the frame from the palette-index screen buffer of `agnes` and its palette (issue #117).
 /// The `& 0x3f` mask in that step is required.
 /// Then dump the frame as a P6 PPM matching the Wasmtime snapshot.
-/// `{rom}` (the cached ROM's host path) and `{frames}` filled by the runner.
+/// `{rom}` (the example ROM's host path) and `{frames}` filled by the runner.
 const RUBY_NES_FRAME_GLUE: &str = r#"nes = Nes.new
 nes.invoke("_initialize")
 mem = nes.memory

@@ -322,8 +322,8 @@ rg_invoke '_start'
 exit 0
 "#;
 
-/// The whole app cache is preopened at `/apps`.
 /// The guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
+/// So the whole app cache is preopened at `/apps`.
 const BASH_TOYWASM_GLUE: &str = r#"WASI_ARGS=(toywasm --wasi /apps/cowsay.wasm Hello from 'dewasm!')
 WASI_ENV=()
 WASI_DIRS=('{cache}::/apps')
@@ -385,7 +385,7 @@ exit 0
 // - guest memory is the `${P}mem` associative array (one decimal byte per index);
 // - the transfers use the generated module's own runtime units.
 //   They are spelled `"${P}mem_init"` / `"${P}mem_i32_load"`.
-//   An artifact's runtime carries that artifact's prefix.
+//   That is because an artifact's runtime carries that artifact's prefix.
 //   `$P` is the very prefix these drives already carry.
 //
 // No Wasmtime snapshot exists, because the results live in guest memory.
@@ -798,14 +798,13 @@ done
 "#;
 
 /// NES (issue #114, mirrors the DOOM glue above).
-/// Load the ROM into `allocRom`'s buffer via `nes_mem_init`.
-/// The ROM is checked against a fixed checksum.
+/// Load the example ROM into `allocRom`'s buffer via `nes_mem_init`.
 /// Then tick `{frames}` times with no input.
 /// Compose the frame from `agnes`'s palette-index screen buffer against a 64-entry lookup table.
 /// The table maps to `\xNN\xNN\xNN` and is built once (issue #117).
 /// The `& 0x3f` mask is load-bearing.
 /// Then dump the frame through the same chunked `printf` output as DOOM.
-/// `{rom}` (the cached ROM's host path) and `{frames}` filled by the runner.
+/// `{rom}` (the example ROM's host path) and `{frames}` filled by the runner.
 /// The trailing `exit 0` matters here in a way it doesn't for DOOM.
 /// At 256x240 the pixel count divides the 4096-pixel flush chunk exactly.
 /// So the final `[[ -n $fmt ]]` is false.
@@ -889,8 +888,8 @@ dewasm_test_helper::sqlite3_shell_dbfile_e2e!(Bash, BASH_SQLITE3_SHELL_DBFILE_GL
 // It is the slowest of the Bash `slow` cases.
 // It is in the same cluster as `qjs_eval` and `sqlite3_shell_dbfile`, short of the `ultra` cases.
 dewasm_test_helper::rg_search_e2e!(Bash, BASH_RG_SEARCH_GLUE);
-// `qjs_repl_pty` is called here.
-// It shares the file system cases' standalone QuickJS conversion, though it has no preopens.
+// `qjs_repl_pty` is called here, though it has no preopens.
+// That is because it shares the file system cases' standalone QuickJS conversion.
 // `ultra`: every key press re-enters QuickJS's interactive line editor.
 // Each later evaluation is slower than the last.
 // That exceeds the shared per-prompt `PTY_TIMEOUT`, and the case timed out on CI (#22).

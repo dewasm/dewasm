@@ -758,7 +758,7 @@ macro_rules! toywasm_cowsay_e2e {
 
 /// See [`qjs_file_io_e2e!`].
 /// Runs [`WASM3_COWSAY`](crate::WASM3_COWSAY): the second converted wasm interpreter.
-/// That is wasm3's WASI build, which forwards the guest's WASI calls to the outer host.
+/// That is wasm3's MetaWASI build, which forwards the guest's WASI calls to the outer host.
 /// It interprets the cached `cowsay` binary.
 #[macro_export]
 macro_rules! wasm3_cowsay_e2e {
@@ -945,7 +945,7 @@ macro_rules! doom_frame_e2e {
 /// Go instead passes a function computing an equivalent `String` at test time.
 /// Go cannot open a host file from *library-mode* glue without an extra import.
 /// The generated module does not itself pull in that import.
-/// The glue loads the checksum-checked ROM and ticks the deterministic no-input contract.
+/// The glue loads the example ROM and ticks the deterministic no-input contract.
 /// Then it dumps the frame.
 /// The frame is a P6 PPM.
 /// The test then diffs `stdout` against `examples/apps/snapshots/nes_frame.ppm`.

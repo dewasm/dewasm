@@ -20,7 +20,7 @@ The package clause follows the mode:
 | library | `--module-name` in lower case | `--module-name` with a capital first letter | `New` + that type |
 
 A standalone artifact is a program, so its internal names are fixed.
-Its bytes never depend on `--module-name`.
+So its bytes never depend on `--module-name`.
 A library artifact is a Go *package* someone imports, so the name has to be a Go identifier.
 The grammar is `/\A[A-Za-z_][A-Za-z0-9_]*\z/`, ASCII.
 A name outside that grammar is rejected at conversion time, not rewritten.
@@ -35,7 +35,7 @@ That includes their trap types, which are per-package and therefore distinguisha
 
 `go` on `PATH`, **1.20 or newer** (the runtime uses generics and `unsafe.SliceData`).
 A little-endian target, which is every `GOARCH` except `mips`, `mips64`, `ppc64` and `s390x`.
-The linear-memory accessors read memory in host byte order.
+That is because the linear-memory accessors read memory in host byte order.
 A big-endian build fails at compile time rather than computing wrong values.
 Standalone output is a normal Go program: `go run` or `go build` it.
 Library output is a package to import (see below).
@@ -117,7 +117,7 @@ A source is one of two things:
 
 Such an object may also implement `ImportAttacher` (`Attach(instance any)`).
 The constructor calls `Attach` once the instance is built.
-The provider can then reach its memory.
+So the provider can reach its memory.
 The e2e override and custom-provider glues are in `crates/dewasm-backend-go/tests/e2e.rs`.
 They are written from inside the artifact's package, so they are unqualified.
 From another package, prefix the constructor with the package name:

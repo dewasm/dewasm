@@ -1,17 +1,17 @@
-// Package doom is the dewasm-generated DOOM library plus the host frontend that drives it.
-// build.sh produces the library (doom_gen.go) from jacobenget/doom.wasm.
+// Package `doom` is the dewasm-generated DOOM library plus the host frontend that drives it.
+// build.sh produces the library (doom_gen.go) from `jacobenget/doom.wasm`.
 // This file connects the wasm module's ten host imports to real OS facilities.
 // Those are stdio, save-game files, and a monotonic clock.
-// It also runs the game loop with ebiten for rendering and keyboard input.
+// It also runs the game loop with Ebiten for rendering and keyboard input.
 //
 // The frontend lives *inside* the generated package rather than beside it.
-// It reads the module's linear memory (doomInst.memory.data) directly.
+// That is because it reads the module's linear memory (doomInst.memory.data) directly.
 // It also reads the exported globals (*global[uint32]) directly.
 // Those are unexported identifiers only a file in the same package can name.
 // ../main.go is the command: it imports this package and calls Run.
 //
 // Run with -smoke for a headless self-check (no window).
-// It inits the game, ticks it a few hundred times, and writes the last frame to screenshot.png.
+// It initializes the game, runs a few hundred ticks, and writes the last frame to screenshot.png.
 package doom
 
 import (
@@ -31,13 +31,13 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
-// doomInst is package-level because the host import closures below need to read/write its memory.
+// `doomInst` is package-level because the host import closures below need to read/write its memory.
 // But Go requires the closures to exist before NewDoom returns the instance that owns that memory.
 var doomInst *Doom
 
-// frameW/frameH/frameBuf hold the most recent frame ui.drawFrame delivered.
-// It is already swizzled from the module's B,G,R,A byte order into ebiten's R,G,B,A.
-// They're sized once loading.onGameInit reports the real dimensions, never hardcoded.
+// `frameW`/`frameH`/`frameBuf` hold the most recent frame `ui.drawFrame` delivered.
+// It is already reordered from the module's B,G,R,A byte order into Ebiten's R,G,B,A.
+// They're sized when `loading.onGameInit` reports the real dimensions, never from a constant.
 // Those are 640x400 for this binary.
 var (
 	frameW, frameH int
@@ -52,14 +52,14 @@ func saveGamePath(id uint32) string {
 	return filepath.Join(saveDir, fmt.Sprintf("doomsav%d.dsg", id))
 }
 
-// readString decodes a UTF-8 string out of the module's linear memory.
-// It's a stand-in for the `Memory.read_string` helper dewasm only emits for
-// WASI-shaped modules; this one has no WASI imports.
+// `readString` decodes a UTF-8 string out of the module's linear memory.
+// It's a stand-in for the `Memory.read_string` helper dewasm emits only for WASI-shaped modules.
+// This module has no WASI imports.
 func readString(off, length uint32) string {
 	return string(doomInst.memory.data[off : off+length])
 }
 
-// Doom's messages carry no trailing newline; the reference embedder prints one per message.
+// DOOM's messages carry no trailing newline; the reference embedder prints one per message.
 func hostOnErrorMessage(off, length uint32) {
 	fmt.Fprintln(os.Stderr, readString(off, length))
 }
@@ -96,14 +96,14 @@ func hostWriteSaveGame(id, srcOff, length uint32) uint32 {
 	return length
 }
 
-// hostTimeInMilliseconds backs DOOM's internal 35Hz pacing.
+// `hostTimeInMilliseconds` backs DOOM's internal 35Hz pacing.
 // So it must be a real monotonic clock, not a fake stepped one.
-// Otherwise the game's notion of elapsed time would drift from ebiten's own frame timing.
+// Otherwise the game's notion of elapsed time would drift from Ebiten's own frame timing.
 func hostTimeInMilliseconds() uint64 {
 	return uint64(time.Since(startTime).Milliseconds())
 }
 
-// hostDrawFrame re-fetches doomInst.memory.data on every call rather than caching it.
+// `hostDrawFrame` re-fetches `doomInst.memory.data` on every call rather than caching it.
 // A preceding tick can grow the module's memory, which replaces the backing slice.
 func hostDrawFrame(bufOff uint32) {
 	data := doomInst.memory.data
@@ -119,14 +119,14 @@ func hostDrawFrame(bufOff uint32) {
 	}
 }
 
-// hostReadWads is never invoked: hostWadSizes leaves both output slots at their pre-zeroed 0.
-// That selects the wasm-embedded shareware WAD and skips the readWads call entirely.
+// `hostReadWads` is never called: `hostWadSizes` leaves both output slots at their pre-zeroed 0.
+// That selects the wasm-embedded shareware WAD and skips the `readWads` call entirely.
 func hostReadWads(dstOff, lengthsArrOff uint32) {}
 
-// hostWadSizes intentionally does nothing.
-// Leaving the wad-count and total-byte-size outputs untouched (they arrive pre-zeroed) matters.
+// `hostWadSizes` intentionally does nothing.
+// Leaving the WAD count and total byte size outputs untouched (they arrive pre-zeroed) matters.
 // It tells the module to fall back to its embedded shareware WAD.
-// A --wads flag to supply external WADs is out of scope.
+// A `--wads` flag to supply external WADs is out of scope.
 func hostWadSizes(numberOfWadsOff, totalBytesOff uint32) {}
 
 func hostOnGameInit(width, height uint32) {
@@ -159,17 +159,17 @@ func buildImports() Imports {
 	}
 }
 
-// keyCode returns the numeric key code behind one of the module's exported
-// KEY_* globals (e.g. "KEY_LEFTARROW").
-// Those exports are *global[uint32]
-// values; .value is unexported but reachable because this file and doom_gen.go share a package.
+// `keyCode` returns the numeric key code behind one of the module's exported `KEY_*` globals.
+// An example is `KEY_LEFTARROW`.
+// Those exports are `*global[uint32]` values.
+// `.value` is unexported but reachable because this file and doom_gen.go share a package.
 func keyCode(name string) uint32 {
 	return doomInst.Exports[name].(*global[uint32]).value
 }
 
-// mapKey translates an ebiten key to the code reportKeyDown/reportKeyUp expect.
-// For special keys that is the module's KEY_* constant.
-// For letters and digits it is the ASCII value of the lowercase, unmodified character.
+// `mapKey` translates an Ebiten key to the code `reportKeyDown`/`reportKeyUp` expect.
+// For special keys that is the module's `KEY_*` constant.
+// For letters and digits it is the ASCII value of the unmodified character in lower case.
 // Those are used for text entry and, notably, weapon-select digits.
 func mapKey(k ebiten.Key) (uint32, bool) {
 	switch k {
@@ -211,18 +211,18 @@ func mapKey(k ebiten.Key) (uint32, bool) {
 	return 0, false
 }
 
-// controlsText mirrors the key mapping in mapKey.
-// It is shown as an on-screen overlay.
-// There's no other discoverability path for a window app.
+// `controlsText` mirrors the key mapping in `mapKey`.
+// It is drawn on screen over the frame.
+// That is because there's no other discoverability path for a window app.
 const controlsText = "arrows move  ctrl fire  space use  shift run  tab automap  ,/. strafe  1-7 weapon  esc menu"
 
-// titleUpdateEvery throttles ebiten.SetWindowTitle calls.
-// The title only needs to be legible, not frame-accurate.
+// `titleUpdateEvery` limits how often `ebiten.SetWindowTitle` is called.
+// The title only needs to be readable, not frame-accurate.
 // OS window-title updates are not free every tick.
 const titleUpdateEvery = 35 // roughly once a second at DOOM's 35 TPS
 
 // Game implements ebiten.Game.
-// tickGame/reportKeyDown/reportKeyUp are the module's exported funcs.
+// `tickGame`/`reportKeyDown`/`reportKeyUp` are the module's exported functions.
 // They are type-asserted once in main rather than on every call.
 type Game struct {
 	tickGame      func()
@@ -259,8 +259,8 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	drawHUD(screen, ebiten.ActualFPS())
 }
 
-// drawHUD overlays the FPS and control scheme on a dark bar along the bottom edge of the frame.
-// So both stay legible against DOOM's own (highly variable) palette.
+// `drawHUD` draws the FPS and control scheme over the frame, on a dark bar along its bottom edge.
+// So both stay readable against DOOM's own (highly variable) palette.
 func drawHUD(screen *ebiten.Image, fps float64) {
 	bounds := screen.Bounds()
 	const barHeight = 16
@@ -269,14 +269,14 @@ func drawHUD(screen *ebiten.Image, fps float64) {
 	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%.0f FPS  |  %s", fps, controlsText), 4, bounds.Dy()-barHeight+2)
 }
 
-// Layout reports the module's native resolution as ebiten's logical screen size.
-// ebiten upscales that to whatever the actual window size is.
+// Layout reports the module's native resolution as Ebiten's logical screen size.
+// Ebiten upscales that to whatever the actual window size is.
 // So Draw can hand it the framebuffer unscaled.
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 	return frameW, frameH
 }
 
-// runSmoke drives the game headlessly: no window, no ebiten loop.
+// `runSmoke` drives the game headlessly: no window, no Ebiten loop.
 // It exists so a quick local check can confirm the generated library still links.
 // The check also confirms it produces a plausible frame without a display.
 func runSmoke(tickGame func()) {
@@ -301,7 +301,7 @@ func runSmoke(tickGame func()) {
 	fmt.Printf("smoke: final frame is %dx%d with %d distinct colors\n", frameW, frameH, len(distinct))
 	// DOOM's software renderer is paletted (classic VGA Mode 13h: at most 256 colors).
 	// So a healthy frame tops out in the low hundreds.
-	// A truecolor renderer would produce thousands.
+	// A 24-bit color renderer would produce thousands.
 	// A degenerate frame (blank/solid) instead lands in the single digits.
 	const minDistinctColors = 50
 	if len(distinct) <= minDistinctColors {
@@ -348,7 +348,7 @@ func Run() {
 	ebiten.SetWindowTitle("DOOM (dewasm)")
 	// 35 TPS matches DOOM's own internal tic rate exactly.
 	// So every Update() call advances exactly one game tic instead of some being no-ops.
-	// tickGame paces itself off runtimeControl.timeInMilliseconds regardless of how often it's called.
+	// `tickGame` paces itself off `runtimeControl.timeInMilliseconds`, however often it's called.
 	ebiten.SetTPS(35)
 
 	game := &Game{tickGame: tickGame, reportKeyDown: reportKeyDown, reportKeyUp: reportKeyUp}

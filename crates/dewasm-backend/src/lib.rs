@@ -456,7 +456,7 @@ pub fn store_method(op: ir::StoreOp) -> &'static str {
 /// That reaches a unit's two-argument twins.
 /// Memory call sites dominate a converted artifact's source (443k sites on `merman`).
 /// So these names spend one character per distinction.
-/// The units with longer names stay for the other backends ([`load_method`]).
+/// The units named after the operation stay for the other backends ([`load_method`]).
 pub fn load_code(op: ir::LoadOp) -> &'static str {
     use ir::LoadOp::*;
     match op {
@@ -707,7 +707,7 @@ pub struct RuntimeScope {
     pub prefix: &'static str,
     pub open: &'static str,
     pub close: &'static str,
-    /// Unit implicitly required by every unit of this scope (the class declaration, constants).
+    /// Unit implicitly required by every unit of this scope (the class's structure, constants).
     /// It is also force-included for the root scope.
     pub prelude: Option<&'static str>,
 }
@@ -715,7 +715,7 @@ pub struct RuntimeScope {
 /// A scope member rendered from the bundle's own contents (which units it carries).
 /// It is not written as a unit.
 /// It serves a member a fixed unit source cannot express.
-/// Such a member's body has to name the units that ended up in the bundle.
+/// That is because such a member's body has to name the units that ended up in the bundle.
 pub type ScopeMember = fn(&BTreeSet<String>) -> String;
 
 /// Resolves `requires:` closures over runtime units and emits the bundle.

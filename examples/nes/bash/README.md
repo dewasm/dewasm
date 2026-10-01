@@ -13,13 +13,13 @@ This is the same shape as the DOOM Bash frontend ([`../../doom/bash`](../../doom
 The NES CPU + PPU emulator is entirely the generated Bash.
 Nothing about the emulator is reimplemented here.
 
-The demonstration ROM is **Alter Ego by Shiru**, released into the [public domain](https://shiru.untergrund.net).
+The example ROM is **Alter Ego by Shiru**, released into the [public domain](https://shiru.untergrund.net).
 Pass a path to `run.sh`/`main.sh` to play a different iNES ROM.
 
 ## Honest performance
 
 This is an existence-proof example, not a playable emulator.
-Each `tickGame` (one NES video frame) takes tens of seconds.
+That is because each `tickGame` (one NES video frame) takes tens of seconds.
 Early boot frames take ~17s, and the full 40-frame boot-to-credits run averages ~30s.
 Rendering itself is well under 1s.
 These were measured on an Apple Silicon laptop, headless.

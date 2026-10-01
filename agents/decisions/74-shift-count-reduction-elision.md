@@ -24,7 +24,7 @@ That is because the emitted reduction preserves congruence.
 **A semantic mask is dropped only when it is provably the identity on the exact rendered value.**
 Congruence is not enough.
 The count reduction is not a representation mask restoring decision 2's invariant.
-Its result feeds the target's shift operator, which observes the exact count.
+That is because its result feeds the target's shift operator, which observes the exact count.
 A negative count shifts the other way, and one that is too large shifts too far.
 So the decision 71 rule (elide under a modular consumer) does not apply.
 `shift_count_mode` implements the exact-value rule with three outcomes:

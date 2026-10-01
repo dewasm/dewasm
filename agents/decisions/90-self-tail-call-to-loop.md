@@ -9,7 +9,7 @@ The other backends adopt it the way they adopt the other shared passes.
 ## Context
 
 [Decision 18](18-ruby-tail-calls.md) rejected this as the *mechanism*.
-It covers direct self-recursion only, and the conformance suite's `even`/`odd` pair is mutual.
+The reason: it covers self-recursion only, and the conformance suite's `even`/`odd` pair is mutual.
 Decision 18 then recorded it as viable later, in these words:
 "as a readability/speed optimization layered on top (it would simply shrink the tail-caller set)".
 
@@ -29,7 +29,7 @@ Three details the rewrite has to get right, and one it declines:
 - The arguments land in fresh temps before any parameter is written.
   That is because an argument may read a parameter that an earlier assignment would write over.
 - The declared locals are reset to their zero, because a fresh call zeroes them.
-  The loop has to do the same.
+  So the loop has to do the same.
 - The loop's label is one past the largest the body already uses.
   So the new frame cannot share a label with an existing one.
 - A function whose body can fall off its end is left alone.

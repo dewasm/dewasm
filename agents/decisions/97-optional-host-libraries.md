@@ -46,7 +46,7 @@ So the unit rescues that failure (`LoadError`, `NameError`, `NoMethodError`) and
   The failure arrives mid-run as a `NameError` from inside a system call.
 - **Fall back to `File.link` unconditionally.**
   On macOS it silently hard-links the symbolic link's target.
-  A guest asking for one file then gets another.
+  So a guest asking for one file gets another.
   The conformance suite cannot see the difference, because the call succeeds.
 - **Refuse `path_link` entirely without Fiddle.**
   It gives up every correct hard link to avoid one wrong case.

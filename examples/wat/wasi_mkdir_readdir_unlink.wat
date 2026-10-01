@@ -21,7 +21,7 @@
     (drop (call $path_open (i32.const 3) (i32.const 0) (i32.const 16) (i32.const 12)
       (i32.const 9) (i64.const -1) (i64.const -1) (i32.const 0) (i32.const 100)))
     (drop (call $fd_close (i32.load (i32.const 100))))
-    ;; list the root directory, echo the raw dirent bytes to stdout
+    ;; list the root directory, echo the raw `dirent` bytes to `stdout`
     (drop (call $fd_readdir (i32.const 3) (i32.const 300) (i32.const 256) (i64.const 0) (i32.const 260)))
     (i32.store (i32.const 104) (i32.const 300))
     (i32.store (i32.const 108) (i32.load (i32.const 260)))

@@ -30,7 +30,7 @@ Any ROM that the mappers of `agnes` cover (NROM/UxROM/MMC1/MMC3) can be passed a
 ![The deterministic NES frame snapshot](../apps/snapshots/nes_frame.png)
 
 *The frame that the framebuffer snapshot test checks: 40 input-free frames into [Alter Ego](https://forums.nesdev.org/viewtopic.php?t=7999).
-Alter Ego is the bundled demonstration ROM, a puzzle platformer by Shiru, public domain.
+Alter Ego is the example ROM, a puzzle platformer by Shiru, public domain.
 Every backend and the Wasmtime oracle render these exact pixels.
 So the frame doubles as a cross-backend conformance snapshot in the DOOM snapshot's harness.
 The compared oracle is `nes_frame.ppm`; this PNG is the same frame for human eyes.*
@@ -42,7 +42,7 @@ go/run.sh    # or: java/run.sh, ruby/run.sh, ruby/gui/run.sh, ...
 go/run.sh path/to/other.nes   # any ROM agnes's mappers cover
 ```
 
-`build.sh` fetches `agnes` and the Alter Ego ROM, both checked against fixed checksums.
+`build.sh` fetches `agnes` and the example ROM, both checked against fixed checksums.
 It compiles `nes.wasm` with `clang` from `wasi-sdk` into the apps cache, which Git ignores.
 It does so via `../apps/scripts/nes.sh`.
 Each frontend also has a headless `-smoke`/`--smoke` mode.

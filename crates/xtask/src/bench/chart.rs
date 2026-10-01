@@ -6,7 +6,7 @@
 //! Each mode is written into its own file.
 //!
 //! The form is a horizontal lollipop, fastest at the top, not bars.
-//! A bar encodes length from a zero that a log axis does not have.
+//! That is because a bar encodes length from a zero that a log axis does not have.
 //! Color carries the runner family, never the rank, and every row is direct-labelled.
 //!
 //! The axis is always seconds, never a ratio, so charts can be read against each other.
@@ -60,7 +60,7 @@ pub struct Chart {
 enum Quantity {
     /// A microbenchmark: compute time `t(N) - t(0)` divided by the calibrated iteration count.
     PerIteration,
-    /// An app: the whole wall time of one run, start included.
+    /// An app: the whole wall time of one run, start-up time included.
     PerRun,
 }
 
@@ -83,8 +83,8 @@ pub enum Family {
     Dewasm,
     /// A wasm runtime executing the module natively: `wasmer`, `wasmedge`, `wazero`, `wasm3`.
     /// It is split out from [`Family::Baseline`], so a reader need not know which is the reference.
-    /// It is split out from [`Family::Interpreter`] too.
-    /// "An interpreter written in Go" and "an interpreter written in Ruby" are different things.
+    /// "An interpreter written in Go" and "one written in Ruby" are different kinds of runner.
+    /// So it is split out from [`Family::Interpreter`] too.
     Native,
     /// A wasm interpreter running on a host language.
     /// It is hand-written (`pywasm`, `wardite`) or converted by dewasm (the `wasm3-*` runners).

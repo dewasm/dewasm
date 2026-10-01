@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-# exif_fixture.py: first-party generator for the exiftool e2e image fixture.
+# exif_fixture.py: first-party generator for the `exiftool` e2e image fixture.
 #
-# Hand-assembles a tiny (~200 byte) JPEG whose only real content is an EXIF APP1 segment.
+# Assembles by hand a tiny (~200 byte) JPEG whose only real content is an EXIF APP1 segment.
 # That segment carries three deterministic tags: Make, Model, and DateTimeOriginal.
-# So the exiftool-on-zeroperl case can pin an exact output string.
+# So the `exiftool`-on-`zeroperl` case can assert an exact output string.
 # Everything is fixed, so the bytes are reproducible.
 #
 # The scan payload is a single grey pixel's worth of placeholder marker segments.
 # ExifTool only needs SOI + the APP1 EXIF block + EOI to identify the file and extract metadata.
-# But a bare SOI/APP1/EOI trips its "looks like trailer garbage" heuristics.
+# But SOI/APP1/EOI alone trips its "looks like trailer garbage" heuristics.
 # So we include a minimal (empty) SOS run.
 #
-# Regenerate (writes examples/apps/fixtures/exif_fixture.jpg) with:
-# python3 examples/apps/fixtures/exif_fixture.py
-# Committing the resulting binary is intentional; the repo already commits binary snapshots.
-# The sha is stable across runs.
+# Regenerate (writes `examples/apps/fixtures/exif_fixture.jpg`) with:
+# `python3 examples/apps/fixtures/exif_fixture.py`
+# Committing the resulting binary is intentional; the repository already commits binary snapshots.
+# The file hash is stable across runs.
 
 import struct
 from pathlib import Path
@@ -46,7 +46,7 @@ datetime_off = exififd_off + exififd_size
 tiff = bytearray()
 tiff += b"II" + struct.pack("<HI", 0x2A, ifd0_off)  # header -> IFD0 at 8
 
-# IFD0: Make, Model, and a pointer to the Exif sub-IFD (tags must ascend).
+# IFD0: Make, Model, and a pointer to the Exif sub-IFD (tags must be in increasing order).
 tiff += struct.pack("<H", 3)
 tiff += entry(0x010F, TYPE_ASCII, len(MAKE), make_off)
 tiff += entry(0x0110, TYPE_ASCII, len(MODEL), model_off)
@@ -54,7 +54,7 @@ tiff += entry(0x8769, TYPE_LONG, 1, exififd_off)  # ExifOffset
 tiff += struct.pack("<I", 0)  # no IFD1
 tiff += MAKE + MODEL
 
-# Exif sub-IFD: DateTimeOriginal only.
+# The Exif sub-IFD: DateTimeOriginal only.
 tiff += struct.pack("<H", 1)
 tiff += entry(0x9003, TYPE_ASCII, len(DATETIME), datetime_off)
 tiff += struct.pack("<I", 0)

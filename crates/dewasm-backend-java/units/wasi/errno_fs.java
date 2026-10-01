@@ -11,7 +11,7 @@ static final int WASI_NOTDIR = 54;
 static final int WASI_NOTEMPTY = 55;
 static final int WASI_PERM = 63;
 // WASI_NOTCAPABLE (76) lives in the always-bundled `wasi/_class` prelude.
-// The rights model returns it from the stdio-core `fd_*` units too.
+// That is because the rights model returns it from the stdio-core `fd_*` units too.
 
 // One mapping from a host error to a WASI `errno`, shared by every file system call.
 // So the same host error never maps to different codes depending on which system call raised it.

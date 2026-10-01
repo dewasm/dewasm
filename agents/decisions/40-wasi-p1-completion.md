@@ -28,7 +28,7 @@ Filling the remaining gaps honestly meant deciding each one, not just coding it.
 
 1. **The symbolic link family is implemented; containment moves from create-time to follow-time.**
    `path_symlink` writes the guest's target string *unchanged*; it is never pre-resolved.
-   A link pointing outside the sandbox is legal until followed.
+   That is because a link pointing outside the sandbox is legal until followed.
    Every follow already passes the `realpath` + prefix-containment check (`resolve_path`, decision 14).
    `path_readlink` and `path_link` resolve the link itself with the NOFOLLOW shape.
    `path_link` contains both paths.

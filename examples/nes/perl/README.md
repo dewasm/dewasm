@@ -5,7 +5,7 @@ It needs no window and no GPU.
 `build.sh` builds the reactor library (`examples/apps/scripts/nes.sh`, cached).
 It converts the library to Perl with dewasm, into `nes_gen.pl`.
 That file is ignored by Git and regenerated on every build.
-`main.pl` loads the demonstration ROM into guest memory and ticks the emulator.
+`main.pl` loads the example ROM into guest memory and ticks the emulator.
 It draws the framebuffer as 24-bit-color half-blocks, reading keys from the terminal in raw mode.
 Core modules only: no CPAN installs.
 Raw mode goes through `stty` because `Term::ReadKey` is not core.
@@ -25,7 +25,7 @@ It is in the emulator's own representation: one palette *index* per pixel at `sc
 Each index resolves against the fixed 64-entry palette at `paletteOffset()` (masked with `0x3f`).
 At terminal resolution that means only the sampled pixels are ever looked up.
 
-The bundled ROM is *Alter Ego* by Shiru, released into the public domain.
+The example ROM is *Alter Ego* by Shiru, released into the public domain.
 
 ## Run
 
@@ -75,7 +75,7 @@ Key repeat keeps extending the deadline.
 A single tap always survives to the very next tick, regardless of the window.
 The reason is that the bit mask is read right after the key press is registered.
 The window matters less here than in DOOM.
-At this tick rate, a terminal's key repeat resends the held key many times between ticks.
+That is because at this tick rate, a terminal's key repeat resends the key many times between ticks.
 
 There are no save games, since `nes.wasm` exposes no such surface.
 There is also no menu/HUD text, since `onInfoMessage` doesn't exist here either.

@@ -108,7 +108,7 @@ Future work recorded, deliberately out of 0.1 scope:
 - **Keep Ruby's 2.0+ support as labels**: it is tested, working code.
   Removing it costs real work.
   It lost to the criterion above.
-  No target app at a fixed version needs it, and no other 0.1 backend will implement it.
+  That is because no target app needs it, and no other 0.1 backend will implement it.
   A five-backend project whose backends accept different inputs reintroduces uneven support.
   It is exactly the uneven support decision 23 tried to manage.
 - **Specification-coverage goals**: coverage numbers do not answer "what can I convert?"; apps do.

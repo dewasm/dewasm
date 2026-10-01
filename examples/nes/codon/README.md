@@ -43,7 +43,7 @@ It sanity-checks the last frame, writes it to `screenshot.ppm`, and exits non-ze
 The file is binary P6 PPM, the same format the cross-backend frame snapshot is stored in.
 Either mode takes an optional ROM path as the last argument.
 Examples are `./run.sh path/to/game.nes` and `./run.sh --smoke path/to/game.nes`.
-The default is the bundled demonstration ROM, `examples/apps/cache/alter_ego.nes`.
+The default is the example ROM, `examples/apps/cache/alter_ego.nes`.
 
 `codon` 0.20 or newer has to be on `PATH`; `DEWASM_CODON` names it explicitly.
 `run.sh` puts the toolchain's `lib/codon` directory on the loader path.
@@ -54,7 +54,7 @@ A `codon build` binary needs it for Codon's runtime shared libraries.
 **Measured ~400-420 frames/sec headless (`--smoke`, `-release`, on an Apple Silicon laptop).**
 The NES frame rate is ~60Hz, so this is about 7x the frame rate the emulator needs.
 So the pacing is a sleep that holds each frame to a fixed time step.
-The interactive status line sits at 59.9-60.1 frames/sec.
+So the interactive status line sits at 59.9-60.1 frames/sec.
 That is roughly 36x the [Python frontend](../python/)'s ~11 frames/sec under PyPy.
 It is the first NES terminal frontend here with speed to spare rather than too little.
 
@@ -101,4 +101,4 @@ Raw mode delivers Ctrl-C as a byte on `stdin` rather than as a signal.
 So the exit path is the same one `q` takes.
 Terminal state is restored from the exact `tcgetattr` snapshot taken at start, on every exit path.
 
-The bundled ROM is [Alter Ego](https://forums.nesdev.org/viewtopic.php?t=7999) by Shiru, released into the public domain.
+The example ROM is [Alter Ego](https://forums.nesdev.org/viewtopic.php?t=7999) by Shiru, released into the public domain.

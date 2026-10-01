@@ -40,7 +40,7 @@ Two measured facts open a fast path:
   In-range values (the common case) return unboxed via two non-allocating comparisons.
   Genuine out-of-range values take the same `& M64` as before.
   So the helper is allocation-neutral on real bignums.
-  It is also correct for every input.
+  So it is also correct for every input.
   For a negative or too large `x`, `x & M64` still yields the low 64 bits.
 - **Applied to exactly the sites whose value can leave `0..2**64-1`**:
 

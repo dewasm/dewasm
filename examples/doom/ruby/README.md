@@ -9,7 +9,7 @@ That file is ~11MB, ignored by Git, and regenerated on every build.
 They cover console logging, save-game I/O, the game clock, and frame delivery.
 `main.rb` also has a terminal renderer and raw-mode key input.
 A terminal is not the worse choice here.
-The Ruby backend only manages ~15 ticks/sec under YJIT, far below what a GUI needs.
+That is because the Ruby backend only manages ~15 ticks/sec under YJIT, far below what a GUI needs.
 That rate is plenty for a terminal.
 A terminal has orders of magnitude fewer cells to redraw than a window has pixels.
 The [`gui/`](gui/) directory runs the same generated library in a real window with Gosu.

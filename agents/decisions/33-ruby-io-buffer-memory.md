@@ -42,7 +42,7 @@ That is the version available in this environment.
   The code saves and restores `Warning[:experimental]`.
   It is `false` for the `IO::Buffer.new` call and restored in an `ensure` immediately after.
   This matters beyond looks.
-  The `qjs` pseudo-terminal snapshot captures standard error unchanged.
+  That is because the `qjs` pseudo-terminal snapshot captures standard error unchanged.
   An experimental warning left on would break it.
   That snapshot is in `crates/dewasm-backend-ruby/tests/e2e.rs`.
 - **Explicit bounds checks are kept as the trap mechanism, not `IO::Buffer`'s `ArgumentError`.**
@@ -59,13 +59,13 @@ That is the version available in this environment.
   `IO::Buffer` names 8-bit types in capitals only (`:U8`/`:S8`).
   Multi-byte lower-case names (`:u16`/`:s16`/`:u32`/`:s32`/`:u64`/`:s64`) are little-endian.
   That matches wasm's memory byte order directly.
-  No explicit `<` suffix is needed the way `Array#pack`/`String#unpack1` required (`"L<"`, `"S<"`).
+  So no explicit `<` suffix is needed the way `Array#pack`/`String#unpack1` required (`"L<"`, `"S<"`).
 - **`f32_load`/`f32_store` are unchanged.**
   They are still routed through the `i32` bit path to preserve NaN sign/payload per decision 2.
   The path is `Rt.f32_from_bits(i32_load(a))` / `i32_store(a, Rt.f32_bits(v))`.
   They get `IO::Buffer`'s gain in speed through `i32_load`/`i32_store`.
   `f64_load`/`f64_store` switch to `get_value(:f64, a)`/`set_value(:f64, a, v)` directly.
-  An 8-byte little-endian IEEE double is bit-preserving with no host path that loses bits.
+  That is because an 8-byte little-endian IEEE double has no host path that loses bits.
   That is unlike the f32 double-rounding concern decision 2 documents.
 - **`grow` uses `@buffer.resize(@size)`** (after raising `@size`).
   `IO::Buffer#resize` zero-fills the new tail, matching wasm's `memory.grow` semantics for free.
@@ -131,7 +131,7 @@ That is the version available in this environment.
   The wall-clock gain is smaller than the GC collapse alone would suggest, for two reasons.
   First, `Kernel#catch`/`#throw` now accounts for ~18.6% of samples and dominates what's left.
   It is still used for every `br` whose target isn't the nearest frame.
-  Decision 4's depth-1 optimization doesn't reach multi-level branches.
+  That is because decision 4's depth-1 optimization doesn't reach multi-level branches.
   Second, raw Ruby method-call dispatch is the CPU-bound floor under all of it.
   That dispatch is one method per wasm function and one line per wasm instruction.
   GC no longer limits speed; control-flow dispatch does.

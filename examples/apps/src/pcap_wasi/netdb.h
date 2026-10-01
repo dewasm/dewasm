@@ -1,12 +1,12 @@
-/* <netdb.h> for the wasm32-wasip1 libpcap build.
-   wasi-libc ships no netdb.h (WASI preview1 has no name resolution), but
-   libpcap's filter compiler includes it (pcap/socket.h, nametoaddr.c,
-   gencode.c) and links five of its functions.
-   This header declares only what those TUs use; stubs.c in this directory
-   defines each function as a resolver-less failure, so a filter naming a
-   host or service fails at pcap_compile time with "unknown host", not at
-   build time on a missing header or symbol.  net/if.h beside it covers
-   the other header those TUs include and wasi-libc lacks. */
+/* <netdb.h> for the wasm32-wasip1 `libpcap` build.
+   `wasi-libc` ships no `netdb.h`, since WASI preview1 has no name resolution.
+   But the filter compiler of `libpcap` includes it and links five of its functions.
+   It is included from `pcap/socket.h`, `nametoaddr.c`, and `gencode.c`.
+   This header declares only what those translation units use.
+   `stubs.c` in this directory defines each function as a failure with no resolver.
+   So a filter naming a host or service fails at `pcap_compile` time with "unknown host".
+   It does not fail at build time on a missing header or symbol.
+   `net/if.h` beside it covers the other header those units include and `wasi-libc` lacks. */
 #ifndef DEWASM_PCAP_NETDB_H
 #define DEWASM_PCAP_NETDB_H
 
@@ -46,7 +46,7 @@ struct protoent {
 	int p_proto;
 };
 
-/* The values musl uses; gencode.c switches on EAI_NONAME/EAI_SERVICE. */
+/* The values `musl` uses; `gencode.c` switches on `EAI_NONAME`/`EAI_SERVICE`. */
 #define EAI_BADFLAGS -1
 #define EAI_NONAME -2
 #define EAI_AGAIN -3

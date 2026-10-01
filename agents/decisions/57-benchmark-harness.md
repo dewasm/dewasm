@@ -54,7 +54,7 @@ So `t(N) - t(0)` is compute, and `t(0)` is cold start.
 Cold start is the one axis where an interpreter legitimately beats an AOT compiler.
 Problems 2 and 3 become two reported numbers instead of one mixed one.
 The subtraction is structurally necessary here and only here.
-The iteration count is calibrated per runner.
+That is because the iteration count is calibrated per runner.
 So per-iteration cost is undefined until the fixed start cost is removed.
 
 **Apps report whole wall time only, with no `t(0)`.**
@@ -101,7 +101,7 @@ A gap is stated, never left out, so a missing row cannot read as a covered one.
 
 **A fixed iteration count per workload.**
 The honest, obvious shape, and unusable at a 23000x spread.
-Sizing for Bash leaves Wasmtime measuring its own process start.
+That is because sizing for Bash leaves Wasmtime measuring its own process start.
 
 **A declared table of per-runner scale factors.**
 Avoids calibration's runtime cost, but the factors are guessed constants.
@@ -137,7 +137,7 @@ Each runtime would look its best, and nothing would be comparable.
   The workload's table is folded into a `<details>` underneath the chart.
   A 23000x span forces a log axis.
   The log axis rules out both Mermaid's `xychart` and any bar form.
-  A bar's length is measured from a zero the axis does not have.
+  That is because a bar's length is measured from a zero the axis does not have.
   The axis is seconds on every chart and never a ratio.
   It is seconds per iteration for a microbenchmark and seconds per run for an app.
   So two charts can be read against each other.

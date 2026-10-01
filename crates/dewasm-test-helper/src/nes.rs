@@ -3,7 +3,7 @@
 //! The oracle and the per-backend drivers (the language glue) must agree on one driving contract.
 //! The oracle is `cargo xtask update-snapshots`, whose NES target embeds the `wasmtime` crate.
 //! That crate is kept out of this crate's dependency tree.
-//! The contract: load the checksum-checked ROM and tick [`NES_FRAMES`] frames with **no input**.
+//! The contract: load the example ROM and tick [`NES_FRAMES`] frames with **no input**.
 //! Then dump the framebuffer.
 //! The `agnes` emulator is deterministic (fixed-point integer, no wall clock).
 //! So every backend and the Wasmtime oracle produce byte-identical pixels.
@@ -88,7 +88,7 @@ pub fn nes_frame_to_ppm(screen: &[u8], palette: &[u8], w: u32, h: u32) -> Vec<u8
 /// Append `glue` that loads the ROM, ticks the deterministic contract, and writes the frame.
 /// The frame goes to `stdout` as a P6 PPM, which must be byte-identical to the snapshot.
 /// The `{frames}`/`{rom}` placeholders in `glue` are filled from [`NES_FRAMES`] and the ROM path.
-/// The ROM path is the cached one, so the driving constants live in one place.
+/// Filling them here keeps the driving constants in one place.
 pub fn run_nes_frame_case(lang: &dyn BackendUnderTest, glue: &str) {
     let bytes = read_nes_wasm();
     let class = lang.convert_app(&bytes, Mode::Library, &lang.module_name("nes"));

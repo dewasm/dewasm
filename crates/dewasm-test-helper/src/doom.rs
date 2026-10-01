@@ -12,7 +12,7 @@
 //!
 //! The snapshot is a P6 PPM ([`frame_to_ppm`]).
 //! The alpha byte of the module's `B,G,R,A` framebuffer is padding and is dropped.
-//! This matches the example frontends' own `screenshot.ppm` writers (`examples/doom/ruby/main.rb`).
+//! This matches the example frontends' own screenshot writers (`examples/doom/ruby/main.rb`).
 
 use std::path::PathBuf;
 
@@ -43,9 +43,9 @@ pub const DOOM_FRAME_H: u32 = 400;
 pub const DOOM_CLOCK_STEP_MS: i64 = 1000;
 
 /// Number of `tickGame` calls before the frame is captured.
-/// Kept minimal: two ticks already clear DOOM's start to a non-degenerate frame.
+/// Two ticks already clear DOOM's start-up to a non-degenerate frame.
 /// The oracle asserts the colour count.
-/// Each tick is ~tens of seconds under Bash.
+/// The count is kept minimal because each tick is ~tens of seconds under Bash.
 /// So every extra tick is real wall time in Bash's `ultra` category; the snapshot uses this count.
 pub const DOOM_TICKS: u32 = 2;
 

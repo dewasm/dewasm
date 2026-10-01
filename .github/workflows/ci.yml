@@ -28,7 +28,7 @@ jobs:
       - run: cargo fmt --check
       - run: cargo clippy --all-targets -- -D warnings
       # The writing style rules that a program can check.
-      # The vocabulary check reads two word lists, which the setup script fetches by sha256.
+      # The vocabulary check reads two word lists, which its `setup.sh` fetches by sha256.
       - uses: actions/cache@v6
         with:
           path: crates/text-check/cache
@@ -45,7 +45,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install wasi-sdk (setup.sh builds the C apps with it)
-        # keep in sync with local dev (docs/testing.md names the version)
+        # Keep in sync with local development (`docs/testing.md` names the version).
         run: |
           curl -fsSL --retry 5 -o /tmp/wasi-sdk.tar.gz \
             https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz
@@ -53,10 +53,10 @@ jobs:
           sudo tar -xzf /tmp/wasi-sdk.tar.gz -C /opt
           echo "WASI_SDK_PATH=/opt/wasi-sdk-34.0-x86_64-linux" >> "$GITHUB_ENV"
       - name: Install setup.sh build tools (binaryen, bison, flex)
-        # Binaryen comes from the pinned upstream release, not apt.
-        # The sqlite3-mod build needs wasm-opt's --no-inline.
-        # Ubuntu's packaged binaryen predates it.
-        # keep in sync with local dev
+        # Binaryen comes from the upstream release at a fixed version, not from `apt`.
+        # The sqlite3-mod build needs `wasm-opt`'s `--no-inline`.
+        # Ubuntu's packaged Binaryen is older than that flag.
+        # Keep in sync with local development.
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends bison flex
@@ -72,10 +72,10 @@ jobs:
           echo "c9ee8179f6f0882abc37024fbe0cd678311aa8a29083fa364915ed4d29a69485  /tmp/wasi-vfs-cli.zip" | shasum -a 256 -c -
           sudo unzip -o /tmp/wasi-vfs-cli.zip -d /usr/local/bin
           sudo chmod +x /usr/local/bin/wasi-vfs
-      # The libpcap/tree-sitter/ripgrep stamps in setup.sh fold in `wasm-opt --version`.
-      # So the apps-cache key must too: a binaryen bump must yield a new key.
+      # The `libpcap`/`tree-sitter`/`ripgrep` stamps in `setup.sh` fold in `wasm-opt --version`.
+      # So the apps-cache key must too: a new Binaryen version must yield a new key.
       # The rebuilt artifacts then get re-saved.
-      # Same for the ruby-packed stamp and `wasi-vfs --version`.
+      # Same for the `ruby-packed` stamp and `wasi-vfs --version`.
       - name: Compute apps cache key
         id: appskey
         run: echo "key=apps-v1-${{ runner.os }}-wasmopt$(wasm-opt --version | awk '{print $3}')-wasivfs$(wasi-vfs --version | awk '{print $2}')-${{ hashFiles('examples/apps/setup.sh', 'examples/apps/scripts/**', 'examples/apps/src/**') }}" >> "$GITHUB_OUTPUT"
@@ -95,8 +95,8 @@ jobs:
       matrix:
         backend: [ruby, bash, python, go, java, perl, codon]
     runs-on: ubuntu-latest
-    # The slow_test run (full spec suites + slow apps) has unmeasured wall time.
-    # Give it generous headroom and tighten later.
+    # The `slow_test` run (full specification suites + slow apps) has unmeasured wall time.
+    # Give it a wide margin and tighten later.
     timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 300 }}
     steps:
       - uses: actions/checkout@v7
@@ -116,18 +116,19 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      # The runner's system perl satisfies the backend's floor (>= 5.26 with ivsize=8/nvsize=8).
+      # The runner's system Perl satisfies the backend's floor (>= 5.26 with `ivsize=8`/`nvsize=8`).
       # Verify loudly up front instead of skipping.
       - if: matrix.backend == 'perl'
         run: perl -MConfig -e 'print "perl $] ivsize=$Config{ivsize} nvsize=$Config{nvsize}\n"; die "unsuitable system perl\n" unless $] >= 5.026 && $Config{ivsize} == 8 && $Config{nvsize} == 8'
-      # ubuntu-24.04's system python 3.12.3 hits the static-block limit.
-      # That limit breaks qjs-scale generated code, so pin >= 3.12.4 (#21).
+      # ubuntu-24.04's system Python 3.12.3 hits the static-block limit.
+      # That limit breaks `qjs-scale` generated code, so require >= 3.12.4 (#21).
       - if: matrix.backend == 'python'
         uses: actions/setup-python@v7
         with:
           python-version: '3.13'
-      # Codon comes from the pinned upstream release; keep in sync with local dev.
-      # docs/backends/codon.md names the floor.
+      # Codon comes from the upstream release at a fixed version.
+      # Keep that version in sync with local development.
+      # `docs/backends/codon.md` names the floor.
       - if: matrix.backend == 'codon'
         name: Install Codon
         run: |
@@ -140,22 +141,22 @@ jobs:
         with:
           shared-key: test-${{ matrix.backend }}
           # Only main writes the shared build cache.
-          # PRs restore it read-only to keep the repo under the 10 GB cache budget.
+          # PRs restore it read-only to keep the repository under the 10 GB cache budget.
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/cache/restore@v6
         with:
           path: examples/apps/cache
           key: ${{ needs.apps-cache.outputs.key }}
           fail-on-cache-miss: true
-      # The cache-matches-its-pins test reproduces the stamps, which name these two tools' versions.
+      # The `apps_cache_pins` test reproduces the stamps, which name these two tools' versions.
       - uses: ./.github/actions/apps-cache-tools
       - name: Test
         if: github.event_name == 'pull_request'
         run: cargo test -p dewasm-backend-${{ matrix.backend }} --no-fail-fast
       # Speed categories: the `slow_test` feature is CI's main run.
-      # It runs the full spec suite plus the slow per-case app cases.
+      # It runs the full specification suite plus the slow per-case app cases.
       # It deliberately excludes the `ultra_slow_test` cases, which run only locally.
-      # Those are the ~1 min+ pty / giant-`go build` cases.
+      # Those are the pseudo-terminal and giant-`go build` cases, which take about 1 minute or more.
       # They timed out (#22) or exhausted runner memory (#23).
       - name: Test (slow)
         if: github.event_name != 'pull_request'
@@ -164,16 +165,17 @@ jobs:
   core:
     needs: apps-cache
     runs-on: ubuntu-latest
-    # The slow_test run (full spec suites + slow apps) has unmeasured wall time.
-    # Give it generous headroom and tighten later.
+    # The `slow_test` run (full specification suites + slow apps) has unmeasured wall time.
+    # Give it a wide margin and tighten later.
     timeout-minutes: ${{ github.event_name == 'pull_request' && 60 || 300 }}
     steps:
       - uses: actions/checkout@v7
         with:
           submodules: true
       # dewasm holds the cross-backend tests, so this job needs every backend toolchain.
-      # bash ships with the runner.
-      # python is pinned below because ubuntu-24.04's 3.12.3 breaks qjs-scale generated code (#21).
+      # Bash ships with the runner.
+      # Python's version is set below because of #21.
+      # ubuntu-24.04's 3.12.3 breaks `qjs-scale` generated code.
       - uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.4'
@@ -192,18 +194,18 @@ jobs:
         with:
           shared-key: core
           # Only main writes the shared build cache.
-          # PRs restore it read-only to keep the repo under the 10 GB cache budget.
+          # PRs restore it read-only to keep the repository under the 10 GB cache budget.
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - uses: actions/cache/restore@v6
         with:
           path: examples/apps/cache
           key: ${{ needs.apps-cache.outputs.key }}
           fail-on-cache-miss: true
-      # The cache-matches-its-pins test reproduces the stamps, which name these two tools' versions.
+      # The `apps_cache_pins` test reproduces the stamps, which name these two tools' versions.
       - uses: ./.github/actions/apps-cache-tools
       # Speed categories: the `slow_test` feature covers the slow cases.
-      # `dewasm-test-helper/wasmtime_test` runs the apps_wasmtime snapshot-freshness suite.
-      # That suite execs the xtask binary, which embeds the pinned wasmtime crate.
+      # `dewasm-test-helper/wasmtime_test` runs the `apps_wasmtime` snapshot-freshness suite.
+      # That suite runs the `xtask` binary, which embeds the `wasmtime` crate at a fixed version.
       # So nothing is installed for it.
       # The suite never builds the binary, hence the explicit build step below.
       # `dewasm/slow_test` runs the slow cross-backend `--data-file` real-app cases.

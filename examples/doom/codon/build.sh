@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Regenerate the dewasm-generated DOOM library.
 # Then compile it together with the terminal frontend into one native binary.
-# Codon has no import path for a sibling source file.
+# Codon has no import path for a source file in the same directory.
 # So the two are linked by concatenation into doom_app.codon.
 # The backend's own test and benchmark runners do the same.
-# Both generated files are gitignored.
+# Both generated files are ignored by Git.
 # So this step has to run before ./run.sh from a clean checkout.
 # The default is a debug build, the cheaper of the two.
 # CODON_BUILD=release selects the optimized compile (README.md has the measured times).

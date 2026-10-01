@@ -54,5 +54,5 @@ Two things the record leaves out favor opposite sides:
 - a runtime binary is the cost of one platform's delivery, where source covers all of them.
 
 The record is host-specific and dated.
-The runtime sizes are whatever that host happens to have installed, at whatever versions.
+That is because the runtime sizes are whatever that host has installed, at whatever versions.
 Two records taken on different hosts compare on their source figures, not on their runtime ones.

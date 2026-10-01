@@ -15,7 +15,7 @@ ERRNO_PERM = 63
 # One mapping from `SystemCallError` to WASI `errno`, shared by every file system call.
 # So the same host error never maps to different codes depending on which system call raised it.
 # It is a rescue dispatch rather than a lookup table.
-# Only in a `rescue` clause does an `Errno` class survive ahead-of-time compilation of this source.
+# That is because only in a `rescue` clause does an `Errno` class survive ahead-of-time compilation.
 # An `Errno` class named as a value is a constant the compiler need not have resolved.
 # A Hash key and a `case/when` operand name it as a value.
 # Every caller rescues SystemCallError, so the last clause is total.

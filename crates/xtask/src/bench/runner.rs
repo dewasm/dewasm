@@ -4,7 +4,7 @@
 //!
 //! Five families:
 //!
-//! * **`wasmtime`**: the AOT baseline and the correctness reference.
+//! * **`wasmtime`**: the AOT upper bound on speed and the correctness reference.
 //! * **native runtimes** (`wasmer`, `wasmedge`, `wazero`, `wasm3`): consume the `.wasm` directly.
 //!   [`Native`] holds the per-runtime command-line spelling.
 //!   Cross-checked like everything else.
@@ -151,7 +151,7 @@ pub struct Runner {
 }
 
 /// The full matrix, in report order.
-/// The baseline comes first, then the other native runtimes beside it, then dewasm's backends.
+/// The upper bound comes first, then the other native runtimes beside it, then dewasm's backends.
 /// Last come the third-party interpreters we are actually competing with.
 pub fn runners() -> Vec<Runner> {
     let r = |label, kind| Runner { label, kind };
@@ -197,7 +197,7 @@ pub fn runners() -> Vec<Runner> {
 impl Runner {
     /// `Ok(())` when this runner can run here.
     /// Otherwise the set-up instruction that would make it available.
-    /// The caller skips an unavailable runner and records this reason in both outputs.
+    /// The caller never drops a runner silently: it reports this reason in both outputs.
     pub fn availability(&self) -> Result<(), String> {
         match &self.kind {
             Kind::Wasmtime => wasmtime_bin()

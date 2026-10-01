@@ -78,7 +78,7 @@ pub struct FsAppCase {
     /// The library class name the glue instantiates.
     /// It is *also* the module name every backend is converted under.
     /// Unlike the other suites this is stated rather than derived from `wasm`.
-    /// The two differ on purpose: cache file `ruby.wasm`, but class `Cruby`.
+    /// That is because the two differ on purpose: cache file `ruby.wasm`, but class `Cruby`.
     /// A `Ruby` class collides with the constant MRI already defines.
     /// Every backend's grammar accepts it; Bash puts it in lower case into its prefix.
     pub class: &'static str,
@@ -259,7 +259,7 @@ pub const CRUBY_HELLO: FsAppCase = FsAppCase {
 /// That indirect ground truth is the only one available.
 /// Wasmtime answers `fd_fdstat_set_flags(0, NONBLOCK)` with `EBADF`.
 /// `toywasm`'s WASI set-up treats the failure as fatal.
-/// So Wasmtime cannot run the cached `toywasm` binary at all.
+/// So Wasmtime cannot run the fixed-version `toywasm` binary at all.
 pub const TOYWASM_COWSAY: FsAppCase = FsAppCase {
     name: "toywasm_cowsay",
     wasm: "toywasm",
@@ -287,7 +287,7 @@ pub const TOYWASM_COWSAY: FsAppCase = FsAppCase {
 
 /// wasm3 interpreting the cached `cowsay.wasm` out of the app cache, preopened at `/apps`.
 /// wasm3 is a second WebAssembly interpreter written in C.
-/// This is its WASI build, at a fixed version.
+/// This is its MetaWASI build, from source at a fixed version.
 /// Same shape as [`TOYWASM_COWSAY`], with two differences.
 /// First, wasm3's CLI takes the guest module directly, with no `--wasi` flag.
 /// That build always forwards the guest's WASI to the outer host.

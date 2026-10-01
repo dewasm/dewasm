@@ -14,7 +14,7 @@ So the frontend just pulls state after every tick, paced to 60 Hz on a dedicated
 
 Zero external dependencies: only the JDK (`javac`/`java`, AWT/Swing, NIO).
 
-The default ROM is [Alter Ego](https://shiru.untergrund.net/nesdev.shtml) by Shiru, released into the public domain.
+The default is the example ROM, [Alter Ego](https://shiru.untergrund.net/nesdev.shtml) by Shiru, released into the public domain.
 `examples/apps/scripts/nes.sh` fetches it and checks it against a fixed hash.
 
 ## Run

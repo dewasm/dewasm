@@ -111,7 +111,7 @@ The token decides which feature of the expanding crate un-ignores the generated 
 Every `ultra` case is marked at its callsite with a comment.
 The comment gives the reason and, where there is one, the issue number.
 No case is lost this way: each `ultra` case runs at `slow` on at least one other backend.
-CI then still covers the case itself.
+So CI still covers the case itself.
 What the token leaves out is that one backend's run of it.
 
 ## The interactive REPL case under a pseudo-terminal (`qjs_repl_pty`)
@@ -124,7 +124,7 @@ Wasmtime's output is checked in as `examples/apps/snapshots/qjs_repl_interactive
 `qjs` only enters that path when `fd_fdstat_get` on `stdin` reports a character device.
 A pipe does not report one, so a pseudo-terminal is required.
 The scripted session is *prompt-driven*: each line is sent only after the `qjs > ` prompt reappears.
-The captured output is then stable however long a backend takes to start.
+So the captured output is stable however long a backend takes to start.
 It is slow on every backend and `ultra` on Bash, where it timed out on CI (#22).
 
 ## Adding a new backend
@@ -163,4 +163,4 @@ Every known failure there is attributed to one of three causes:
 - the standalone interface passing the whole environment through.
 
 Both lists are checked both ways: a listed trial that unexpectedly *passes* is a hard failure.
-Filling a gap then forces the entry to be removed.
+So filling a gap forces the entry to be removed.

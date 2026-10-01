@@ -2,10 +2,10 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# dwarf-fixture: a first-party C fixture built WITH DWARF (`-g`).
-# So the --dwarf-line source back-mapping test has a module carrying `.debug_line`.
-# The source is committed (src/dwarf_fixture.c, first-party).
-# Unlike the other apps there is nothing to download.
+# `dwarf-fixture`: a first-party C fixture built WITH DWARF (`-g`).
+# So the `--dwarf-line` source back-mapping test has a module carrying `.debug_line`.
+# The source is committed (`src/dwarf_fixture.c`, first-party).
+# Unlike the other apps there is nothing to fetch.
 # So the "pin" is the sha256 of that source file plus the toolchain token: editing either rebuilds.
 # Built at -O1 (not -O0) so the fixture exercises the folded-expression marker path.
 # The core test calibrates that path.

@@ -88,5 +88,5 @@ The harness compares results bit-exactly including NaN patterns (decision 8/deci
   Float-heavy hot loops are orders of magnitude slower than Ruby's host floats.
   The selected specification suite grew from ~1 s to ~5 s, and the full run from ~39 s to ~58 s.
 - The `floats` skip tag is dead.
-  `Feature::Floats` Supported means any float-related skip is now a hard harness failure.
+  That is because `Feature::Floats` Supported means any float-related skip is a hard harness failure.
   This is decision 8's one-way discipline.

@@ -84,7 +84,7 @@ impl BackendUnderTest for Go {
     /// Lay out a multi-module case as a temporary Go module in `dir`.
     /// Return the driver file's `package main` clause.
     /// Everything else the driver needs, its imports included, comes from the case glue.
-    /// Go rejects an unused import, and only the glue knows what it uses.
+    /// That is because Go rejects an unused import, and only the glue knows what it uses.
     ///
     /// `shared_runtime` mirrors the specification harness.
     /// Each module is emitted as package-level declarations alone (`generate_program_with_units`).
@@ -96,7 +96,7 @@ impl BackendUnderTest for Go {
     /// A table value crossing modules would then no longer pass type checking.
     /// `shared_runtime=false` is the opposite layout and needs no trick at all.
     /// Each module is a library conversion, which since #155 declares `package <module name>`.
-    /// So the driver writes them into `alpha/` and `beta/` beside itself.
+    /// So `compose_modules` writes them into `alpha/` and `beta/` beside the driver.
     /// That gives two artifacts with their own runtime and their own trap type.
     /// They share no identifier.
     fn compose_modules(
@@ -427,8 +427,8 @@ const GO_RG_SEARCH_GLUE: &str = r#"func RunTest() {
 }
 "#;
 
-/// The whole app cache is preopened at `/apps`.
 /// The guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
+/// So the whole app cache is preopened at `/apps`.
 const GO_TOYWASM_GLUE: &str = r#"func RunTest() {
 	inst := NewToywasm(nil, []string{"toywasm", "--wasi", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"}, nil, map[string]string{"/apps": "{cache}"})
 	defer func() {
@@ -968,7 +968,7 @@ const GO_DOOM_FRAME_GLUE: &str = r#"func RunTest() {
 "#;
 
 /// NES (issue #114, mirrors the DOOM glue above).
-/// Load the checksum-checked ROM into `allocRom`'s buffer.
+/// Load the example ROM into `allocRom`'s buffer.
 /// Then tick [`NES_FRAMES`] times with no input.
 /// Compose the frame from `agnes`'s palette-index screen buffer and its palette (issue #117).
 /// The `& 0x3f` mask is load-bearing.

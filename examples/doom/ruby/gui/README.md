@@ -149,7 +149,8 @@ That figure is from an Apple Silicon laptop.
 
 Gosu closes a window on Escape unless the frontend overrides its `button_down`.
 This frontend does override it.
-Escape belongs to DOOM's menu, and F10 or the window's close button exits the frontend.
+That is because Escape belongs to DOOM's menu.
+F10 or the window's close button exits the frontend.
 
 Save games are written to `.savegame/` (ignored by Git) relative to wherever the script runs.
 

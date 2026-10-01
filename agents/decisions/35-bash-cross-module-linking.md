@@ -65,7 +65,7 @@ That is the nameref's target, not the nameref itself.
 A consumer's `declare -gn` then points in one step at the real cell/array.
 So `${!name}` never has to chase a chain.
 Memory has no single name to flatten to.
-Its derived state (`mem`/`pages`/`max_pages`) is three variables, not one cell.
+That is because its derived state (`mem`/`pages`/`max_pages`) is three variables, not one cell.
 `MEMORY_EXPORTS` therefore publishes the owning module's *prefix* (`<p>memown`).
 A re-export just forwards that string.
 A consumer's three `declare -gn`s (`${RESOLVED}mem`/`pages`/`max_pages`) still each resolve in one step.

@@ -32,18 +32,18 @@ from C import cfmakeraw(Ptr[byte])
 # Resolved against the working directory, which run.sh sets to this frontend's own directory.
 SAVE_DIR = ".savegame"
 
-# A pressed key is held reportKeyDown-active until this many seconds pass without seeing it again.
-# Terminals only deliver key-down events (no key-up), so releases have to be synthesized.
+# A pressed key stays down for `reportKeyDown` until this many seconds pass without seeing it again.
+# Terminals only deliver key-down events (no key-up), so releases have to be generated.
 # This matches the Python DOOM frontend's window.
-# It has to outlast a terminal's own autorepeat interval, which is where the lower bound comes from.
+# It has to last longer than a terminal's own key repeat interval, which sets the lower bound.
 RELEASE_TIMEOUT = 0.4
 
 SMOKE_TICKS = 15
 
 
 def emit(s: str):
-    # Codon's str is indexed by codepoint, and the half-block character is three UTF-8 bytes.
-    # So len(s) is not the byte count write() needs.
+    # Codon's `str` is indexed by code point, and the half-block character is three UTF-8 bytes.
+    # So `len(s)` is not the byte count `write()` needs.
     b = s.encode()
     write(1, Ptr[byte](b._ptr.as_byte()), b._len)
 
@@ -51,7 +51,7 @@ def emit(s: str):
 # --- Terminal control ----------------------------------------------------
 
 # `ioctl` is variadic.
-# On darwin arm64 a variadic argument is passed on the stack rather than in a register.
+# On Darwin arm64 a variadic argument is passed on the stack rather than in a register.
 # So the call has to be spelled as variadic for the buffer pointer to reach the kernel.
 @llvm
 def _ioctl_ptr(fd: int, request: int, arg: Ptr[byte]) -> int:
@@ -63,8 +63,8 @@ def _ioctl_ptr(fd: int, request: int, arg: Ptr[byte]) -> int:
 
 
 TIOCGWINSZ = 0x40087468 if __apple__ else 0x5413
-# struct termios has a different layout on darwin and linux (72 and 60 bytes).
-# So the saved state is only ever copied as opaque bytes and edited through cfmakeraw.
+# `struct termios` has a different layout on Darwin and Linux (72 and 60 bytes).
+# So the saved state is only ever copied as opaque bytes and edited through `cfmakeraw`.
 # This covers both.
 TERMIOS_SIZE = 128
 TCSADRAIN = 1
@@ -75,7 +75,7 @@ FALLBACK_ROWS = 24
 
 def term_size() -> Tuple[int, int]:
     """Terminal size as (columns, rows), falling back to 80x24 when it cannot be read."""
-    # struct winsize starts with ws_row then ws_col, both unsigned short, on both platforms.
+    # `struct winsize` starts with `ws_row` then `ws_col`, both `unsigned short`, on both platforms.
     ws = Ptr[byte](8)
     if _ioctl_ptr(1, TIOCGWINSZ, ws) != 0:
         return (FALLBACK_COLS, FALLBACK_ROWS)
@@ -109,7 +109,7 @@ class Terminal:
     def leave(self):
         # SGR reset first.
         # Otherwise the fixed status-line colors persist past leaving the alternate screen.
-        # They would tint the shell prompt underneath.
+        # They would color the shell prompt underneath.
         emit("\x1b[0m\x1b[?25h\x1b[?1049l")
         tcsetattr(0, TCSADRAIN, self.saved)
 
@@ -120,13 +120,13 @@ class Terminal:
 # But they have to exist before Doom(...) returns the instance that owns that memory.
 # So they share this one object, and the instance fills its `mem` in afterwards.
 # `mem` holds the DoomRt.Memory rather than its `data` pointer.
-# memory.grow reallocates the buffer, so a cached pointer would go stale mid-tick.
+# memory.grow reallocates the buffer, so a cached pointer would go out of date mid-tick.
 
 
 class Host:
     mem: Optional[DoomRt.Memory]
-    # Frame geometry comes from loading.onGameInit (640x400 for this binary).
-    # The offset comes from every ui.drawFrame call during a tick; neither is hardcoded.
+    # Frame size comes from `loading.onGameInit` (640x400 for this binary).
+    # The offset comes from every `ui.drawFrame` call during a tick; neither is a constant.
     frame_w: int
     frame_h: int
     frame_off: int
@@ -312,7 +312,7 @@ def instantiate() -> Tuple[Doom, Host]:
 
     doom = Doom(imports, List[str](), Dict[str, str](), Dict[str, str]())
     host.mem = doom.m
-    # initGame triggers loading.onGameInit, which sizes the frame.
+    # `initGame` triggers `loading.onGameInit`, which sizes the frame.
     doom.exports["initGame"].fn.invoke(List[DoomRt.Val]())
     return (doom, host)
 
@@ -332,7 +332,7 @@ def tick(doom: Doom):
 UPPER_HALF_BLOCK = "▀"
 
 # Fixed status-line colors (white on black), independent of the game's own palette.
-# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left.
+# Without an explicit color the status line inherits the colors the last-drawn pixel cell left.
 # It would then flicker with the game.
 STATUS_SGR = "\x1b[48;2;0;0;0m\x1b[38;2;255;255;255m"
 
@@ -342,7 +342,7 @@ RGB_SPAN = 1 << 24
 
 
 def pixel(data: Ptr[byte], off: int, buf_w: int, lx: int, ly: int) -> int:
-    # Memory byte order is B, G, R, A (see loading/drawFrame host contract).
+    # Memory byte order is B, G, R, A (see the `loading`/`drawFrame` host contract).
     o = off + (ly * 2 * buf_w + lx * 2) * 4
     return (int(data[o + 2]) << 16) | (int(data[o + 1]) << 8) | int(data[o])
 
@@ -450,14 +450,14 @@ class Renderer:
 
 # --- Input ---------------------------------------------------------------
 #
-# Terminals deliver key presses only, in raw mode as bytes on stdin.
+# Terminals deliver key presses only, in raw mode as bytes on `stdin`.
 # Arrow keys are 3-byte escape sequences, and everything else is 1 byte.
-# A lone ESC keypress is indistinguishable from an escape sequence's first byte until either:
+# A lone ESC key press looks the same as an escape sequence's first byte until either:
 # - more bytes show up; they arrive together, already buffered, for a real escape sequence;
-# - a short timeout passes with nothing more arriving, which means a real ESC keypress.
+# - a short timeout passes with nothing more arriving, which means a real ESC key press.
 ESC_TIMEOUT_MS = 10
 
-# read_key's out-of-band results; every DOOM key code is positive.
+# `read_key`'s out-of-band results; every DOOM key code is positive.
 QUIT = -1
 NO_KEY = 0
 
@@ -509,7 +509,7 @@ class Keyboard:
 
     def __init__(self, keys: Keys):
         self.keys = keys
-        # struct pollfd is { int fd; short events; short revents } on both platforms.
+        # `struct pollfd` is `{ int fd; short events; short revents }` on both platforms.
         self.pollfd = Ptr[byte](8)
         self.byte_buf = Ptr[byte](1)
         Ptr[Int[32]](self.pollfd.as_byte())[0] = Int[32](0)
@@ -681,7 +681,7 @@ def run_smoke():
 
     # DOOM's software renderer is paletted (classic VGA Mode 13h: at most 256 colors).
     # So a healthy frame tops out in the low hundreds.
-    # A truecolor renderer would produce thousands.
+    # A 24-bit color renderer would produce thousands.
     # A degenerate frame (blank/solid) instead lands in the single digits.
     if distinct <= 50:
         print("smoke: FAIL: frame looks degenerate (too few distinct colors)", file=sys.stderr)

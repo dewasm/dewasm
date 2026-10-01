@@ -1,8 +1,8 @@
 (module
-  ;; Standalone `--dir` round-trip: opens "hello.txt" under the first preopen (fd 3).
-  ;; It writes a line, reopens the file read-only, reads it back, and echoes it to stdout.
+  ;; Standalone `--dir` round-trip: opens "hello.txt" under the first preopen (`fd` 3).
+  ;; It writes a line, reopens the file read-only, reads it back, and echoes it to `stdout`.
   ;; It uses a valid WASI rights mask (0x3FFFFFFF) rather than -1.
-  ;; So wasmtime accepts the same fixture as the ground-truth engine.
+  ;; So Wasmtime accepts the same fixture as the ground-truth engine.
   (import "wasi_snapshot_preview1" "path_open"
     (func $path_open (param i32 i32 i32 i32 i32 i64 i64 i32 i32) (result i32)))
   (import "wasi_snapshot_preview1" "fd_write"
@@ -29,7 +29,7 @@
     (i32.store (i32.const 244) (i32.const 32))
     (drop (call $fd_read (i32.load (i32.const 120)) (i32.const 240) (i32.const 1) (i32.const 252)))
     (drop (call $fd_close (i32.load (i32.const 120))))
-    ;; echo what was read back to stdout
+    ;; echo what was read back to `stdout`
     (i32.store (i32.const 104) (i32.const 200))
     (i32.store (i32.const 108) (i32.load (i32.const 252)))
     (drop (call $fd_write (i32.const 1) (i32.const 104) (i32.const 1) (i32.const 116)))))

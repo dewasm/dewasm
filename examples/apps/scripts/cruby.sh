@@ -3,17 +3,19 @@
 # shellcheck source=common.sh
 
 # CRuby 3.4 (ruby.wasm 2.9.4): the official ruby.wasm wasm32-wasip1 full build.
-# Beyond ruby.wasm we extract the stdlib tree (usr/local/lib/ruby) the interpreter reads at startup.
+# Beyond ruby.wasm we extract the standard library tree (`usr/local/lib/ruby`).
+# The interpreter reads that tree at start.
 # The multi-hundred-MB libruby-static.a and the rest of the tree are not needed at run time.
 # They are left out; the extract helpers unpack only the two named members.
-# The e2e case preopens cache/ruby-lib/usr at guest /usr.
-# This is the "Ruby on Ruby" goal demo.
-# Every backend converts and runs it, behind the `slow_test`/`ultra_slow_test` cargo features.
+# The e2e case preopens `cache/ruby-lib/usr` at guest `/usr`.
+# This is the "Ruby on Ruby" goal example.
+# Every backend converts and runs it, behind the `slow_test`/`ultra_slow_test` Cargo features.
 # The speed category varies by backend.
 # The audit record is agents/apps-audit.md.
 #
-# A second artifact, cache/ruby-packed.wasm, covers ruby.wasm's intended deployment shape.
-# It is the same module with the stdlib embedded by `wasi-vfs pack` (wizer pre-initialization).
+# A second artifact, `cache/ruby-packed.wasm`, covers the shape ruby.wasm intends for release use.
+# It is the same module with the standard library embedded by `wasi-vfs pack`.
+# That packing is a pre-initialization by `wizer`.
 # It is self-contained: no preopens.
 # The official build links libwasi_vfs.a, which is what makes packing work.
 
@@ -26,9 +28,9 @@ fetch_runtime_with_stdlib ruby \
   "$CRUBY_SHA" \
   "$CRUBY_DIR/usr/local/bin/ruby" "$CRUBY_DIR/usr/local/lib/ruby" 1
 
-# ruby-packed: cache/ruby.wasm with cache/ruby-lib/usr embedded at guest /usr.
-# The stamp folds the archive sha and `wasi-vfs --version` (same discipline as the wasm-opt stamps).
-# So a re-pin or a CLI upgrade re-packs instead of keeping a stale module.
+# `ruby-packed`: `cache/ruby.wasm` with `cache/ruby-lib/usr` embedded at guest `/usr`.
+# The stamp folds the archive checksum and `wasi-vfs --version`, as the `wasm-opt` stamps do.
+# So a new checksum or CLI version re-packs instead of keeping an out-of-date module.
 require_tool ruby-packed wasi-vfs \
   "prebuilt CLI on https://github.com/kateinoigakukun/wasi-vfs/releases, or \`cargo install wasi-vfs-cli\`"
 packed=cache/ruby-packed.wasm

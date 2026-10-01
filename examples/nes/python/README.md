@@ -26,7 +26,7 @@ It sanity-checks the last frame, writes it to `screenshot.ppm`, and exits non-ze
 The file is binary P6 PPM, since the standard library has no PNG encoder.
 Either mode takes an optional ROM path as the last argument.
 Examples are `./run.sh path/to/game.nes` and `./run.sh --smoke path/to/game.nes`.
-The default is the bundled demonstration ROM, `examples/apps/cache/alter_ego.nes`.
+The default is the example ROM, `examples/apps/cache/alter_ego.nes`.
 Both modes run under `pypy3` when it is on `PATH` and under `python3` otherwise.
 The reason is below.
 Set `PYTHON` to pick an interpreter explicitly (`PYTHON=python3 ./run.sh --smoke`).
@@ -73,4 +73,4 @@ That differs from DOOM's edge-triggered `reportKeyDown`/`reportKeyUp` pair.
 Terminal state is always restored on exit, including on Ctrl-C.
 That state is raw mode, the alternate screen, and cursor visibility.
 
-The bundled ROM is [Alter Ego](https://forums.nesdev.org/viewtopic.php?t=7999) by Shiru, released into the public domain.
+The example ROM is [Alter Ego](https://forums.nesdev.org/viewtopic.php?t=7999) by Shiru, released into the public domain.

@@ -35,12 +35,24 @@ use wast::{WastArg, WastRet};
 /// - a tag's parameter types.
 ///
 /// The `assert_unlinkable` cases that test those stay known gaps.
-/// So do the `linking`-tagged out-of-date-state cases downstream of a declared-unsupported feature.
-/// That feature (multi-memory) also happens to `register`.
+/// So do the `linking`-tagged cases, described below.
 /// `imports.wast` contributes 59 of them (28 before tags were represented).
 /// Its fixture module exports tags, so it only converts now.
 /// Every type-mismatch check downstream of it became reachable at once.
 /// It is the same mechanism as Ruby's, no new gap.
+///
+/// `linking` (`linking0`, `load1`): out-of-date state left by a module that never converts.
+/// The module that calls `register` is not the one that uses multi-memory.
+/// `linking0` registers `$Mt`, which has one table and no memory.
+/// `load1` registers `$M`, which exports its one memory.
+/// A later module imports that table or memory and writes into it as it instantiates.
+/// That later module declares several memories, and multi-memory is declared unsupported.
+/// So it never converts, and its writes never happen.
+/// A later assertion against the registered module then observes out-of-date state.
+/// In `linking0`, slot 7 of `$Mt`'s table stays null (1 failure).
+/// The write must persist there although the writing module's instantiation then traps.
+/// In `load1`, bytes 20 to 24 of `$M`'s memory stay zero (5 failures).
+/// This is not a gap in cross-module linking itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 59, "import-limits"),
     ("imports2", 2, "import-limits"),

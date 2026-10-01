@@ -37,13 +37,13 @@ from C import poll(Ptr[byte], int, int) -> int
 from C import tcgetattr(int, Ptr[byte]) -> int
 from C import tcsetattr(int, int, Ptr[byte]) -> int
 from C import cfmakeraw(Ptr[byte])
-# Codon's own `open` builds the PPM file below, so the libc one keeps a separate name.
+# Codon's own `open` builds the PPM file below, so the one from `libc` keeps a separate name.
 from C import open(cobj, int) -> int as c_open
 
 # Resolved against the working directory, which run.sh sets to this frontend's own directory.
 DEFAULT_ROM = "../../apps/cache/alter_ego.nes"
 
-# Controller bit layout, fixed by nes_demo.c's setInput contract.
+# Controller bit layout, fixed by the `setInput` contract of `nes_demo.c`.
 BIT_A = 1
 BIT_B = 2
 BIT_SELECT = 4
@@ -54,9 +54,9 @@ BIT_LEFT = 64
 BIT_RIGHT = 128
 
 # A pressed key is held down-active until this many seconds pass without seeing it again.
-# Terminals only deliver key-down events (no key-up), so releases have to be synthesized.
+# Terminals only deliver key-down events (no key-up), so releases have to be generated here.
 # This matches the Python NES frontend's window.
-# It has to outlast a terminal's own autorepeat interval, which is where the lower bound comes from.
+# It has to last longer than a terminal's own key repeat interval: that sets the lower bound.
 RELEASE_TIMEOUT = 0.4
 
 FRAME_W = 256
@@ -69,17 +69,17 @@ FRAME_H = 240
 TARGET_FPS = 60
 FRAME_SECONDS = 1.0 / TARGET_FPS
 
-# Matches NES_FRAMES in crates/dewasm-test-helper/src/nes.rs.
+# Matches `NES_FRAMES` in `crates/dewasm-test-helper/src/nes.rs`.
 # It is the smallest input-free tick count that clears Alter Ego's boot.
 # That run reaches its stable credits screen.
-# It also lets a smoke run's screenshot.ppm be diffed directly against the snapshot.
-# The snapshot is examples/apps/snapshots/nes_frame.ppm.
+# It also lets a smoke run's `screenshot.ppm` be diffed directly against the snapshot.
+# The snapshot is `examples/apps/snapshots/nes_frame.ppm`.
 SMOKE_FRAMES = 40
 
 
 def emit(s: str):
-    # Codon's str is indexed by codepoint, and the half-block character is three UTF-8 bytes.
-    # So len(s) is not the byte count write() needs.
+    # Codon's `str` is indexed by code point, and the half-block character is three UTF-8 bytes.
+    # So `len(s)` is not the byte count `write()` needs.
     b = s.encode()
     write(1, Ptr[byte](b._ptr.as_byte()), b._len)
 
@@ -87,7 +87,7 @@ def emit(s: str):
 # --- Terminal control ----------------------------------------------------
 
 # `ioctl` is variadic.
-# On darwin arm64 a variadic argument is passed on the stack rather than in a register.
+# On Darwin arm64 a variadic argument is passed on the stack rather than in a register.
 # So the call has to be spelled as variadic for the buffer pointer to reach the kernel.
 @llvm
 def _ioctl_ptr(fd: int, request: int, arg: Ptr[byte]) -> int:
@@ -99,8 +99,8 @@ def _ioctl_ptr(fd: int, request: int, arg: Ptr[byte]) -> int:
 
 
 TIOCGWINSZ = 0x40087468 if __apple__ else 0x5413
-# struct termios has a different layout on darwin and linux (72 and 60 bytes).
-# So the saved state is only ever copied as opaque bytes and edited through cfmakeraw.
+# `struct termios` has a different layout on Darwin and Linux (72 and 60 bytes).
+# So the saved state is only ever copied as opaque bytes and edited through `cfmakeraw`.
 # This covers both.
 TERMIOS_SIZE = 128
 TCSADRAIN = 1
@@ -111,7 +111,7 @@ FALLBACK_ROWS = 24
 
 def term_size() -> Tuple[int, int]:
     """Terminal size as (columns, rows), falling back to 80x24 when it cannot be read."""
-    # struct winsize starts with ws_row then ws_col, both unsigned short, on both platforms.
+    # `struct winsize` starts with `ws_row` then `ws_col`, both `unsigned short`, on both platforms.
     ws = Ptr[byte](8)
     if _ioctl_ptr(1, TIOCGWINSZ, ws) != 0:
         return (FALLBACK_COLS, FALLBACK_ROWS)
@@ -145,7 +145,7 @@ class Terminal:
     def leave(self):
         # SGR reset first.
         # Otherwise the fixed status-line colors persist past leaving the alternate screen.
-        # They would tint the shell prompt underneath.
+        # They would color the shell prompt underneath.
         emit("\x1b[0m\x1b[?25h\x1b[?1049l")
         tcsetattr(0, TCSADRAIN, self.saved)
 
@@ -196,7 +196,7 @@ class Emulator:
         if fd < 0:
             print("error: cannot open ROM:", path, file=sys.stderr)
             sys.exit(1)
-        # agnes's mappers (NROM/UxROM/MMC1/MMC3) top out well under this.
+        # The mappers of `agnes` (NROM/UxROM/MMC1/MMC3) top out well under this.
         cap = 4 * 1024 * 1024
         buf = Ptr[byte](cap)
         size = 0
@@ -235,20 +235,20 @@ class Emulator:
 # Each character cell shows two vertically-stacked pixels via the upper-half block character.
 # Its foreground is the top pixel, and its background is the bottom pixel.
 # DOOM's 640x400 framebuffer is a 2x upscale of its native 320x200.
-# Unlike it, agnes's 256x240 framebuffer already is the native NES resolution.
+# Unlike it, the 256x240 framebuffer of `agnes` already is the native NES resolution.
 # So pixels are read 1:1.
 # They are nearest-neighbor sampled down to however many columns/rows actually fit.
 
 UPPER_HALF_BLOCK = "▀"
 
 # Fixed status-line colors (white on black), independent of the game's own palette.
-# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left.
+# Without an explicit color the status line inherits the colors the last-drawn pixel cell left.
 # It would then flicker with the game.
 STATUS_SGR = "\x1b[48;2;0;0;0m\x1b[38;2;255;255;255m"
 
 
 def pixel_index(data: Ptr[byte], off: int, buf_w: int, x: int, y: int) -> int:
-    # One byte per pixel, a palette index; the & 0x3F mask is load-bearing (see nes_demo.c).
+    # One byte per pixel, a palette index; the `& 0x3F` mask is load-bearing (see `nes_demo.c`).
     return int(data[off + y * buf_w + x]) & 0x3F
 
 
@@ -351,14 +351,14 @@ class Renderer:
 
 # --- Input ---------------------------------------------------------------
 #
-# Terminals deliver key presses only, in raw mode as bytes on stdin.
+# Terminals deliver key presses only, in raw mode as bytes on `stdin`.
 # Arrow keys are 3-byte escape sequences, and everything else is 1 byte.
-# A lone ESC keypress is indistinguishable from an escape sequence's first byte until either:
+# A lone ESC key press looks the same as an escape sequence's first byte until either:
 # - more bytes show up; they arrive together, already buffered, for a real escape sequence;
-# - a short timeout passes with nothing more arriving, which means a real ESC keypress.
+# - a short timeout passes with nothing more arriving, which means a real ESC key press.
 ESC_TIMEOUT_MS = 10
 
-# read_key's out-of-band results; every controller bit is positive.
+# Out-of-band results of `read_key`; every controller bit is positive.
 QUIT = -1
 NO_KEY = 0
 
@@ -373,7 +373,7 @@ class Keyboard:
     byte_buf: Ptr[byte]
 
     def __init__(self):
-        # struct pollfd is { int fd; short events; short revents } on both platforms.
+        # `struct pollfd` is `{ int fd; short events; short revents }` on both platforms.
         self.pollfd = Ptr[byte](8)
         self.byte_buf = Ptr[byte](1)
         Ptr[Int[32]](self.pollfd.as_byte())[0] = Int[32](0)
@@ -424,9 +424,9 @@ def run_interactive(rom_path: str):
 
     terminal.enter()
     try:
-        # Fixed-timestep pacing: sleep when running ahead of schedule.
+        # Pacing with a fixed time step: sleep when running ahead of schedule.
         # When the host can't keep up, never sleep and just resync the schedule to "now".
-        # That avoids trying to burn through a backlog of missed frames.
+        # That avoids trying to catch up on all the missed frames.
         next_frame_at = time.monotonic()
         while True:
             events = List[int]()
@@ -528,13 +528,13 @@ def run_smoke(rom_path: str):
     )
 
     # The NES PPU palette tops out at 64 colors.
-    # agnes's frame is a small, mostly-flat subset of it.
+    # The frame of `agnes` is a small, mostly-flat subset of it.
     # Alter Ego's title screen settles at 7.
-    # NES_FRAMES's comment in crates/dewasm-test-helper/src/nes.rs records that.
-    # So a healthy frame is nowhere near the thousands of colors a truecolor renderer would produce.
+    # The comment on `NES_FRAMES` in `crates/dewasm-test-helper/src/nes.rs` records that.
+    # So a healthy frame is far from the thousands of colors a 24-bit color renderer would produce.
     # A degenerate (blank/solid) frame is the real signal to catch, and lands in the single digits.
-    # Mirrors the >4 threshold the snapshot oracle uses (crates/xtask/src/nes_snapshot.rs).
-    # The sibling frontends use it too.
+    # Mirrors the >4 threshold the snapshot oracle uses (`crates/xtask/src/nes_snapshot.rs`).
+    # The other NES frontends use it too.
     if distinct <= 4:
         print("smoke: FAIL: frame looks degenerate (too few distinct colors)", file=sys.stderr)
         sys.exit(1)

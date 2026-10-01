@@ -1,47 +1,46 @@
-;; i64_div: i64 division and remainder, signed and unsigned.
+;; `i64_div`: i64 division and remainder, signed and unsigned.
 ;;
-;; The i32_div chain widened to i64.
-;; Against i32_div it separates the cost of the 64-bit value representation.
-;; The other cost is the division correction itself, as i64_alu does against i32_alu.
+;; The `i32_div` chain widened to i64.
+;; Against `i32_div` it separates two costs, the way `i64_alu` does against `i32_alu`.
+;; One is the cost of the 64-bit value representation; the other is the division correction itself.
 ;; Every divisor is `(x & 0xffff) | 3`, which is at least 3.
 ;; That covers two requirements at once.
 ;; Nothing traps: division by zero and the INT64_MIN / -1 overflow are both out of reach.
 ;; No unsigned quotient reaches 2^63.
-;; pywasm 2.2.3 stores an i64.div_u result as a signed value.
+;; `pywasm` 2.2.3 stores an `i64.div_u` result as a signed value.
 ;; It raises OverflowError above that point.
 ;; This case is here to measure division, not to reproduce that bug.
 ;;
 ;; ---------------------------------------------------------------------------
 ;; Shared preamble.
-;; Duplicated verbatim in every hand-written microbenchmark.
-;; So each .wat stays a standalone module that wat2wasm and dewasm can consume directly.
+;; Duplicated unchanged in every hand-written microbenchmark.
+;; So each `.wat` stays a standalone module that `wat2wasm` and dewasm can consume directly.
 ;;
-;; A microbenchmark is a WASI command module invoked as `<module> <iterations>`.
-;; It does <iterations> units of work, writes exactly one line to stdout, and exits 0.
+;; A microbenchmark is a WASI command module run as `<module> <iterations>`.
+;; It does <iterations> units of work, writes exactly one line to `stdout`, and exits 0.
 ;; The line is the decimal result followed by a newline.
 ;; <iterations> = 0 does no work but still prints.
-;; That is how the harness measures startup in isolation.
-;; Only args_sizes_get / args_get / fd_write / proc_exit are imported.
+;; That is how the harness measures cold start in isolation.
+;; Only `args_sizes_get` / `args_get` / `fd_write` / `proc_exit` are imported.
 ;; A body stays inside i32/i64/f64 except for the one axis its case exists to measure.
-;; That axis is f32 in f32_alu, and exception handling in eh_throw and eh_try.
+;; That axis is f32 in `f32_alu`, and exception handling in `eh_throw` and `eh_try`.
 ;; This keeps every other case within reach of the pure-Ruby and pure-Python interpreters.
 ;; Those are the interpreters this suite compares.
-;; A runner that cannot execute a case's axis is excluded for that case in the workload table.
+;; A runner that cannot run a case's axis is excluded for that case in the harness's workload table.
 ;; The reason is stated there.
 ;;
 ;; Memory map, shared by every microbenchmark.
-;; It starts at 0x1000 rather than at 0.
-;; wasm3 traps whenever a WASI out param is written to linear-memory address 0.
+;; wasm3 traps whenever a WASI out parameter is written to linear-memory address 0.
 ;; The trap message is "out of bounds memory access".
 ;; Address 0 is valid linear memory, and every other runtime in the matrix accepts it.
-;; So the whole block is simply moved up out of wasm3's way:
+;; So the whole block starts at 0x1000 rather than at 0, out of wasm3's way:
 ;;
-;; 0x1000   4  argc                     (args_sizes_get out param)
-;; 0x1004   4  argv buffer size         (args_sizes_get out param)
-;; 0x1010      argv pointer array       (args_get out param)
-;; 0x1100      argv string buffer       (args_get out param)
-;; 0x1400   8  iovec { base, len }
-;; 0x1408   4  fd_write nwritten
+;; 0x1000   4  `argc`                   (`args_sizes_get` out parameter)
+;; 0x1004   4  `argv` buffer size       (`args_sizes_get` out parameter)
+;; 0x1010      `argv` pointer array     (`args_get` out parameter)
+;; 0x1100      `argv` string buffer     (`args_get` out parameter)
+;; 0x1400   8  `iovec { base, len }`
+;; 0x1408   4  `fd_write` `nwritten`
 ;; 0x1410  24  decimal scratch, filled backwards from 0x1428
 ;; 0x1800  29  usage message
 ;; 0x10000+    working set, for the microbenchmarks that have one
@@ -60,7 +59,7 @@
 
   (data (i32.const 0x1800) "usage: <module> <iterations>\n")
 
-  ;; Every argv problem lands here.
+  ;; Every `argv` problem lands here.
   ;; The harness always passes exactly one argument.
   ;; So anything else is a caller bug, not an input to guess at.
   (func $die
@@ -71,8 +70,8 @@
     (call $proc_exit (i32.const 2))
     (unreachable))
 
-  ;; argv[1] as an unsigned decimal.
-  ;; Hand-rolled atoi: ask for the sizes, ask for the strings, then walk the bytes of argv[1].
+  ;; `argv[1]` as an unsigned decimal.
+  ;; Hand-rolled `atoi`: ask for the sizes, ask for the strings, then walk the bytes of `argv[1]`.
   (func $iterations (result i32)
     (local $p i32) (local $start i32) (local $c i32) (local $n i32)
     (if (call $args_sizes_get (i32.const 0x1000) (i32.const 0x1004))
@@ -98,7 +97,7 @@
     (if (i32.eq (local.get $p) (local.get $start)) (then (call $die)))
     (local.get $n))
 
-  ;; Write `<v>\n` to stdout with v as an unsigned decimal.
+  ;; Write `<v>\n` to `stdout` with `v` as an unsigned decimal.
   ;; Digits come out least significant first, so the scratch area is filled backwards.
   (func $print (param $v i64)
     (local $p i32)

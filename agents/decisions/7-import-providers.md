@@ -16,7 +16,7 @@ It also generalized it to generated classes implementing the protocol themselves
 
 Imports could only be supplied as a Hash of per-function callables.
 That made a whole-runtime replacement not practical.
-A WASI implementation is coupled to the guest memory.
+That is because a WASI implementation is coupled to the guest memory.
 But the memory exists only after `new` returns, while imports must go *into* `new`.
 This is the classic instantiation circularity.
 Library mode also refused to instantiate WASI-importing modules at all.
@@ -57,7 +57,7 @@ Survey of how real systems break the circularity:
   Unimplemented system calls resolve to stubs at generation time, so they cannot trigger construction.
 - `Rt::WASI` implements the provider protocol itself.
   So a custom WASI runtime can replace it whole by defining two methods.
-  The standalone main also collapses to `Klass.new({}, args:, env:)` + `invoke("_start")`.
+  So the standalone main also collapses to `Klass.new({}, args:, env:)` + `invoke("_start")`.
 - `--no-default-wasi` (library mode only) turns off the fallback.
   It serves embedders that want zero ambient authority.
   In library mode, `proc_exit` surfaces as `Klass::Rt::Exit` for the embedder to rescue.

@@ -1,6 +1,6 @@
 //! The NES framebuffer-snapshot oracle (issue #114), mirroring the DOOM one.
 //! It runs the *original* `nes.wasm` under the `wasmtime` crate with the deterministic contract.
-//! That contract loads the ROM at its fixed version and ticks [`NES_FRAMES`] frames with no input.
+//! That contract loads the example ROM and ticks [`NES_FRAMES`] frames with no input.
 //! The oracle writes the rendered frame to `examples/apps/snapshots/nes_frame.ppm`.
 //! `wasmtime` lives here, in development tooling, not in `dewasm-test-helper`.
 //! A PNG rendering is emitted alongside for people to view; only the PPM is the compared oracle.

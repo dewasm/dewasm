@@ -47,7 +47,7 @@ So the prize was known before the design.
   The store's address is spilled to a temp first.
   That also keeps its evaluation (and any trap inside it) in the original order.
 - **A loop containing a call, an indirect call, or a bulk-memory operation is not hoisted from.**
-  Those can write memory (or run code that does) with no address to guard.
+  That is because those can write memory (or run code that does) with no address to guard.
 - **The threshold is per backend** ([`licm::Params`]).
   A loop with stores needs at least `min_hoisted_with_stores` distinct hoistable loads (Ruby: 2).
   Below that count the per-store guards do not pay.

@@ -44,7 +44,7 @@ Measured per-operation costs (Perl 5.44, M1 Pro):
   So zero signs, NaN payloads, and the pack-'f' overflow clamp all stay in the fallback.
   The fallback is the unchanged `Rt::f32(Rt::fadd(...))` chain.
 - The fast branch yields `$__ft + 0`, never the lexical itself.
-  Perl aliases `@_` elements to the yielded scalar until the callee copies them.
+  The reason: Perl aliases `@_` elements to the yielded scalar until the callee copies them.
   So two fast-path ternaries as arguments of one call would both alias `$__ft`.
   The later write would then replace the earlier argument (caught by `float_exprs.wast`).
   `+ 0` forces a fresh scalar, and is value-exact for everything the branch can yield.
@@ -64,7 +64,7 @@ Measured per-operation costs (Perl 5.44, M1 Pro):
   That is because wasm traps a faulting value computation before the store's own bounds check.
   A non-leaf value is therefore bound to `$__mv` before the test.
   The store address lexical (`$__msa`) is distinct from the load one (`$__ma`).
-  A non-leaf store value may contain loads that reuse `$__ma` after the store address was bound.
+  The reason: a non-leaf store value may contain loads reusing `$__ma` after the store address is bound.
 - Kept as calls:
   - float `div` (Perl dies on `x / 0.0`);
   - `min`/`max`/`copysign`/`sqrt`/`ceil`/`floor`/`trunc`/`nearest`;

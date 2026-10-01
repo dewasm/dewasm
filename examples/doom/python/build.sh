@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Regenerate the dewasm-generated DOOM library and byte-compile the terminal frontend.
-# doom_gen.py is ~11MB of generated code and is gitignored.
+# `doom_gen.py` is ~11MB of generated code and is ignored by Git.
 # So this step has to run before main.py can import it from a clean checkout.
 # The byte-compile check runs under the same interpreter run.sh will use.
 # That is PyPy when installed, unless $PYTHON says otherwise.

@@ -2,10 +2,10 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# ripgrep: built from the pinned source release with cargo for wasm32-wasip1.
-# Default features (which already exclude pcre2); no tweaks needed: ripgrep
-# 14.1.1 builds clean for wasip1 as-is.
-# A Ruby-only filesystem demo (recursive directory search over a preopened tree).
+# `ripgrep`: built from the source release at a fixed version with `cargo` for wasm32-wasip1.
+# Default features, which already exclude pcre2.
+# No changes are needed: `ripgrep` 14.1.1 builds clean for wasip1 as-is.
+# A Ruby-only file system example (recursive directory search over a preopened tree).
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 

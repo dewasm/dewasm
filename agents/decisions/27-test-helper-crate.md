@@ -6,7 +6,7 @@ It also holds the shared case data and the per-case test macros.
 Each backend crate owns its specification, WASI, and e2e suites.
 `dewasm-cli` keeps only the tests that need every backend.
 Wasmtime is itself a `BackendUnderTest` (`crates/dewasm-test-helper/tests/apps_wasmtime.rs`).
-The snapshot-freshness checks then run through the same shared runners.
+So the snapshot-freshness checks run through the same shared runners.
 Builds on [decision 3](3-testing-strategy.md) (the specification harness binds).
 It also builds on [decision 8](8-latest-testsuite-support-matrix.md).
 That decision gives skip attribution and per-file expected-failure lists.
@@ -86,7 +86,7 @@ Each backend crate takes it as a development dependency.
 - **One flat trait**: forces a backend without specification support to stub a dozen `emit_*` methods.
   It must do so before its first `cowsay` run.
 - **test-helper depends on the backend crates**: inverts the dependency.
-  Backends could then no longer take it as a development dependency.
+  So backends could no longer take it as a development dependency.
 - **A dedicated conformance crate for the cross-backend tests**: an extra crate for two tests.
   It is the way out if a third appears.
 - **Backend-specific `#[test]`s for "language-only" scenarios**.

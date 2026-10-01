@@ -26,7 +26,7 @@ That is raw bytes, the fixed corpus, and what a runtime's size counts.
 [Decision 64](64-size-record.md) put the size record in `benchmarks/results/`.
 It did so that every measurement record has one home rather than one per kind.
 The home was the right call and its location was not.
-A size record measures no benchmark.
+That is because a size record measures no benchmark.
 The path claimed a containment that does not hold.
 So the command and the documents around it had to keep explaining it.
 They explained why a size record lives under the benchmark suite.
@@ -102,7 +102,7 @@ The test is in `crates/xtask/src/bench/mod.rs`.
 - **Leave the speed records unsuffixed.**
   The case for it: the suffix only has to separate the newer kind from the older one.
   True as a parsing matter and false as a naming one.
-  It makes "speed" the meaning of a missing suffix, which nothing in the file name says.
+  That is because it makes "speed" the meaning of a missing suffix, which nothing in the name says.
   Every reader who has to ask what an unsuffixed record is pays for the two characters saved.
 
 - **Keep one command per kind with `--render FILE`.**
@@ -130,6 +130,6 @@ The test is in `crates/xtask/src/bench/mod.rs`.
 - Negative: links to `benchmarks/results/...` from outside the repository do not redirect.
   The three renamed speed records break any reference to their old file names.
   The historical mentions inside this directory keep the old paths deliberately.
-  They record what was true then.
+  That is because they record what was true then.
 - Carry-over: the test checks that a line exists, not that its occasion was filled in.
   A TODO reaching main is a review miss, not a mechanical one.

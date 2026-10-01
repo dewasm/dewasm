@@ -40,8 +40,8 @@ That includes NaN payloads through `reinterpret` and memory.
   Measured on MRI: `pack("e")` canonicalizes NaN sign and payload.
   It also overflows straight to infinity instead of rounding near f32-max.
   So f32 bit extraction/injection takes a software path for NaNs.
-  Memory traffic of f32 values goes through those helpers.
-  The overflow boundary (2^128 − 2^103) is handled explicitly.
+  So memory traffic of f32 values goes through those helpers.
+  So the overflow boundary (2^128 − 2^103) is handled explicitly.
   The specification requires some operations to *quiet* NaNs.
   Those are `floor`/`ceil`/`trunc`/`nearest`/`sqrt`/`promote`, and they set the quiet bit via bit manipulation.
 - **Trap conditions are explicit checks in helpers.**

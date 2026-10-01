@@ -41,7 +41,7 @@ Frames are dissolved until two closure rules together reach a fixed point:
   Once any frame on its path dissolves, the whole path goes.
   The reason: a relayed `break`/`next` could no longer thread past the dispatch loop.
 - Dissolving a frame still dissolves every frame outside it.
-  A surviving Ruby loop would capture a `next` aimed at the dispatch.
+  That is because a surviving Ruby loop would capture a `next` aimed at the dispatch.
 
 Relay and dispatch can both appear in one function.
 `__br` is hoisted whenever any crossed frame survives.

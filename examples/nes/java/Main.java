@@ -5,13 +5,13 @@
 // The smoke test (`--smoke`) is headless.
 // It never touches java.awt.event/javax.swing, so it can run without a display.
 //
-// nes.wasm has zero imports, unlike DOOM's console/gameSaving/ui/loading host interface.
-// It exposes memory plus allocRom/initGame/setInput/tickGame and the frame accessors directly.
+// `nes.wasm` has zero imports, unlike DOOM's `console`/`gameSaving`/`ui`/`loading` host interface.
+// It exports memory plus `allocRom`/`initGame`/`setInput`/`tickGame` and the frame accessors.
 // It never calls back into the host.
 // So unlike DoomEngine, NesEngine builds no imports map at all.
 // It just drives the exports and composes the frame out of linear memory itself after every tick.
 // The host is responsible for the fixed 60 Hz pace.
-// tickGame renders exactly one NES video frame per call, with no internal timing of its own.
+// `tickGame` renders exactly one NES video frame per call, with no internal timing of its own.
 
 import java.awt.Color;
 import java.awt.Dimension;
@@ -39,12 +39,12 @@ import javax.swing.SwingUtilities;
 public class Main {
 
     // Alter Ego by Shiru, released into the public domain.
-    // examples/apps/scripts/nes.sh fetches and pins it.
+    // `examples/apps/scripts/nes.sh` fetches it and checks it against a fixed checksum.
     // It is resolved relative to the working directory.
     // run.sh/build.sh leave that at this script's own directory.
     private static final String DEFAULT_ROM = "../../apps/cache/alter_ego.nes";
 
-    // Button bitmask (matches nes_demo.c's setInput and the README table).
+    // Button bit mask (matches `setInput` in `nes_demo.c` and the README table).
     private static final int BTN_A = 1;
     private static final int BTN_B = 2;
     private static final int BTN_SELECT = 4;
@@ -56,8 +56,8 @@ public class Main {
 
     private static final int FPS = 60;
 
-    // Shown as an on-screen overlay (mirrors mapKey).
-    // There's no other discoverability path for a window app.
+    // Shown on the screen over the game (mirrors `mapKey`).
+    // That is because there's no other discoverability path for a window app.
     private static final String CONTROLS_TEXT = "arrows d-pad  x A  z B  enter start  space select  esc quit";
 
     private static final String WINDOW_TITLE = "NES (dewasm) - Alter Ego";
@@ -80,11 +80,11 @@ public class Main {
         }
     }
 
-    // Headless self-test: init + a fixed number of ticks with no window.
+    // Headless self-test: initialization + a fixed number of ticks with no window.
     // It uses no KeyListener and no JFrame.
     // It uses only BufferedImage/ImageIO, which render in software and need no display.
     // Alter Ego opens on a run of static black-background credits screens.
-    // A handful of Start presses are injected along the way to page through them.
+    // A few Start presses are injected along the way to page through them.
     // They reach the animated title screen.
     // This mirrors DOOM's smoke test, which injects Enter to clear its title/legal screens.
     // So the final frame has real varied pixel art rather than mostly-black credits text.
@@ -115,10 +115,10 @@ public class Main {
             }
         }
         System.out.println("smoke: " + colors.size() + " distinct colors in final frame");
-        // A blank/solid-color buffer would top out at a handful of colors.
+        // A blank/solid-color buffer would top out at a few colors.
         // Such a buffer would mean the memory read was set up wrong.
         // Any real rendered NES frame clears this easily.
-        // Such a frame is a 25-entry palette shaded across a title screen or gameplay.
+        // Such a frame is a 25-entry palette shaded across a title screen or a game scene.
         if (colors.size() <= 8) {
             System.err.println("smoke: FAILED sanity check (expected > 8 distinct colors)");
             System.exit(1);
@@ -126,10 +126,10 @@ public class Main {
         System.out.println("smoke: OK");
     }
 
-    // Interactive window: a JFrame whose panel blits the engine's current
-    // BufferedImage scaled ~2x, plus a KeyListener that tracks which mapped keys are held.
+    // Interactive window: a `JFrame` whose panel draws the engine's current `BufferedImage`.
+    // The image is scaled ~2x, and a `KeyListener` tracks which mapped keys are held.
     // NES ticks on its own thread, paced to 60 Hz, while Swing delivers input on the EDT.
-    // tickGame has no internal timing.
+    // `tickGame` has no internal timing.
     // One call renders exactly one video frame, however fast it's called.
     // The game thread reads the held-key set each tick.
     // A simple lock guards the set, since it's small and touched every ~16ms either way.
@@ -184,8 +184,8 @@ public class Main {
             long frameNanos = 1_000_000_000L / FPS;
             long next = System.nanoTime();
             // Measured over ~1s windows (frame counting), not one frame at a time.
-            // A per-frame instantaneous rate would be far too noisy to read.
-            // That holds even though tickGame paces at a fixed 60Hz target.
+            // A rate measured per frame would be far too noisy to read.
+            // That holds even though `tickGame` paces at a fixed 60Hz target.
             long fpsWindowStart = next;
             int fpsWindowFrames = 0;
             while (running.get() != 0) {
@@ -221,8 +221,8 @@ public class Main {
                         break;
                     }
                 } else {
-                    // Fell behind (e.g. the window was minimized).
-                    // Resync instead of a spiral-of-death catch-up burst.
+                    // Fell behind (for example the window was minimized).
+                    // Resync instead of a catch-up burst that would only fall further behind.
                     next = System.nanoTime();
                 }
             }
@@ -270,7 +270,7 @@ public class Main {
     }
 
     // Draws the engine's current frame scaled to the panel, preserving aspect ratio.
-    // Black bars letterbox the short axis.
+    // Black bars fill the short axis.
     private static final class NesPanel extends JPanel {
         volatile NesEngine engine;
         volatile double fps;
@@ -302,9 +302,9 @@ public class Main {
             drawHud(g2, dx, dy + dh);
         }
 
-        // Overlays the FPS and control scheme on a fixed-color dark bar.
+        // Draws the FPS and control scheme over the frame, on a fixed-color dark bar.
         // The bar runs along the bottom edge of the rendered frame.
-        // So both stay legible against the game's own (highly variable) palette.
+        // So both stay readable against the game's own (highly variable) palette.
         // Without the bar, the panel's plain black background would bleed through.
         private void drawHud(Graphics2D g2, int frameLeft, int frameBottom) {
             String text = String.format("%.0f FPS  |  %s", fps, controlsText);
@@ -319,11 +319,11 @@ public class Main {
 
     // Owns the Nes instance and the current framebuffer.
     // nes.wasm has no imports, so construction just needs the ROM bytes.
-    // It allocates a guest buffer with allocRom, copies the ROM in, and calls initGame.
+    // It allocates a guest buffer with `allocRom`, copies the ROM in, and calls `initGame`.
     // Every tick() sets the input mask and advances one video frame.
-    // Then it composes the guest's frame into the BufferedImage's backing int[].
+    // Then it composes the guest's frame into the backing `int[]` of the `BufferedImage`.
     // The guest hands over one palette *index* per pixel plus a fixed 64-entry palette.
-    // So the palette is decoded once into the ARGB ints TYPE_INT_ARGB expects.
+    // So the palette is decoded once into the ARGB `int` values `TYPE_INT_ARGB` expects.
     // Every pixel is then one masked table lookup.
     private static final class NesEngine {
         final Nes nes;
@@ -338,9 +338,9 @@ public class Main {
         final BufferedImage frame;
 
         NesEngine(byte[] rom) {
-            // This module has zero wasm imports (verified by nes.sh with wasm-objdump).
+            // This module has zero wasm imports (verified by `nes.sh` with `wasm-objdump`).
             // It has no WASI imports either.
-            // So null is tolerated for the imports map and for args/env/preopens.
+            // So `null` is accepted for the imports map and for arguments/environment/preopens.
             this.nes = new Nes(null, null, null, null);
             this.memory = (Nes.Memory) nes.Exports.get("memory");
 
@@ -385,7 +385,7 @@ public class Main {
             byte[] d = memory.d;
             for (int i = 0; i < pixels.length; i++) {
                 // One byte per pixel, a palette index.
-                // The & 0x3f mask is load-bearing (see examples/apps/src/nes_demo.c).
+                // The `& 0x3f` mask is load-bearing (see `examples/apps/src/nes_demo.c`).
                 pixels[i] = palette[d[screenOff + i] & 0x3f];
             }
         }

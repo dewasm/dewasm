@@ -48,7 +48,8 @@ Local speeds:
 `-- --include-ignored` remains the feature-independent way to run everything.
 The `ultra` category is thereby *locally* verified, never silently skipped.
 It is run before declaring support or tagging a release.
-The cases stay compiled (Clippy runs `--all-features`) and visibly `ignored` in default output.
+That is because the cases stay compiled (Clippy runs `--all-features`).
+They are also visibly `ignored` in default output.
 
 ## Rejected alternatives
 

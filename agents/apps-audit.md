@@ -288,7 +288,7 @@ The LLVM toolchain emits those immediates.
 So these modules audit as *pure* baseline rather than baseline + the reference-types encoding bit¹.
 The fetched release artifacts (`qjs`, CPython, CRuby) still carry that bit.
 `cowsay` is fetched as a release but audits as pure baseline too.
-Its own release workflow runs the same `wasm-opt` pass before publishing.
+That is because its own release workflow runs the same `wasm-opt` pass before publishing.
 
 ¹² **`zeroperl` retraction (audited 2026-08-01).**
 This entry was previously *deferred* on three presumed host-environment blockers.
@@ -301,7 +301,7 @@ It lowers to ordinary baseline instructions.
 The evaluation path never does that.
 So a stub that returns zero, as an import provider, satisfies the link with no host glue.
 (3) No **standard library preopen** is needed.
-The Perl core is embedded in the module as "SFS" data served from guest memory.
+That is because the Perl core is embedded in the module as "SFS" data served from guest memory.
 The only preopen `zeroperl_init` requires is `/dev/null`, mapped guest→host `/dev/null`.
 Without it `zeroperl_init` returns 1.
 
@@ -335,7 +335,7 @@ They do so because `wasi-libc` rewrites a path that *is* a preopen to `.`.
 `os.open("/dev/null/.")` is then ENOTDIR.
 Ruby's `File.realpath`, Perl's `Cwd::realpath`, and Go's `filepath.Join` already collapsed it.
 On Java the reactor is what pushed the function-partition threshold down to 2000.
-Its ~2450 constant-dense functions overflow a single class's 65535-entry pool.
+That is because its ~2450 constant-dense functions overflow a single class's 65535-entry pool.
 `javac` then reports *too many constants*.
 
 ¹³ **CRuby packed with `wasi-vfs` (audited 2026-08-04).**
@@ -420,7 +420,7 @@ Every backend lowers the proposal, so every backend runs the case.
 The old per-opcode stack growth is gone with the source build that caused it.
 The asset's dispatch is a tail call.
 So each backend's trampoline runs the whole chain in one host frame.
-The glue on every backend is now plain.
+So the glue on every backend is now plain.
 The `wasi-libc` compatibility fixes the v0.5.0 build carried as a patch are upstream in v0.9.0.
 Its MetaWASI layer serves 38 WASI functions where v0.5.0 served 28.
 `fd_tell` is among the additions: `minigzip` round-trips through it, measured.
@@ -453,7 +453,7 @@ The speed benchmark suite measures that comparison.
   The GHC 9.12 wasm backend output is otherwise baseline-shaped.
   So SIMD support alone would unblock it.
 - Revisit when/if SIMD enters scope.
-  The binary is otherwise a pure wasip1 stdio converter.
+  That is because the binary is otherwise a pure wasip1 stdio converter.
   It would make a strong example.
 
 ## Deferred: LightningCSS
@@ -487,9 +487,9 @@ The speed benchmark suite measures that comparison.
   The build toolchain has since moved to `wasi-sdk`.
   So a retry would go through `wasi-sdk` Clang and its shipped `libsetjmp`.
   The exception-handling requirement itself is no longer a blocker.
-  Since the `mruby` work¹⁴ it is accepted input, lowered per backend.
+  That is because, since the `mruby` work¹⁴, it is accepted input, lowered per backend.
   Added value is low regardless.
-  A Lua build would cover the same category (a complete small scripting engine in C) as QuickJS.
+  That is because a Lua build would cover QuickJS's category (a complete small scripting engine in C).
   It would also cover the same WASI surface QuickJS already gives.
 - Revisit if the `wasm-ld` bug gets fixed upstream.
   The `mruby` recipe¹⁴ should then apply directly.

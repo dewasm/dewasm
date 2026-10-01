@@ -2,10 +2,10 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# doom: the jacobenget/doom.wasm v0.1.0 release binary (DOOM shareware, WAD embedded).
-# Shared between the examples/doom demo frontends and the deterministic framebuffer-snapshot test.
-# So it lives in the apps cache like every other fixture, checksum-pinned here.
-# The old examples/doom/fetch.sh downloaded it unverified.
+# `doom`: the `jacobenget/doom.wasm` v0.1.0 release binary (DOOM shareware, WAD embedded).
+# The `examples/doom` example frontends and the deterministic framebuffer-snapshot test share it.
+# So it lives in the apps cache like every other fixture, checked against a fixed checksum here.
+# The old `examples/doom/fetch.sh` fetched it unverified.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 

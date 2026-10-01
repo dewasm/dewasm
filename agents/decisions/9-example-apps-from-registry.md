@@ -50,7 +50,7 @@ App selection is constrained by the declared WASI surface (`docs/support.md`).
 Originally that was stdio, arguments, environment, clock and random only.
 WASI file system support (decision 14) later widened this for Ruby.
 `wasi_unstable` (snapshot 0) is accepted as an alias of WASI Preview 1 for the implemented functions.
-The original Wasmer Registry QuickJS build (since replaced) needed it.
+That is because the original Wasmer Registry QuickJS build (since replaced) needed it.
 This is a known simplification: snapshot 0's `fd_seek` `whence` encoding differs.
 None of the current apps seek.
 

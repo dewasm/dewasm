@@ -102,7 +102,8 @@ Remove the two commands made for one snapshot each.
 - **An update mode on the compare-only tests** (`DEWASM_UPDATE_SNAPSHOTS=1 cargo test …`).
   Tempting because the test already computes the fresh bytes.
   Rejected on standing policy (decision 27, `docs/testing.md`).
-  A compare test that can rewrite its own reference can turn a broken capture into a passing run.
+  That is because of a test that can rewrite its own reference.
+  Such a test can turn a broken capture into a passing run.
   That defeats the check.
   Capture stays a separate path that never runs inside the assertion.
 

@@ -12,7 +12,7 @@ Inside an outer frame it lands or relays.
 At method-body level nothing outer exists to relay to.
 So it reduces to `__br = nil if __br == {id}`.
 At that spelling a pending `__br` can only name the frame itself.
-An outer frame a branch could target would be on that branch's path, both ends included.
+That is because an outer frame a branch could target is on that branch's path, both ends included.
 [Decision 60](60-ruby-flatten-only-deep-crossings.md) dissolves frames all-or-nothing per path.
 So no surviving frame has a dissolved lexical ancestor a branch still relays toward.
 The statement therefore never redirects control; it only resets `__br` for later reads.

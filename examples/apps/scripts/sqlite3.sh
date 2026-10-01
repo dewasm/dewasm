@@ -2,21 +2,22 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# sqlite3: built from the pinned amalgamation source with wasi-sdk.
+# sqlite3: built from the amalgamation source at a fixed version with `wasi-sdk`.
 #
-# One pinned source release yields four artifacts:
+# One source release yields four artifacts:
 #
 # - cache/sqlite3-shell.wasm: the CLI shell (standalone: _start, stdio).
 # - cache/sqlite3-mod.wasm: the same shell, built from a patched source copy.
-#   The patch is src/sqlite3-vdbe-split.patch.
+#   The patch is `src/sqlite3-vdbe-split.patch`.
 #   It moves the hot VDBE opcode bodies into their own functions, so a JIT reaches them.
 # - cache/libsqlite3.wasm: a reactor library exporting the sqlite3 C API.
 #   The apps e2e drives it from Ruby.
-# - cache/sqlite3-binding.wasm: the same reactor library plus our own src/sqlite3_binding.c.
-#   Its run_query calls back into an imported env.host_row: a guest->host callback round-trip proof.
+# - cache/sqlite3-binding.wasm: the same reactor library plus our own `src/sqlite3_binding.c`.
+#   Its `run_query` calls back into an imported env.host_row.
+#   That is the proof of a guest->host callback round-trip.
 #
 # No upstream distributes a C-API-exporting wasm32-wasi build.
-# That is why these are compiled locally rather than downloaded.
+# That is why these are compiled locally rather than fetched.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
@@ -55,29 +56,30 @@ BINDING_EXPORTS=(
   sqlite3_malloc sqlite3_free
 )
 
-# The mod build's C-source half; the patch's own header states what it changes and why.
+# The C-source half of the `sqlite3-mod` build; the patch's header states what it changes and why.
 SQLITE_SPLIT_PATCH="src/sqlite3-vdbe-split.patch"
-# The mod build's wasm-opt half, and the reason it cannot be folded into the shared recipe.
+# The `wasm-opt` half of the `sqlite3-mod` build, and why it cannot join the shared recipe.
 # -O2 inlines a function with a single caller.
-# That puts every vdbeOp* body straight back into the interpreter.
-# The artifact is then indistinguishable from the stock shell.
-# So the mod build turns that off by name.
+# That puts every `vdbeOp*` body straight back into the interpreter.
+# The artifact then cannot be told apart from the stock shell.
+# So the `sqlite3-mod` build turns that off by name.
 # Matching by name needs the name section.
-# So the mod link omits -Wl,--strip-debug, and the debug info leaves here instead.
+# So the `sqlite3-mod` link drops -Wl,--strip-debug, and the debug information leaves here instead.
 # The two groups stay separate because the check after the build reruns the stripping half alone.
 # That run is the check's control.
 SQLITE_MOD_NO_INLINE="--no-inline=vdbeOp*"
 SQLITE_MOD_STRIP=(--strip-dwarf --strip-producers)
 
-# patch_version_suffix <file>: rewrite the unpacked source's single `#define SQLITE_VERSION` line.
+# `patch_version_suffix <file>`: rewrite the unpacked source's `#define SQLITE_VERSION` line.
+# The source has one such line.
 # The new value is "3.53.3-wasm".
-# The converted engine must identify itself in demo output.
+# The converted engine must identify itself in example output.
 # So it is not mistaken for a native SQLite.
-# examples/rails answers /stats with sqlite_version().
+# `examples/rails` answers `/stats` with `sqlite_version()`.
 # SQLITE_VERSION_NUMBER and SQLITE_SOURCE_ID stay upstream.
 # Only the display string carries the suffix.
-# sed -i is not portable across BSD and GNU, hence the temp file.
-# A source whose define does not have the assumed shape aborts the build.
+# `sed -i` is not portable across BSD and GNU, hence the temporary file.
+# A source whose define does not have the assumed shape stops the build with an error.
 # It does not silently produce an unpatched artifact.
 patch_version_suffix() {
   local f="$1"
@@ -93,17 +95,17 @@ patch_version_suffix() {
   fi
 }
 
-# wasm_func_count <wasm>: the module's function count.
+# `wasm_func_count <wasm>`: the module's function count.
 wasm_func_count() {
   wasm-opt "${WASM_OPT_FEATURES[@]}" --metrics "$1" -o /dev/null 2>&1 |
     awk '$1 == "[funcs]" { print $3 }'
 }
 
 # The stamp covers these inputs, so editing any of them retriggers the build:
-# - the source sha and the export lists;
+# - the source checksum and the export lists;
 # - the version-string patch;
-# - the split patch's bytes with the wasm-opt flags that keep it effective;
-# - the wasm-opt version and the toolchain token.
+# - the split patch's bytes with the `wasm-opt` flags that keep it effective;
+# - the `wasm-opt` version and the toolchain token.
 sqlite_key="$SQLITE_SHA256 exports:${SQLITE_EXPORTS[*]} binding:${BINDING_EXPORTS[*]} version-suffix:-wasm split:$(shasum -a 256 "$SQLITE_SPLIT_PATCH" | cut -d' ' -f1) mod-wasm-opt:$SQLITE_MOD_NO_INLINE ${SQLITE_MOD_STRIP[*]} wasm-opt:$(wasm_opt_version) $(wasi_sdk_stamp)"
 sqlite_stamp="cache/sqlite3.src-sha256"
 if is_cached "$sqlite_stamp" "$sqlite_key" \
@@ -116,13 +118,13 @@ fi
 require_wasi_sdk sqlite3
 require_tool sqlite3 unzip
 require_tool sqlite3 wasm-opt "install binaryen (e.g. brew install binaryen) to preprocess the sqlite3 apps"
-# The mod build passes --no-inline.
+# The `sqlite3-mod` build passes --no-inline.
 # It keeps the split VDBE opcode functions out of Binaryen's inlining.
 # That inlining targets single-caller functions.
-# A binaryen too old to know the flag would fail mid-build, so refuse it up front.
-# grep must consume the whole help text: -q exits at the first match.
-# Under pipefail, the SIGPIPE that gives wasm-opt then fails the probe.
-# That happens on hosts where the help outruns the pipe buffer.
+# A Binaryen too old to know the flag would fail mid-build, so refuse it up front.
+# `grep` must consume the whole help text: -q exits at the first match.
+# Under `pipefail`, the SIGPIPE that gives `wasm-opt` then fails the probe.
+# That happens on hosts where the help text is larger than the pipe buffer.
 if ! wasm-opt --help 2>&1 | grep -c -- --no-inline > /dev/null; then
   echo "sqlite3: this wasm-opt does not support --no-inline; install a newer binaryen (local dev uses version 132)" >&2
   exit 1
@@ -136,10 +138,10 @@ unzip -q "$tmp/sqlite.zip" -d "$tmp"
 # So both files carry the define.
 patch_version_suffix "$tmp/$SQLITE_DIR/sqlite3.c"
 patch_version_suffix "$tmp/$SQLITE_DIR/sqlite3.h"
-# --strip-debug (the three stock builds) drops the DWARF wasm-opt cannot parse.
-# The mod build strips it in wasm-opt instead, see SQLITE_MOD_STRIP.
-# The two shell builds add src/sqlite3_shell_wasi_compat.c.
-# That file is a getpid stand-in shell.c's debug path links.
+# --strip-debug (the three stock builds) drops the DWARF `wasm-opt` cannot parse.
+# The `sqlite3-mod` build strips it in `wasm-opt` instead, see SQLITE_MOD_STRIP.
+# The two shell builds add `src/sqlite3_shell_wasi_compat.c`.
+# That file is a `getpid` stand-in shell.c's debug path links.
 # Its header comment states why the engine needs none.
 echo "sqlite3: building sqlite3-shell.wasm (wasi-sdk clang)"
 wasi_sdk_clang "${SQLITE_CFLAGS[@]}" -Wl,--strip-debug \
@@ -164,10 +166,10 @@ wasi_sdk_clang -mexec-model=reactor "${SQLITE_CFLAGS[@]}" -Wl,--strip-debug \
   "${exports[@]}" \
   -o cache/libsqlite3.wasm
 
-# The binding artifact: the reactor library plus our own run_query.
-# run_query forwards each result row to the imported env.host_row.
+# The binding artifact: the reactor library plus our own `run_query`.
+# `run_query` forwards each result row to the imported env.host_row.
 # Only the symbols this callback flow needs are exported.
-# The import lands via the import_module/import_name attributes in src/sqlite3_binding.c.
+# The import lands via the `import_module`/`import_name` attributes in `src/sqlite3_binding.c`.
 echo "sqlite3: building sqlite3-binding.wasm (wasi-sdk clang, reactor + host callback)"
 mapfile -t binding_exports < <(wl_exports "${BINDING_EXPORTS[@]}")
 wasi_sdk_clang -mexec-model=reactor "${SQLITE_CFLAGS[@]}" -Wl,--strip-debug \
@@ -186,10 +188,9 @@ wasm_opt_inplace cache/sqlite3-mod.wasm "$SQLITE_MOD_NO_INLINE" "${SQLITE_MOD_ST
 wasm_opt_inplace "$tmp/sqlite3-mod-inlined.wasm" "${SQLITE_MOD_STRIP[@]}"
 
 # Undoing the split changes nothing an app case or a snapshot can see.
-# So the mod artifact would go on passing every test while being a copy of the stock one.
+# So the `sqlite3-mod` artifact would go on passing every test while being a copy of the stock one.
 # The control is the same module optimized without --no-inline.
-# The split survived exactly when the artifact carries the functions the patch adds.
-# The control must not carry them.
+# The split survived exactly when the artifact has the patch's functions and the control lacks them.
 split_fns=$(grep -c '^static SQLITE_NOINLINE [a-z]* vdbeOp' "$tmp/$SQLITE_DIR-mod/sqlite3.c")
 kept_fns=$(($(wasm_func_count cache/sqlite3-mod.wasm) - $(wasm_func_count "$tmp/sqlite3-mod-inlined.wasm")))
 [ "$kept_fns" -ge "$split_fns" ] || {

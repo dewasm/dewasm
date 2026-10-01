@@ -27,7 +27,7 @@ It sanity-checks the last frame, writes it to `screenshot.ppm`, and exits non-ze
 The file is binary PPM, since Ruby's standard library has no PNG writer.
 Either mode takes an optional ROM path as the last argument.
 Examples are `./run.sh path/to/game.nes` and `./run.sh --smoke path/to/game.nes`.
-The default is the bundled demonstration ROM, `examples/apps/cache/alter_ego.nes`.
+The default is the example ROM, `examples/apps/cache/alter_ego.nes`.
 
 ## Rendering
 
@@ -64,4 +64,4 @@ Unlike DOOM, the module actually wants this bit mask every tick, not discrete do
 | Space | Select |
 | q / Ctrl-C | Exit |
 
-The bundled ROM is [Alter Ego](https://forums.nesdev.org/viewtopic.php?t=7999) by Shiru, released into the public domain.
+The example ROM is [Alter Ego](https://forums.nesdev.org/viewtopic.php?t=7999) by Shiru, released into the public domain.

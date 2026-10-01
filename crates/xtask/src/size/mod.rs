@@ -63,7 +63,7 @@ pub fn record(args: impl Iterator<Item = String>) -> Result<()> {
 
 /// The backends, in report order.
 /// Each one converts every app in the corpus; nothing here is optional.
-/// Generating source needs no toolchain installed: only running it would.
+/// That is because generating source needs no toolchain installed: only running it would.
 fn backends() -> Vec<(&'static str, &'static (dyn Backend + Sync))> {
     vec![
         ("ruby", &dewasm_backend_ruby::RubyBackend),
@@ -279,7 +279,7 @@ fn weigh(bin: &Path) -> Result<(u64, Vec<Component>)> {
 
 /// Whether `image` mentions `name` anywhere in its bytes.
 /// The dynamic linker's dependency list is stored as plain strings in the executable.
-/// This tells a library beside the binary apart from one merely installed in the same directory.
+/// So this is how a library beside the binary is told apart from one merely installed there.
 fn references(image: &[u8], name: &str) -> bool {
     image
         .windows(name.len())

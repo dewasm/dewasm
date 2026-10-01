@@ -13,7 +13,8 @@ workspace = true
 [features]
 # Optional: expands the slow per-case macros (`dewasm-test-helper`) as active `#[test]`s.
 # Without it they are `#[ignore]`d.
-# It also runs the full specification testsuite (CI's main run).
+# It also runs the full specification testsuite.
+# CI's main run enables this feature.
 # See `docs/testing.md`.
 slow_test = []
 # The `ultra_slow_test` category: cases measured at ~1 minute or more locally.

@@ -81,7 +81,7 @@ Second, there are **no tuples, no multi-value returns, and no unsigned integer t
   **Direct calls to defined functions stay primitive**, though.
   That confines boxing to the edge, as Go's `any` boundary does.
   A multi-value signature returns a boxed `Object[]` for the same reason.
-  A JVM method returns only one value.
+  That is because a JVM method returns only one value.
   Every global is a boxed `Global` cell.
   It is shared rather than copied across an instantiation boundary (decision 16).
   An instance's `Exports` map doubles as a [decision 7](7-import-providers.md) provider.
@@ -103,7 +103,7 @@ Second, there are **no tuples, no multi-value returns, and no unsigned integer t
   So `wasi == null` is the honest observable.
 - **The `Embedded` runtime is nested in the module class** ([decision 62](62-embedded-runtime-isolation.md)).
   The runtime classes used to be top-level.
-  Two artifacts in one package then fought over `Rt`/`Memory`/`Table`/`Global`/`WASI`.
+  So two artifacts in one package fought over `Rt`/`Memory`/`Table`/`Global`/`WASI`.
   So the bundle is emitted as `static` **nested** classes, the shape `P{k}`/`Elem`/`Frame` already use.
   Java resolves a simple name through outer scopes.
   So unit bodies and every generated `Rt.trap(...)` are untouched.
@@ -125,7 +125,7 @@ Second, there are **no tuples, no multi-value returns, and no unsigned integer t
   The helper compiles `Main.java` with `javac` into a content-addressed cache of class directories.
   It then runs `java -cp <dir> Main`.
   That beats the `java Main.java` source launcher by far on `cowsay`.
-  The launcher recompiles in memory on **every** run, about 3.3 s each.
+  That is because the launcher recompiles in memory on **every** run, about 3.3 s each.
   The cache costs about 2 s once plus about 0.15 s warm.
   `$DEWASM_JAVA`/`$DEWASM_JAVAC` override the toolchain, and a missing one fails loud ([decision 15](15-tests-fail-not-skip.md)).
   One public class (`Main`) per file keeps the `javac` file name contract trivial.
@@ -159,7 +159,7 @@ Only larger modules exercise the machinery.
   - then an `if`/`else if` chain goes into part methods that each `switch` over their own range.
 
   The cost model counts one node per target.
-  Counting only a target's assignments made a thousands-of-targets table look free.
+  That is because counting only assignments made a thousands-of-targets table look free.
   That left its function unsplit.
 - **Data segments are chunked Base64** (`Rt.data_from_b64`).
   A chunk is 32KB raw, to stay under the string limit.
@@ -177,16 +177,16 @@ Only larger modules exercise the machinery.
   One class is not enough for CRuby: each entry costs a pool roughly ten entries.
   They are a lambda's `invokedynamic`, method handle, synthetic method, and called method reference.
   So its 8737-entry table filled one pool alone.
-  The fillers live in `ElemF{c}` classes of at most `ELEM_PER_CLASS` (2048) entries.
+  So the fillers live in `ElemF{c}` classes of at most `ELEM_PER_CLASS` (2048) entries.
   **Reading `javac`'s diagnosis:** CRuby reported "too many constants" 1059 times.
   That is once per class in the nested tree.
   Only the **first** is genuine.
-  After one class overflows, `javac` repeats the error for every class it writes afterwards.
+  That is because after one class overflows, `javac` repeats the error for every later class.
   A two-class probe confirmed it, the first class over the limit and the second trivial.
   Splitting the one class over the limit cleared all 1059.
 - **Modules over the limit split their functions across nested `P{k}` classes.**
   Moving the element lambdas out was necessary but not sufficient for `ripgrep`.
-  Its roughly 7300 functions' own literals, method references, and names still overflow one pool.
+  That is because its ~7300 functions' literals, method references, and names still overflow one pool.
   Over `FN_PARTITION_THRESHOLD` (2000) defined functions, they become `static` methods.
   Those methods sit in nested `P{k}` classes.
   Each class holds `FN_PER_PARTITION` (1500) functions.
@@ -196,7 +196,7 @@ Only larger modules exercise the machinery.
   `zeroperl` has about 2450 functions.
   It is constant-dense enough that it overflowed under the former 3000 bound.
   The conditioning is load-bearing for safety.
-  With partitioning off, the output is identical to the unpartitioned shape.
+  That is because with partitioning off, the output is identical to the unpartitioned shape.
   So the specification suite and `qjs`/SQLite stay on their proven path.
   Only modules the size of `ripgrep` exercise the new one.
   `rg_search_java`'s snapshot, matched exactly, checks it.

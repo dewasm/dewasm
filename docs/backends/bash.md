@@ -20,7 +20,8 @@ In **library** mode `--module-name` is required, and the prefix is that name **i
 The name must be one identifier matching `[A-Za-z_][A-Za-z0-9_]*`.
 Anything else is a conversion-time error.
 Changing to lower case is the one mapping the policy keeps.
-Bash has no case-carrying namespace, and the mapping is total and stated rather than guessed.
+That is because Bash has no case-carrying namespace.
+The mapping is also total and stated rather than guessed.
 In **standalone** mode the prefix is always `program_` and `--module-name` is rejected.
 
 ## Requirements

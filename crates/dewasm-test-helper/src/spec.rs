@@ -12,8 +12,8 @@
 //! The error names the declared-unsupported features.
 //! Every directive skipped because of it is counted under those feature identifiers.
 //! A conversion failure without attribution is a dewasm bug and fails the suite.
-//! Validation failures beyond every proposal this toolchain knows are allowed.
-//! They are reported as `unknown-proposal`, because the converter refused cleanly.
+//! Validation failures beyond all proposals the toolchain knows are reported as `unknown-proposal`.
+//! They are allowed, because the converter refused cleanly.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;

@@ -55,7 +55,7 @@ Concretely:
   It also re-inlined the module's split functions.
   The only `wasm-opt` pass is `wasm_opt_inplace` ([decision 39](39-running-wasm-opt.md)).
 - Each stamp key folds in `wasi_sdk_stamp` (`cc:wasi-sdk`), the toolchain's identity and not its version.
-  Artifact bytes may vary across toolchain versions.
+  That is because artifact bytes may vary across toolchain versions.
   By decision 22's rule, behavior is what the snapshots keep fixed.
   An honest version stamp would have to read the installed SDK.
   But `setup.sh --check` must work without the installed SDK.

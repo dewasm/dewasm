@@ -15,15 +15,15 @@ Go is the first *compiled* backend, so it is the first to use [decision 27](27-t
 
 Go's native numerics remove work the interpreted backends do by hand.
 Integer arithmetic wraps, so decision 2's masked-unsigned convention is free.
-Sign-extensions, wraps, and conversions are casts.
+So sign-extensions, wraps, and conversions are casts.
 Floats are machine floats, so f32 re-rounds itself, and division is trap-free.
-Only `demote`/`promote` reconstruct NaN payloads.
+So only `demote`/`promote` reconstruct NaN payloads.
 Go adds two problems they never face:
 
 - **Unused variables, labels, and imports are compile errors.**
   That is the Go-specific danger, like Python's 20-block cap.
 - Function values are **statically typed**, so a dynamic `invoke` would need reflection.
-  `call_indirect` also needs one table holding mixed signatures.
+  So `call_indirect` also needs one table holding mixed signatures.
 
 ## Decision
 
@@ -51,7 +51,7 @@ Go adds two problems they never face:
   A pre-pass blanks write-only locals and temps with `_ = x`.
   The import set is computed by scanning the runtime bundle alone.
   That works since generated code emits no package-qualified selectors.
-  Data is written as hexadecimal literals.
+  It also works since data is written as hexadecimal literals.
   The scan strips line comments, so comment text cannot pull in a package.
   It never rewrites output.
   That is why `//go:embed` needs the blank import [decision 37](37-data-segments-in-a-file.md) adds.
@@ -60,7 +60,7 @@ Go adds two problems they never face:
   They are named in **`snake_case` matching their unit identifier 1:1** (`Rt.i32_div_s`).
   That is an intended break with Go's PascalCase convention.
   So a unit identifier maps to its reference without case conversion.
-  The units lint then stays a direct name match.
+  So the units lint stays a direct name match.
   Correctness and tools come before Go's usual style ([decision 1](1-ir-design.md)).
   All bundler scope wrappers are empty.
   Go methods and types are package-level whatever `struct` they belong to.
@@ -176,7 +176,7 @@ Go-specific:
 - `resolve_path` derives the final component from the raw guest string.
   It does not use `filepath.Base(filepath.Join(base, rel))`.
   `Join` *Cleans*, folding a trailing `.` or `..` away, so `Base` returns the parent's own name.
-  Then the AT_SYMLINK_NOFOLLOW branch would wrongly resolve it and reject it with ERRNO_NOTCAPABLE.
+  So the AT_SYMLINK_NOFOLLOW branch would wrongly resolve it and reject it with ERRNO_NOTCAPABLE.
   Taking the substring after the final `/` restores what Python's non-cleaning join gives for free.
 - Library-mode WASI output always seeds `rt/exit`.
   Host glue catches `*rtExit` for the exit code, and Go asserts the concrete type at compile time.
@@ -185,7 +185,7 @@ Go-specific:
 ## Rejected alternatives
 
 - **A per-function branch register** (Python's `_br`): unnecessary.
-  Labeled `break`/`continue` express block exits and loop back-edges directly.
+  That is because labeled `break`/`continue` express block exits and loop back-edges directly.
 - **PascalCase runtime method names with a converting lint**: a bug surface for no gain.
   That is because `go build` ignores case.
 - **Reflection-based `invoke`.**

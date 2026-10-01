@@ -52,10 +52,10 @@ It is outside the `cargo test` speed categories ([decision 48](48-slow-test-spee
 - **Standalone mode over a WASI port of DOOM.**
   It inverts the example: WASI has no display/input surface.
   So the interesting part would live in a shim written for this example only.
-  Nothing would exercise `--mode library`'s host-import path, the thing this example exists to show.
+  So nothing would exercise `--mode library`'s host-import path, the thing this example exists to show.
 - **Per-language guest builds (for example, Emscripten JS glue, TinyGo-side ports).**
   It breaks the one-artifact claim that makes the example convincing.
-  Every frontend would demonstrate a different binary.
+  That is because every frontend would demonstrate a different binary.
 - **A uniform SDL binding layer in every language.**
   One rendering stack to learn, but it imports a C dependency into every language.
   Here those languages' selling point is "plain JDK" / "one idiomatic game library".
@@ -98,7 +98,7 @@ It is outside the `cargo test` speed categories ([decision 48](48-slow-test-spee
   Its `gosu` dependency is scoped to `gui/` with bundler.
   `Gemfile.lock` is checked in, and it installs into `vendor/bundle`, which Git ignores.
   So `ruby/` itself uses the standard library only.
-  The gem version also stays fixed instead of depending on a globally installed `gosu`.
+  So the gem version also stays fixed instead of depending on a globally installed `gosu`.
 
   The terminal renderer doubles as the frontend shape for any backend too slow for a window.
   That includes Bash, after [decision 51](51-bash-assoc-memory.md)/[decision 52](52-bash-inline-memops.md).

@@ -384,8 +384,8 @@ const JAVA_RG_SEARCH_GLUE: &str = r#"public class Main {
 }
 "#;
 
-/// The whole app cache is preopened at `/apps`.
 /// The guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
+/// So the whole app cache is preopened at `/apps`.
 const JAVA_TOYWASM_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         Toywasm inst = new Toywasm(null, new String[]{"toywasm", "--wasi", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"}, null, java.util.Map.of("/apps", "{cache}"));
@@ -935,12 +935,12 @@ const JAVA_DOOM_FRAME_GLUE: &str = r#"public class Main {
 "#;
 
 /// NES (issue #114, mirrors the DOOM glue above).
-/// Load the checksum-checked ROM into `allocRom`'s buffer.
+/// Load the example ROM into `allocRom`'s buffer.
 /// Then tick `{frames}` times with no input.
 /// Compose the frame from `agnes`'s palette-index screen buffer and its palette (issue #117).
 /// The `& 0x3f` mask is load-bearing.
 /// Then dump the frame as a P6 PPM matching the Wasmtime snapshot.
-/// `{rom}` (the cached ROM's host path) and `{frames}` filled by the runner.
+/// `{rom}` (the example ROM's host path) and `{frames}` filled by the runner.
 const JAVA_NES_FRAME_GLUE: &str = r#"public class Main {
     public static void main(String[] a) throws Exception {
         byte[] rom = java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("{rom}"));

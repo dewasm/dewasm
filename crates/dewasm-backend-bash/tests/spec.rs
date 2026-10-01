@@ -39,16 +39,21 @@ use wast::{WastArg, WastRet};
 ///   A kind mismatch is caught.
 ///   This is the same accepted gap as the Ruby list's `import-limits`.
 ///   It now has the same count (28/2/4), since Bash supports every import kind Ruby does.
-/// - `multi-memory` (`linking0`, `load1`).
+/// - `multi-memory` (`linking0`, `load1`): out-of-date state left by a module that never converts.
+///   The module that calls `register` is not the one that uses multi-memory.
+///   `linking0` registers `$Mt`, which has one table and no memory.
+///   `load1` registers `$M`, which exports its one memory.
+///   A later module imports that table or memory and writes into it as it instantiates.
+///   That later module declares several memories, and multi-memory is declared unsupported.
+///   So it never converts, and its writes never happen.
+///   A later assertion against the registered module then observes out-of-date state.
+///   In `linking0`, slot 7 of `$Mt`'s table stays null (1 failure).
+///   The write must persist there although the writing module's instantiation then traps.
+///   In `load1`, bytes 20 to 24 of `$M`'s memory stay zero (5 failures).
+///   This is not a gap in cross-module linking itself: every import in play resolves.
 ///   The core builder rejects a second `(memory ...)` outright.
 ///   That holds for a declaration or an import, regardless of backend.
 ///   The feature is `Feature::MultiMemory`, a post-1.0 proposal.
-///   Both files exercise this via a module with two memories.
-///   One memory is often an import of another module's exported memory.
-///   That module fails to convert.
-///   So the data/assertions that depended on it running observe out-of-date (zeroed) state.
-///   That state is in a memory another, unrelated module still owns.
-///   This is not a linking gap: every import in play resolves.
 ///   It is not fixable without the multi-memory proposal.
 ///   That proposal is rejected outright as a post-1.0 wasm feature.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[

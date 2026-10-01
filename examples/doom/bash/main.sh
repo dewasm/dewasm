@@ -1,30 +1,30 @@
 #!/usr/bin/env bash
 # Interactive terminal frontend for the dewasm-generated DOOM library.
-# build.sh produces that library (doom_gen.sh) from jacobenget/doom.wasm.
-# Renders into any ANSI truecolor terminal with half-block characters.
-# This is the same trick as ../ruby and ../python.
+# build.sh produces that library (doom_gen.sh) from `jacobenget/doom.wasm`.
+# Renders into any ANSI 24-bit color terminal with half-block characters.
+# This is the same trick as `../ruby` and `../python`.
 # There is no pixel-window option here because the point of this frontend is that it needs none.
-# The bash backend runs DOOM's initGame in ~103s and each tickGame in ~34s.
+# The Bash backend runs DOOM's `initGame` in ~103s and each `tickGame` in ~34s.
 # That was measured on the reference machine.
 # The measurement came after the associative-memory and inline-load/store work.
 # See ../README.md.
-# So this is an existence-proof demo, not a game anyone will speedrun.
+# So this is an existence-proof example, not a game anyone will play for speed.
 # It takes about two minutes to boot, and shows one frame roughly every half a minute.
 # See README.md for the honest framing.
 #
-# Run with --smoke for a headless self-check (no tty/alternate-screen needed).
-# It inits the game, ticks it twice, and renders one frame to a string (verified, never drawn).
+# Run with `--smoke` for a headless self-check (no terminal or alternate screen needed).
+# It initializes the game, runs two ticks, and renders one frame to a string (checked, never drawn).
 # Then it sanity-checks the frame and writes screenshot.ppm.
 #
-# doom_mem (the module's linear memory) is a global associative array, declared by doom_init.
-# This script never uses `set -u`, because sparse reads of doom_mem are meant to default to 0.
-# That matches the rest of the bash backend.
-# The script also never relies on `set -e` around any doom_* call.
-# A generated function's internal arithmetic routinely computes an intermediate value of exactly 0.
-# bash treats that as a "failed" command.
-# The backend's own status-cascade convention already covers this.
+# `doom_mem` (the module's linear memory) is a global associative array, declared by `doom_init`.
+# This script never uses `set -u`, because sparse reads of `doom_mem` are meant to default to 0.
+# That matches the rest of the Bash backend.
+# The script also never relies on `set -e` around any `doom_*` call.
+# That is because a generated function's internal arithmetic often yields an intermediate 0.
+# Bash treats that as a "failed" command.
+# The backend's own status chain convention already covers this.
 # Every generated function returns its real status explicitly via `return 0`/`return $?`.
-# So this script checks *that* after every call instead of leaning on errexit.
+# So this script checks *that* after every call instead of leaning on `errexit`.
 set -o pipefail
 
 if (( BASH_VERSINFO[0] < 5 )); then
@@ -37,15 +37,15 @@ cd "$(dirname "${BASH_SOURCE[0]}")" || exit 1
 readonly ESC=$'\e'
 
 # Fixed status-line colors (white on black), independent of the game's own palette.
-# Without an explicit color the status line inherits whatever fg/bg the last-drawn pixel cell left.
+# Without an explicit color the status line inherits the colors the last-drawn pixel cell left.
 # It would then flicker with the game.
 readonly STATUS_SGR="${ESC}[48;2;0;0;0m${ESC}[38;2;255;255;255m"
 
 MODE=interactive
 [[ ${1-} == --smoke ]] && MODE=smoke
-# Info messages would corrupt the alternate-screen frame if printed there.
+# Informational messages would break the frame on the alternate screen if printed there.
 # So they're dropped entirely in interactive mode.
-# --smoke has no alternate screen, so they're shown there (matching ../ruby, ../python).
+# `--smoke` has no alternate screen, so they're shown there (matching `../ruby`, `../python`).
 SUPPRESS_INFO=1
 [[ $MODE == smoke ]] && SUPPRESS_INFO=0
 
@@ -53,16 +53,16 @@ FRAME_W=0
 FRAME_H=0
 FRAME_BUF_OFF=0
 
-# Overridden by run_interactive once the terminal is actually in raw/alternate-screen mode.
+# Redefined by `run_interactive` once the terminal is actually in raw mode on the alternate screen.
 # Otherwise it is a global no-op.
-# So invoke_or_die and the doom_init failure path can call it unconditionally in either mode.
+# So `invoke_or_die` and the `doom_init` failure path can call it unconditionally in either mode.
 restore_terminal() { :; }
 
-# Decodes a UTF-8 byte range out of doom_mem into MEM_TEXT_OUT.
-# Only used for the handful of console messages emitted around boot.
+# Decodes a UTF-8 byte range out of `doom_mem` into `MEM_TEXT_OUT`.
+# Only used for the few console messages emitted around boot.
 # So a per-byte loop is not a hot path.
 # The framebuffer is different: it is orders of magnitude larger.
-# render_frame/write_ppm read it directly instead.
+# `render_frame`/`write_ppm` read it directly instead.
 mem_to_text() {
   local off=$1 len=$2 i b hex out=""
   for (( i = 0; i < len; i++ )); do
@@ -92,11 +92,11 @@ imp_on_info() {
 }
 
 # Save games are stubbed: at 34s/tick nobody is going to sit through a save/load round-trip.
-# File-backed saves (see ../ruby/../python) would add untested code paths.
-# This demo's whole point is elsewhere.
-# sizeOfSaveGame reporting 0 makes DOOM treat every save slot as empty;
-# writeSaveGame silently discards.
-# See README.md for the rationale.
+# File-backed saves (see `../ruby`/`../python`) would add untested code paths.
+# This example's whole point is elsewhere.
+# `sizeOfSaveGame` reporting 0 makes DOOM treat every save slot as empty.
+# `writeSaveGame` silently drops what it is given.
+# See README.md for the reason.
 imp_size_of_save() { R0=0; return 0; }
 imp_read_save() { R0=0; return 0; }
 imp_write_save() { R0=0; return 0; }
@@ -104,9 +104,9 @@ imp_write_save() { R0=0; return 0; }
 # DOOM's internal 35Hz pacing is driven by this.
 # So it has to be a real clock, not a fake stepped one.
 # EPOCHREALTIME is "seconds.microseconds".
-# Millisecond resolution is plenty and avoids a floating-point dependency bash doesn't have.
+# Millisecond resolution is plenty and avoids a floating-point dependency Bash doesn't have.
 # `10#` forces base-10.
-# So a leading-zero microseconds field (e.g. "007123") isn't parsed as an (invalid) octal literal.
+# So a leading-zero microseconds field ("007123") isn't parsed as an (invalid) octal literal.
 imp_time_ms() {
   local t=$EPOCHREALTIME
   local sec=${t%.*} frac=${t#*.}
@@ -115,17 +115,17 @@ imp_time_ms() {
 }
 
 # Only records where the framebuffer lives.
-# doom_mem is already a global array, so there is nothing to copy out of it.
-# ../ruby and ../python snapshot the buffer here instead.
-# Their host languages don't share address space with the module's memory representation.
+# `doom_mem` is already a global array, so there is nothing to copy out of it.
+# `../ruby` and `../python` snapshot the buffer here instead.
+# The reason: their host languages share no address space with the module's memory representation.
 imp_draw_frame() {
   FRAME_BUF_OFF=$1
   R0=
   return 0
 }
 
-# Leaving both output slots untouched selects the wasm-embedded shareware
-# WAD; external WADs are out of scope for this frontend (see ../ruby).
+# Leaving both output slots untouched selects the wasm-embedded shareware WAD.
+# External WADs are out of scope for this frontend (see `../ruby`).
 imp_wad_sizes() { R0=; return 0; }
 imp_read_wads() { R0=; return 0; }
 
@@ -136,8 +136,8 @@ imp_on_game_init() {
   return 0
 }
 
-# Read by doom_rt_resolve_import in the sourced doom_gen.sh (IMPORTS[mod.name]).
-# Nothing in this script reads it, hence the unused-variable suppression.
+# Read by `doom_rt_resolve_import` in the sourced doom_gen.sh (IMPORTS[mod.name]).
+# Nothing in this script reads it, hence the unused-variable warning is turned off.
 # shellcheck disable=SC2034
 declare -A IMPORTS=(
   ['console.onErrorMessage']=imp_on_error
@@ -152,8 +152,8 @@ declare -A IMPORTS=(
   ['loading.onGameInit']=imp_on_game_init
 )
 
-# ms-resolution monotonic-ish timestamp for phase/tick timing.
-# It is not the game clock: that's imp_time_ms above.
+# Millisecond timestamp, close to monotonic, for phase/tick timing.
+# It is not the game clock: that's `imp_time_ms` above.
 # It uses no subshell, unlike `date`.
 epoch_ms() {
   local t=$EPOCHREALTIME
@@ -166,9 +166,9 @@ fmt_secs() {
   printf '%d.%03d' $(( ms / 1000 )) $(( ms % 1000 ))
 }
 
-# Calls a doom_* export and exits on anything but success.
+# Calls a `doom_*` export and exits on anything but success.
 # Before exiting it restores the terminal, a no-op outside interactive mode.
-# The status-cascade convention's TRAP_MSG is the only place the actual reason lives.
+# Under the status chain convention, `TRAP_MSG` is the only place the actual reason lives.
 invoke_or_die() {
   local name=$1
   shift
@@ -193,8 +193,8 @@ echo "doom (bash): sourced in $(fmt_secs $((T_SOURCE_END - T_SOURCE_START)))s" >
 # One character cell shows two vertically-stacked source pixels.
 # So cell rows are half of sampled logical-pixel rows.
 # Capped at 160 columns, far short of DOOM's native 320-wide resolution.
-# 640x400 sampled at 320 would be 128000 byte reads/frame.
-# This script wants to keep the render under a second of a 34-SECOND tick.
+# That is because 640x400 sampled at 320 would be 128000 byte reads/frame.
+# That is too many for a render this script wants to keep under a second of a 34-SECOND tick.
 # And 160 columns is already wider than most terminals people actually run this in.
 compute_grid() {
   local term_rows=$1 term_cols=$2 w=$3 h=$4
@@ -221,13 +221,13 @@ compute_grid() {
 
 # Builds one frame's worth of ANSI half-block cells into RENDER_OUT.
 # Deliberately flat inside the nested loops: no helper-function calls, no command substitution.
-# It also has no per-cell printf.
+# It also has no per-cell `printf`.
 # Only string concatenation (+=) and arithmetic ($(( ))) are used.
-# Either of the first two is the standard way to make a bash render loop slow.
-# There is no frame-to-frame diffing (compare ../ruby, which needs it).
+# That is because either of the first two is the standard way to make a Bash render loop slow.
+# There is no frame-to-frame diffing (compare `../ruby`, which needs it).
 # At ~34s/tick a full redraw every frame costs nothing next to the tick itself.
 # An SGR code is still skipped when it repeats the previous cell's.
-# That is cheap and shrinks the string a lot on DOOM's large flat-color areas.
+# That is cheap and makes the string much shorter on DOOM's large flat-color areas.
 # Its software renderer is paletted, VGA Mode 13h, <=256 colors.
 render_frame() {
   local buf="" cy cx top_base bot_base src_x to bo
@@ -246,7 +246,7 @@ render_frame() {
       # Associative-array subscripts are literal strings, not arithmetic expressions.
       # Inside `$(( ))` it is different.
       # So every one of these needs an explicit `$`/`$(( ))`.
-      # A bare `doom_mem[to]` would silently look up the key "to".
+      # A `doom_mem[to]` with no `$` would silently look up the key "to".
       # It would not look up the key named by the variable's value.
       tb=${doom_mem[$to]-0}; tg=${doom_mem[$((to + 1))]-0}; tr=${doom_mem[$((to + 2))]-0}
       bb=${doom_mem[$bo]-0}; bgc=${doom_mem[$((bo + 1))]-0}; br=${doom_mem[$((bo + 2))]-0}
@@ -266,10 +266,10 @@ render_frame() {
   printf -v RENDER_OUT '%s' "$buf"
 }
 
-# Dumps the same sampled grid render_frame uses as an ASCII PPM (P3).
-# That grid is GRID_COLS x PIXEL_ROWS logical pixels, e.g. 160x100.
+# Dumps the same sampled grid `render_frame` uses as an ASCII PPM (P3).
+# That grid is GRID_COLS x PIXEL_ROWS logical pixels, for example 160x100.
 # The full 640x400 framebuffer would take minutes at this array's access cost.
-# P3 is text, so no stray NUL can confuse anything downstream, unlike a binary P6.
+# P3 is text, so no NUL byte can confuse anything downstream, unlike a binary P6.
 write_ppm() {
   local path=$1
   local w=$FRAME_W h=$FRAME_H off=$FRAME_BUF_OFF
@@ -293,9 +293,9 @@ write_ppm() {
 # --- Input (interactive mode only) -----------------------------------
 #
 # Terminals deliver key *presses* only, never releases.
-# At ~34s/tick there is no meaningful "held key" the way ../ruby's timer-based hold models one.
+# At ~34s/tick there is no meaningful "held key" the way `../ruby`'s timer-based hold models one.
 # So a press is instead held down for exactly the tick it was seen before.
-# reportKeyDown fires just before tickGame, and reportKeyUp just after.
+# `reportKeyDown` fires just before `tickGame`, and `reportKeyUp` just after.
 # This happens for every key seen since the previous tick.
 declare -a DOWN_KEYS=()
 declare -A DOWN_SEEN=()
@@ -309,7 +309,7 @@ add_key() {
   fi
 }
 
-# See ../ruby/README.md's table for the mapping this mirrors.
+# See the table in `../ruby/README.md` for the mapping this mirrors.
 # Ctrl isn't deliverable through a terminal, so fire is 'f'.
 # Shift/run has no terminal equivalent and isn't mapped.
 handle_char() {
@@ -332,7 +332,7 @@ handle_char() {
   esac
 }
 
-# Drains whatever bytes have queued up on stdin since the last call, and turns them into DOWN_KEYS.
+# Drains whatever bytes have queued on `stdin` since the last call, and turns them into DOWN_KEYS.
 # For this frame rate that means "since up to 34 seconds ago".
 # Arrow keys arrive as ESC [ A/B/C/D.
 # A lone ESC (nothing follows within one more 10ms read) is the Escape key itself.
@@ -354,7 +354,7 @@ drain_input() {
             esac
           fi
         else
-          # Not a CSI sequence: the ESC was a real Escape keypress.
+          # Not a CSI sequence: the ESC was a real Escape key press.
           # c2 is itself a fresh byte to process, not part of a sequence.
           add_key "$KEY_ESCAPE"
           handle_char "$c2"
@@ -398,8 +398,8 @@ run_smoke() {
     echo "smoke: tick $i in $(fmt_secs $((t1 - t0)))s"
   done
 
-  # A synthetic 160x51 terminal, matching the cap this frontend always applies (see compute_grid).
-  # It runs the same whether or not stdout is a real tty, which is the point of a headless check.
+  # A synthetic 160x51 terminal, matching the cap this frontend always applies (see `compute_grid`).
+  # It runs the same whether or not `stdout` is a terminal, which is the point of a headless check.
   compute_grid 51 160 "$FRAME_W" "$FRAME_H"
 
   epoch_ms; t0=$EPOCH_MS_OUT
@@ -421,7 +421,7 @@ run_smoke() {
   echo "smoke: wrote $(pwd)/screenshot.ppm (${GRID_COLS}x${PIXEL_ROWS}, $DISTINCT_COLORS distinct colors)"
   # DOOM's software renderer is paletted (classic VGA Mode 13h: at most 256 colors).
   # So a healthy frame lands in the low hundreds at most.
-  # A truecolor renderer would produce thousands.
+  # A 24-bit color renderer would produce thousands.
   # A degenerate frame (blank/solid) lands in the single digits.
   if (( DISTINCT_COLORS <= 50 )); then
     echo "smoke: FAIL: frame looks degenerate (too few distinct colors)" >&2
@@ -437,11 +437,11 @@ run_interactive() {
     exit 1
   fi
 
-  # The alternate screen is entered immediately, before doom_init/initGame even start.
+  # The alternate screen is entered immediately, before `doom_init`/`initGame` even start.
   # It is not entered only once the game loop is ready: boot alone is ~2 minutes (see README.md).
   # Those two minutes are better spent already inside the alternate screen.
   # There the script prints plain scrolling progress lines.
-  # That is better than leaving the real scrollback cluttered and then cutting over.
+  # That is better than filling the normal screen's history with lines and then cutting over.
   # It also means Ctrl-C/kill during boot exercises the same restore path as quitting the game loop.
   # So there is no separate untested restore path.
   ORIG_STTY=$(stty -g)
@@ -449,24 +449,24 @@ run_interactive() {
     stty "$ORIG_STTY" 2>/dev/null || true
     # SGR reset first.
     # Otherwise the fixed status-line colors persist past leaving the alternate screen.
-    # They would tint the shell prompt underneath.
+    # They would color the shell prompt underneath.
     printf '%s' "${ESC}[0m${ESC}[?25h${ESC}[?1049l"
   }
-  # Ctrl-C is handled explicitly as a byte in drain_input (once raw mode is active).
-  # Raw mode disables the terminal's own SIGINT generation.
-  # The INT/TERM traps are only a backstop for termination from outside (e.g. `kill`).
-  # They also cover boot, before drain_input ever runs.
+  # Ctrl-C is handled explicitly as a byte in `drain_input` (once raw mode is active).
+  # That is because raw mode disables the terminal's own SIGINT generation.
+  # The INT/TERM traps are only a fallback, for a signal sent from outside (for example by `kill`).
+  # They also cover boot, before `drain_input` ever runs.
   # Unlike EXIT, a custom INT/TERM trap does not itself end the process.
-  # bash resumes whatever it was doing once the handler returns.
+  # Bash resumes whatever it was doing once the handler returns.
   # So these have to call exit explicitly, which then also fires the EXIT trap.
-  # restore_terminal is idempotent, so running it twice is harmless.
+  # `restore_terminal` is idempotent, so running it twice does no harm.
   trap restore_terminal EXIT
   trap 'restore_terminal; exit 130' INT
   trap 'restore_terminal; exit 143' TERM
   stty raw -echo
   printf '%s' "${ESC}[?1049h${ESC}[?25l${ESC}[2J${ESC}[H"
-  # -echo means a plain `printf`'d line won't start at column 1 of the next row on its own.
-  # \r\n (not bare \n) keeps boot progress readable.
+  # `-echo` means a plain `printf`'d line won't start at column 1 of the next row on its own.
+  # `\r\n` (not a lone `\n`) keeps boot progress readable.
   boot_msg() { printf '%s\r\n' "$1"; }
 
   boot_msg "dewasm DOOM (bash): booting. This takes about two minutes total; none of this is a hang."

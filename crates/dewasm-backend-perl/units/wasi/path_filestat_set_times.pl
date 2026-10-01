@@ -12,7 +12,8 @@ sub wasi_path_filestat_set_times {
     my ($a, $m, $terr) = $self->fst_times($st[8], $st[9], $atim, $mtim, $fst_flags);
     return $terr if defined $terr;
     # Core Perl has no `lutimes` or `utimensat(AT_SYMLINK_NOFOLLOW)`.
-    # So a final symbolic link cannot carry its own times: the `utime` below follows it.
+    # So a symbolic link as the final path component cannot carry its own times.
+    # The `utime` below follows it.
     # This is the one NOFOLLOW gap in this backend's WASI surface.
     # The expected-failures list for `wasi-testsuite` carries the attribution.
     Time::HiRes::utime($a, $m, $host) or return $self->fs_errno(0 + $!);

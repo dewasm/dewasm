@@ -45,7 +45,7 @@ The design questions:
   `throw_ref` re-raises it (`Rt.throw_ref`, trapping `"null exception reference"` on `nil`).
   `ValType::ExnRef` joins the flat reference variants with `nil` as null.
   `Rt::WasmException` is deliberately unrelated to `Rt::Trap`.
-  `try_table`'s `rescue Rt::WasmException` structurally cannot catch traps, exhaustion, or `Rt::Exit`.
+  So `try_table`'s `rescue Rt::WasmException` structurally cannot catch traps, exhaustion, or `Rt::Exit`.
   `unreachable-not-caught`/`trap-in-callee` in `try_table.wast` test this.
 - **`Stmt::TryTable` lowers to the body wrapped in `begin … rescue Rt::WasmException => __e`.**
   Clauses are checked in order (first match wins, per `duplicated-catches`).
@@ -75,7 +75,7 @@ The design questions:
   A `rescue` of a shared parent class would do it.
   Two unrelated classes make the "traps are uncatchable" property structural rather than disciplined.
 - **`Partial("try_table only")`**: unnecessary.
-  The suite in use has no legacy EH constructs (checked with `grep` before implementation).
+  That is because the suite has no legacy EH constructs (checked with `grep` before implementation).
   Legacy binaries fail validation, since the `LEGACY_EXCEPTIONS` validation feature stays off.
   They surface as clean `unknown-proposal` refusals.
 
