@@ -1,9 +1,9 @@
 // requires: rt/tag
-// A wasm exception in flight; the object itself is the exnref value.
+// A wasm exception in flight; the object itself is the `exnref` value.
 // Its payload is boxed like every other value crossing a dynamic boundary.
-// Deliberately unrelated to Trap and Exit: a try_table catches this class alone.
-// So traps and the exit path structurally cannot be caught by catch_all.
-// `wasm_exception` is void and throws (see rt/trap).
+// Deliberately unrelated to Trap and Exit: a `try_table` catches this class alone.
+// So traps and the exit path structurally cannot be caught by `catch_all`.
+// `wasm_exception` is `void` and throws (see `rt/trap`).
 static final class WasmException extends RuntimeException {
     final Tag tag;
     final Object[] values;

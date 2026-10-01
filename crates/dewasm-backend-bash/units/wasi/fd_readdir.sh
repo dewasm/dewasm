@@ -1,21 +1,22 @@
 # requires: mem/check, mem/i32_store, wasi/filetype
-# WASI fd_readdir: the first call for a dir fd snapshots the listing.
-# The snapshot goes into <p>wdn<fd>/<p>wdt<fd> (names/filetypes).
+# WASI `fd_readdir`: the first call for a directory `fd` snapshots the listing.
+# The snapshot goes into `<p>wdn<fd>`/`<p>wdt<fd>` (names and file types).
 # The steps:
-# 1. Glob the host directory once with dotglob+nullglob.
+# 1. Glob the host directory once with `dotglob`+`nullglob`.
 #    The saved `shopt -p` string restores both unconditionally right after.
-# 2. Strip to basenames.
+# 2. Strip to base names.
 # 3. Insertion-sort byte-wise (`LC_ALL=C`), since Bash has no builtin sort.
 # 4. Prepend "."/".." (type 3).
-# Later calls for the same fd reuse the cached snapshot.
+# Later calls for the same `fd` reuse the cached snapshot.
 # So the cookie is a stable 1-based index into a point-in-time listing.
-# It is not a live cursor under concurrent mutation.
-# Mirrors the `WasiDir#entries` cache of crates/dewasm-backend-ruby/units/wasi/fd_readdir.rb.
+# It is not a live cursor while the directory changes.
+# Mirrors the `WasiDir#entries` cache of `crates/dewasm-backend-ruby/units/wasi/fd_readdir.rb`.
 # It also mirrors Ruby's own `.sort` (byte order under LC_ALL=C).
-# Packs the 24-byte dirent, followed by the unpadded name bytes.
-# The dirent is d_next u64 resume cookie, d_ino u64 = 0, d_namlen u32, d_type u8 + 3 pad.
-# A dirent may be legally truncated once buf_len runs out.
-# bufused == buf_len signals more entries remain, the same contract as Ruby's byteslice truncation.
+# Packs the 24-byte `dirent`, followed by the name bytes without padding.
+# The `dirent` is `d_next` u64 (the cookie of the next entry), `d_ino` u64 = 0, `d_namlen` u32.
+# Then comes `d_type` u8 and 3 bytes of padding.
+# A `dirent` may be legally truncated once `buf_len` runs out.
+# `bufused == buf_len` signals more entries remain, as Ruby's `byteslice` truncation does.
 wasi_fd_readdir() {
   local __p=$1 __fd=$2 __buf_ptr=$3 __buf_len=$4 __cookie=$5 __bufused_ptr=$6
   local -n __fds=${__p}wfds
@@ -67,9 +68,9 @@ wasi_fd_readdir() {
   local -n __m=${__p}mem
   local LC_ALL=C
   local __out=() __outlen=0 __ri=$__cookie __name __nlen __next __ck __b __mk
-  # The u64 cookie arrives as bash's signed-64 bit pattern.
+  # The u64 cookie arrives as Bash's signed-64 bit pattern.
   # A negative value is a huge unsigned position past any snapshot's end.
-  # So report end-of-directory (an empty result, matching wasmtime).
+  # So report end-of-directory (an empty result, matching Wasmtime).
   # Otherwise the loop would read negative subscripts.
   if (( __ri < 0 )); then __ri=$__total; fi
   while (( __ri < __total && __outlen < __buf_len )); do

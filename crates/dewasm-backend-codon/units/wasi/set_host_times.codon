@@ -1,5 +1,5 @@
 # requires: rt/raw_store64
-# utimensat/futimens with two absolute-nanosecond timestamps; empty path means the fd form.
+# `utimensat`/`futimens` with two absolute-nanosecond timestamps; empty path means the `fd` form.
 def set_host_times(self, path: str, fd: int, a_ns: int, m_ns: int, follow: bool) -> bool:
     from C import utimensat(int, cobj, Ptr[byte], int) -> int
     from C import futimens(int, Ptr[byte]) -> int

@@ -1,4 +1,4 @@
-# Map a stat mode to a WASI filetype tag (S_IFMT bits).
+# Map a `stat` mode to a WASI `filetype` tag (S_IFMT bits).
 def wasi_filetype(self, mode: int) -> int:
     fmt = mode & 0o170000
     if fmt == 0o040000:

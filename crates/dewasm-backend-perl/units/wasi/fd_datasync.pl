@@ -1,6 +1,6 @@
 # requires:
-# Core perl exposes no fdatasync; IO::Handle::sync (fsync) is the faithful superset.
-# macOS python does the same.
+# Core Perl has no `fdatasync`; `IO::Handle::sync` (`fsync`) does all it does and more.
+# Python on macOS does the same.
 use IO::Handle ();
 
 sub wasi_fd_datasync {

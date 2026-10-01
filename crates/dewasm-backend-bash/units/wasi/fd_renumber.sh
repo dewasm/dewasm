@@ -1,14 +1,14 @@
 # requires: wasi/fd_flush
-# WASI fd_renumber: atomically move the open fd <from> into the slot <to>.
+# WASI `fd_renumber`: atomically move the open `fd` <from> into the slot <to>.
 # Whatever <to> was is closed.
 # Both must currently be open: an unopened endpoint is EBADF (8).
 # That is why `fd_renumber(valid, closed)` fails.
 # It is also why renumbering onto stdio or a preopen (both open) works.
-# Every parallel fd-table slot moves from <from> to <to>.
-# The slots are kind, offset, path, name, rights, fdflags, append, and dirty.
-# For a regular-file fd, the whole-file byte buffer moves too.
+# Every parallel `fd` table slot moves from <from> to <to>.
+# The slots are kind, offset, path, name, rights, `fdflags`, append, and dirty.
+# For a regular-file `fd`, the whole-file byte buffer moves too.
 # The destination's own buffer is flushed first, since it is being closed.
-# Any readdir cache on either side is dropped, so a later fd_readdir rebuilds.
+# Any `readdir` cache on either side is dropped, so a later `fd_readdir` rebuilds.
 wasi_fd_renumber() {
   local __p=$1 __from=$2 __to=$3
   local -n __fds=${__p}wfds
@@ -21,10 +21,10 @@ wasi_fd_renumber() {
     return 0
   fi
   local __kind=${__fds[$__from]}
-  # Close the destination: flush a dirty buffer, then drop its per-fd state.
+  # Close the destination: flush a dirty buffer, then drop its `fd` state.
   wasi_fd_flush "$__p" "$__to" || return $?
   unset "${__p}wbuf${__to}" "${__p}wdn${__to}" "${__p}wdt${__to}"
-  # Move every parallel slot; an absent source slot clears the destination's.
+  # Move every parallel slot; a missing source slot clears the destination's.
   local __a
   for __a in wfds wtell wpath wname wrbase wrinh wfdflags wapp wdirty; do
     local -n __arr=${__p}${__a}
@@ -36,7 +36,7 @@ wasi_fd_renumber() {
     fi
     unset -n __arr # release the nameref before rebinding next round
   done
-  # Move the whole-file buffer for a regular-file fd.
+  # Move the whole-file buffer for a regular-file `fd`.
   if [[ $__kind == 2 ]]; then
     declare -ga "${__p}wbuf${__to}=()"
     local -n __src=${__p}wbuf${__from}

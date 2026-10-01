@@ -1,14 +1,14 @@
 // requires: wasi/wasi_filetype
-// Pack an os.FileInfo into a WASI filestat (64 bytes).
-// The fields are dev, ino, filetype (+7 pad), nlink, size, atim/mtim/ctim.
+// Pack an `os.FileInfo` into a WASI `filestat` (64 bytes).
+// The fields are `dev`, `ino`, `filetype` (+7 padding), `nlink`, `size`, `atim`/`mtim`/`ctim`.
 // All are u64, and times are in nanoseconds.
-// dev/ino/nlink come from the unix syscall.Stat_t.
-// mtim is the portable ModTime.
-// atim/ctim are read from the Stat_t's platform time field via reflect.
-// That is the only std, build-tag-free way to reach it.
-// The field is named Atim on linux and Atimespec on darwin.
-// A distinct atim matters for fd_filestat_set_times.
-// That syscall changes mtim while leaving atim untouched.
+// `dev`/`ino`/`nlink` come from the Unix `syscall.Stat_t`.
+// `mtim` is the portable `ModTime`.
+// `atim`/`ctim` are read from the `Stat_t`'s platform time field via `reflect`.
+// That is the only way to reach it with the standard library and no build tags.
+// The field is named `Atim` on Linux and `Atimespec` on Darwin.
+// A distinct `atim` matters for `fd_filestat_set_times`.
+// That system call changes `mtim` while leaving `atim` untouched.
 func (w *WASI) pack_filestat(fi os.FileInfo) []byte {
     buf := make([]byte, 64)
     var dev, ino, nlink uint64
@@ -37,10 +37,10 @@ func (w *WASI) pack_filestat(fi os.FileInfo) []byte {
     return buf
 }
 
-// statTimeNanos reads a syscall.Stat_t timespec field as nanoseconds.
+// `statTimeNanos` reads a `syscall.Stat_t` `timespec` field as nanoseconds.
 // The field is given by its per-platform names.
 // It uses reflect, so a single build-tag-free file compiles on both platforms.
-// Those are linux (Atim/Ctim) and darwin (Atimespec/Ctimespec).
+// Those are Linux (`Atim`/`Ctim`) and Darwin (`Atimespec`/`Ctimespec`).
 // Returns 0 when no listed field is present.
 func statTimeNanos(st *syscall.Stat_t, names ...string) int64 {
     v := reflect.ValueOf(st).Elem()

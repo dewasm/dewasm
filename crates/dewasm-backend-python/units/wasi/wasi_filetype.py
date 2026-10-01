@@ -1,4 +1,4 @@
-# Map a stat result's st_mode to a WASI filetype tag.
+# Map a `stat` result's `st_mode` to a WASI `filetype` tag.
 # It reads the S_IFMT bits, avoiding a dependency on the `stat` module.
 def wasi_filetype(self, st):
     fmt = st.st_mode & 0o170000

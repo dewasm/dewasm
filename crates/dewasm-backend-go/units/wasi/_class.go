@@ -1,12 +1,12 @@
 // requires: memory/_class
-// The bundled WASI preview 1 runtime.
-// Its filesystem model is adopted one-for-one from the Ruby/Python backends.
+// The bundled WASI Preview 1 runtime.
+// Its file system model is adopted one-for-one from the Ruby/Python backends.
 // Stdio and files are *os.File.
-// A directory (whether a preopen or one the guest opened via path_open) is a *wasiDir.
-// The fd table holds either, keyed by fd.
-// Args/env are pre-encoded byte strings.
-// Env is passed already-ordered ("K=V"), and preopens are assigned fds in sorted order.
-// So there is no map-iteration nondeterminism.
+// A directory (whether a preopen or one the guest opened via `path_open`) is a `*wasiDir`.
+// The file descriptor table holds either, keyed by `fd`.
+// The arguments and the environment are pre-encoded byte strings.
+// The environment is passed already-ordered ("K=V"), and preopens get `fd`s in sorted order.
+// So no result depends on map iteration order.
 const (
     wasiOk         uint32 = 0
     wasiBadf       uint32 = 8
@@ -18,12 +18,12 @@ const (
 )
 
 // WASI p1 rights bits.
-// The per-fd rights model is adopted from the reference runtime's per-filetype masks.
-// A preopen/dir fd carries dirRightsBase.
-// A file fd carries whatever path_open requested, intersected with the dir's inheriting set.
-// Rights are enforced (NOTCAPABLE=76) in these units:
-// fd_read/fd_write/fd_seek/fd_readdir/fd_filestat_set_size.
-// fd_fdstat_set_rights narrows them.
+// The rights model per `fd` is adopted from the reference runtime's masks per file type.
+// A preopen or directory `fd` carries `dirRightsBase`.
+// A file `fd` carries whatever `path_open` requested, masked by the directory's inheriting set.
+// Rights are checked (NOTCAPABLE=76) in these units:
+// `fd_read`/`fd_write`/`fd_seek`/`fd_readdir`/`fd_filestat_set_size`.
+// `fd_fdstat_set_rights` narrows them.
 const (
     rightFdDatasync          uint64 = 1 << 0
     rightFdRead              uint64 = 1 << 1
@@ -55,10 +55,10 @@ const (
     rightPollFdReadwrite     uint64 = 1 << 27
 
     // The reference runtime's directory masks.
-    // wasi-libc and the conformance suite hard-code them as the minimum for every directory.
-    // A dir base deliberately excludes FD_SEEK and FD_FILESTAT_SET_SIZE.
+    // `wasi-libc` and the conformance suite hard-code them as the minimum for every directory.
+    // A directory base deliberately excludes FD_SEEK and FD_FILESTAT_SET_SIZE.
     // The suite asserts their absence.
-    // Inheriting adds the per-file fd_* rights a file opened underneath may request.
+    // Inheriting adds the per-file `fd_*` rights a file opened underneath may request.
     dirRightsBase uint64 = rightPathCreateDirectory | rightPathCreateFile |
         rightPathLinkSource | rightPathLinkTarget | rightPathOpen |
         rightFdReaddir | rightPathReadlink | rightPathRenameSource |
@@ -70,7 +70,7 @@ const (
         rightFdWrite | rightFdAdvise | rightFdAllocate | rightFdFilestatSetSize |
         rightPollFdReadwrite
 
-    // Stdio streams get a broad tty-shaped set.
+    // Stdio streams get a broad set shaped like a TTY's.
     // So rights enforcement never blocks the inherited descriptors.
     // Seek still answers SPIPE first.
     stdioRights uint64 = rightFdRead | rightFdWrite | rightFdSeek | rightFdTell |
@@ -79,20 +79,20 @@ const (
         rightFdFilestatSetTimes | rightPollFdReadwrite
 )
 
-// fdflags bits (fs_flags).
-// Only APPEND is acted on (fd_write seeks to end).
+// `fdflags` bits (`fs_flags`).
+// Only APPEND is acted on (`fd_write` seeks to end).
 // SYNC/DSYNC/RSYNC/NONBLOCK are stored and reported but treated as no-ops.
 const (
     fdflagAppend uint16 = 1 << 0
 )
 
-// Per-fd rights/flags carried alongside the fd-table entry.
-// Every live fd (stdio, preopen, path_open'd) has one; fd_renumber moves it.
-// filetype memoizes what fd_fdstat_get reports, valid once filetypeKnown is set.
-// An open descriptor's filetype cannot change while it is open.
-// This meta travels with its fd-table entry.
-// fd_renumber moves both, and fds are never reused after close.
-// So the memoized answer cannot outlive the descriptor it describes.
+// Rights and flags per `fd`, carried alongside its entry in the `fd` table.
+// Every live `fd` (stdio, preopen, opened by `path_open`) has one; `fd_renumber` moves it.
+// `filetype` memoizes what `fd_fdstat_get` reports, valid once `filetypeKnown` is set.
+// An open descriptor's file type cannot change while it is open.
+// This `wasiFdMeta` travels with its entry in the `fd` table.
+// `fd_renumber` moves both, and `fd`s are never reused after close.
+// So the memoized answer cannot live longer than the descriptor it describes.
 type wasiFdMeta struct {
     base          uint64
     inheriting    uint64
@@ -101,10 +101,11 @@ type wasiFdMeta struct {
     filetypeKnown bool
 }
 
-// A directory descriptor: either a preopen or a directory the guest opened itself via path_open.
-// For a preopen, preopenName is set to the guest-visible path passed in preopens.
-// For a guest-opened directory, preopenName is nil.
-// entries is the fd_readdir listing cache, filled lazily; loaded guards the one-shot snapshot.
+// A directory descriptor: either a preopen or a directory the guest opened itself via `path_open`.
+// For a preopen, `preopenName` is set to the guest-visible path passed in preopens.
+// For a guest-opened directory, `preopenName` is `nil`.
+// `entries` is the `fd_readdir` listing cache, filled lazily.
+// `loaded` guards the one-shot snapshot.
 type wasiDir struct {
     hostPath    string
     preopenName []byte
@@ -158,7 +159,7 @@ func newWASI(args []string, env []string, preopens map[string]string) *WASI {
         }
         // The host path must resolve, but need not be a directory.
         // Like the Ruby/Perl runtimes, a single-file preopen is accepted.
-        // An example is "/dev/null" for the zeroperl reactor's init probe.
+        // An example is "/dev/null" for the `zeroperl` reactor's initialization probe.
         // The guest resolves it as the preopen root itself.
         if _, err := os.Stat(real); err != nil {
             panic("preopen " + guest + " => " + preopens[guest] + ": does not exist")
@@ -171,8 +172,8 @@ func newWASI(args []string, env []string, preopens map[string]string) *WASI {
     return w
 }
 
-// checkRight reports wasiOk if the fd holds `right`, else wasiNotcapable.
-// An fd with no tracked meta (should not happen for a live fd) is permitted.
+// `checkRight` reports `wasiOk` if the `fd` holds `right`, else `wasiNotcapable`.
+// An `fd` with no tracked `meta` entry (should not happen for a live `fd`) is permitted.
 func (w *WASI) checkRight(fd uint32, right uint64) uint32 {
     if m, ok := w.meta[fd]; ok && m.base&right == 0 {
         return wasiNotcapable
@@ -180,8 +181,8 @@ func (w *WASI) checkRight(fd uint32, right uint64) uint32 {
     return wasiOk
 }
 
-// isStdio reports whether f is one of the three inherited standard streams.
-// Those take the SPIPE/no-close special cases (in lockstep with fds 0..2).
+// `isStdio` reports whether `f` is one of the three inherited standard streams.
+// Those take the SPIPE/no-close special cases (in step with `fd`s 0..2).
 func (w *WASI) isStdio(f *os.File) bool {
     return f == os.Stdin || f == os.Stdout || f == os.Stderr
 }

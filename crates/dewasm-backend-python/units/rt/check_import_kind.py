@@ -2,7 +2,7 @@
 # A present-but-wrong-kind import is a link error, distinct from a missing one.
 # A missing one still falls through to the caller's WASI/ENOSYS/raise fallback via `or`.
 # Function values are plain callables; the runtime's own
-# Global/Table/Memory/Tag wrappers self-report via wasm_kind.
+# Global/Table/Memory/Tag wrappers self-report via `wasm_kind`.
 @staticmethod
 def check_import_kind(value, kind, mod, name):
     if value is None:

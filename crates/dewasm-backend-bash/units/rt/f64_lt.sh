@@ -1,4 +1,5 @@
-# The order key p >= 0 ? p : -(p & ABSM) collapses both zeros to 0 and linearizes the sign.
+# The order key `p >= 0 ? p : -(p & ABSM)` collapses both zeros to 0.
+# It also turns sign-magnitude patterns into integer order.
 # The key then matches IEEE order for all non-NaN patterns.
 rt_f64_lt() {
   local a=$1 b=$2

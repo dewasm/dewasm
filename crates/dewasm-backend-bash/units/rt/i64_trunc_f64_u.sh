@@ -1,7 +1,7 @@
 # requires: rt/trap
 # At e == 63 the m << 11 deliberately wraps negative.
 # That wrapped value is the u64 bit pattern of the result.
-# This holds since bash holds an i64 as its signed-64 bit pattern.
+# This holds since Bash holds an i64 as its signed-64 bit pattern.
 rt_i64_trunc_f64_u() {
   local a=$1 pa s e m
   (( pa = a & 0x7fffffffffffffff, s = (a >> 63) & 1 ))

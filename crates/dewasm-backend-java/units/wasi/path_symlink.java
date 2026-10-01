@@ -1,8 +1,8 @@
 // requires: memory/read_string, wasi/resolve_path, wasi/errno_fs
-// Create a symlink whose content is the guest's target string.
-// The string is stored VERBATIM (never pre-resolved).
+// Create a symbolic link whose content is the guest's target string.
+// The string is stored UNCHANGED (never pre-resolved).
 // Confinement happens later, when something follows the link, not at creation.
-// That later check is resolve_path's realpath + containment check.
+// That later check is the `realpath` + containment check of `resolve_path`.
 // An absolute target is rejected outright.
 // It could only ever escape the preopen tree at follow time.
 // The link's own parent is resolved NOFOLLOW.
@@ -22,7 +22,7 @@ int wasi_path_symlink(int oldPtr, int oldLen, int fd, int newPtr, int newLen) {
     }
     java.nio.file.Path linkPath = java.nio.file.Paths.get(r.path);
     // A trailing slash on the link path demands the name resolve to a directory.
-    // So a symlink can never be created there.
+    // So a symbolic link can never be created there.
     // Report why precisely:
     // - ENOENT if nothing is there;
     // - EEXIST if a directory is;

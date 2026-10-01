@@ -1,11 +1,12 @@
-# WASI preview 1 runtime state, mirroring the Ruby/Python runtimes.
-# It is a fd table plus a parallel per-fd capability map, seeded from the constructor's preopens.
-# Per-fd rights are modelled after wasmtime's wasi-common:
+# WASI Preview 1 runtime state, mirroring the Ruby and Python runtimes.
+# It is an `fd` table plus a parallel capability map per `fd`.
+# Both are seeded from the constructor's preopens.
+# The rights of each `fd` are modelled after Wasmtime's `wasi-common`:
 # - a directory and a file each carry a different default set;
-# - path_open narrows the requested rights against the parent's inheriting set (then per-filetype);
-# - fd_fdstat_set_rights can only drop bits.
+# - `path_open` narrows requested rights against the parent's inheriting set, then per `filetype`;
+# - `fd_fdstat_set_rights` can only drop bits.
 # This state is kept in the always-bundled prelude.
-# new() seeds the fd -> [base, inheriting, fdflags] meta map for every preopen and for stdio.
+# `new()` seeds the `fd -> [base, inheriting, fdflags]` `meta` map for every preopen and for stdio.
 # So the constants must exist whenever any WASI import is used.
 use Cwd ();
 
@@ -53,7 +54,7 @@ use constant {
 # The base rights are the rights a directory descriptor carries.
 # The inheriting rights are the rights it may pass to things opened beneath it.
 # Those are the directory rights plus every file right.
-# Mirrors wasmtime's DIR_RIGHTS / FILE_RIGHTS.
+# Mirrors Wasmtime's `DIR_RIGHTS` / `FILE_RIGHTS`.
 use constant DIR_RIGHTS_BASE =>
     RIGHTS_FD_FDSTAT_SET_FLAGS | RIGHTS_FD_SYNC | RIGHTS_FD_ADVISE
     | RIGHTS_PATH_CREATE_DIRECTORY | RIGHTS_PATH_CREATE_FILE
@@ -72,21 +73,23 @@ use constant FILE_RIGHTS_BASE =>
     | RIGHTS_FD_FILESTAT_SET_TIMES | RIGHTS_POLL_FD_READWRITE;
 use constant DIR_RIGHTS_INHERITING => DIR_RIGHTS_BASE | FILE_RIGHTS_BASE;
 
-# An fd-table entry is a plain hashref of one of three shapes:
-# * stdio:  { fh => glob ref, std => 0|1|2 } (SPIPE on seek/tell/pread/
-# pwrite, never closed; keyed by the `std` field, in lockstep with the
-# fd table, not by whatever the globals point at when a syscall runs);
-# * file:   { fh => handle, path => host path }, sysopen'd, unbuffered
-# (sysread/syswrite/sysseek only), so pread/pwrite emulation and
-# read/write/seek stay coherent on one fd (sqlite mixes both);
-# * dir:    { dir => 1, path => realpath'd host path, preopen => guest
-# name (undef when the guest opened it itself via path_open),
-# entries => lazily built fd_readdir cache }.
-# Any shape may also carry `filetype`, what fd_fdstat_get reports, filled in
-# on its first query.
-# An open descriptor's filetype cannot change while it is open, and the entry
-# is the descriptor (fd_renumber moves it, fd_close drops it), so the memoized
-# answer cannot outlive the descriptor it describes.
+# An entry of the `fd` table is a plain `hashref` in one of three shapes.
+# A stdio entry is `{ fh => glob ref, std => 0|1|2 }`.
+# It answers SPIPE on seek, tell, `pread` and `pwrite`, and is never closed.
+# It is keyed by its `std` field, which moves together with the `fd` table.
+# It is not keyed by whatever the globals point at when a system call runs.
+# A file entry is `{ fh => handle, path => host path }`, opened with `sysopen` and unbuffered.
+# It uses `sysread`, `syswrite` and `sysseek` only.
+# So the `pread` and `pwrite` emulation and read, write and seek stay coherent on one `fd`.
+# SQLite mixes both.
+# A directory entry is `{ dir => 1, path => ..., preopen => ..., entries => ... }`.
+# Its `path` is the host path after `realpath`.
+# Its `preopen` is the guest name, `undef` when the guest opened it itself through `path_open`.
+# Its `entries` is the `fd_readdir` cache, built on first use.
+# Any shape may also carry `filetype`, what `fd_fdstat_get` reports, filled in on its first query.
+# An open descriptor's `filetype` cannot change while it is open.
+# The entry is the descriptor: `fd_renumber` moves it, and `fd_close` drops it.
+# So the memoized answer cannot last longer than the descriptor it describes.
 sub new {
     my ($class, %opts) = @_;
     my $env = $opts{env} // {};
@@ -115,7 +118,7 @@ sub new {
     for my $guest (sort keys %$preopens) {
         # The host path must resolve, but need not be a directory.
         # Like the Ruby runtime, a single-file preopen is accepted.
-        # An example is '/dev/null' for the zeroperl reactor's init probe.
+        # An example is `/dev/null` for the `init` probe of the `zeroperl` reactor.
         # The guest resolves it as the preopen root itself.
         my $real = Cwd::realpath($preopens->{$guest});
         die "preopen '$guest' => '$preopens->{$guest}': does not exist\n"
@@ -128,8 +131,8 @@ sub new {
     return $self;
 }
 
-# Import-provider protocol: a custom WASI runtime can replace this package wholesale.
-# It does so by implementing wasm_import($name) and attach($instance).
+# Import-provider protocol: a custom WASI runtime can replace this whole package.
+# It does so by implementing `wasm_import($name)` and `attach($instance)`.
 sub wasm_import {
     my ($self, $name) = @_;
     my $method = "wasi_$name";

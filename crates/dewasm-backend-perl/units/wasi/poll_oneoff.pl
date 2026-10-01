@@ -1,14 +1,14 @@
 # requires: memory/fill, memory/i32_load, memory/i32_load8_u, memory/i32_load16_u, memory/i64_load, memory/i32_store, memory/i32_store8, memory/i32_store16, memory/i64_store
-# poll_oneoff waits until at least one subscription is ready.
+# `poll_oneoff` waits until at least one subscription is ready.
 # Then it writes one event per ready subscription.
 # The layout is WASI p1: 48-byte subscriptions in, 32-byte events out.
-# Only fd_read on stdin actually blocks (via 4-arg select).
-# Regular files, stdout/stderr, and every fd_write are treated as immediately ready.
-# Unknown fds report EBADF.
+# Only `fd_read` on `stdin` actually blocks (through the 4-argument `select`).
+# Regular files, `stdout` and `stderr`, and every `fd_write` are treated as immediately ready.
+# Unknown descriptors report EBADF.
 # Clock subscriptions set the wait deadline.
-# If it elapses with no fd ready, the due clock subs fire.
+# If it elapses with no `fd` ready, the due clock subs fire.
 # Motivated by event-loop guests such as the QuickJS REPL.
-# The REPL blocks here on stdin between prompts.
+# The REPL blocks here on `stdin` between prompts.
 use Time::HiRes ();
 
 sub wasi_poll_oneoff {

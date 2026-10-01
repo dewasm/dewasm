@@ -1,18 +1,19 @@
 // requires: memory/fill, memory/i32_load, memory/i32_load8_u, memory/i32_load16_u, memory/i64_load, memory/i32_store, memory/i32_store8, memory/i32_store16, memory/i64_store
-// poll_oneoff waits until at least one subscription is ready.
+// `poll_oneoff` waits until at least one subscription is ready.
 // Then it writes one event per ready subscription.
 // The WASI p1 layout is 48-byte subscriptions in, 32-byte events out.
-// Regular files, stdout/stderr, and every fd_write are treated as immediately ready.
-// Unknown fds report EBADF.
+// Regular files, `stdout`/`stderr`, and every `fd_write` are treated as immediately ready.
+// Unknown descriptors report EBADF.
 // Clock subscriptions set the wait deadline.
-// If it elapses with no fd ready, the due clock subs fire.
+// If it elapses with no descriptor ready, the due clock subs fire.
 // Motivated by event-loop guests such as the QuickJS REPL.
-// That REPL blocks here on stdin between prompts.
+// That REPL blocks here on `stdin` between prompts.
 //
 // Java limitation: there is no select(2) on System.in.
-// So an fd_read wait on stdin is approximated by polling InputStream.available() with a 1 ms sleep.
-// A canonical-mode tty reports 0 until a whole line is entered.
-// EOF is also indistinguishable from "no data yet".
+// So an `fd_read` wait on `stdin` is approximated by polling InputStream.available().
+// Between polls it sleeps 1 ms.
+// A canonical-mode terminal reports 0 until a whole line is entered.
+// EOF also cannot be told apart from "no data yet".
 // So a no-clock (infinite) wait blocks until bytes actually arrive.
 // Adequate for the event-loop use case.
 // Byte-exact interactive behaviour is out of scope for this approximation.
@@ -20,7 +21,7 @@ int wasi_poll_oneoff(int inPtr, int outPtr, int nsubs, int neventsPtr) {
     if (nsubs == 0) {
         return WASI_INVAL;
     }
-    // Each event row: {userdata, error, type, nbytes, flags}.
+    // Each event row: `{userdata, error, type, nbytes, flags}`.
     java.util.List<long[]> ready = new java.util.ArrayList<>();
     java.util.List<long[]> stdinWaiters = new java.util.ArrayList<>(); // {userdata, type}
     java.util.List<long[]> clocks = new java.util.ArrayList<>(); // {userdata, rel_ns}

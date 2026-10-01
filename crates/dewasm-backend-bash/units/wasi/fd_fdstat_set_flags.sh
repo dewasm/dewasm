@@ -1,14 +1,14 @@
-# WASI fd_fdstat_set_flags: set an fd's open fdflags.
+# WASI `fd_fdstat_set_flags`: set an `fd`'s open `fdflags`.
 # The flags are APPEND=0x1, DSYNC=0x2, NONBLOCK=0x4, RSYNC=0x8, SYNC=0x10.
-# Flipping APPEND updates the <p>wapp array fd_write consults.
+# Flipping APPEND updates the `<p>wapp` array `fd_write` consults.
 # So clearing it makes subsequent writes land at the seek offset again.
-# The fd_flags_set conformance case checks this.
-# The other flags are stored and reflected by fd_fdstat_get.
+# The `fd_flags_set` conformance case checks this.
+# The other flags are stored and reflected by `fd_fdstat_get`.
 # They are no-ops under the flush-on-close model.
-# An unopened fd is EBADF (8).
-# Any open fd is accepted, stdio included.
-# toywasm's WASI setup sets NONBLOCK on stdin and treats failure as fatal.
-# So wasmtime's regular-files-only EBADF answer is not copied.
+# An unopened `fd` is EBADF (8).
+# Any open `fd` is accepted, stdio included.
+# The WASI set-up of `toywasm` sets NONBLOCK on `stdin` and treats failure as fatal.
+# So Wasmtime's regular-files-only EBADF answer is not copied.
 wasi_fd_fdstat_set_flags() {
   local __p=$1 __fd=$2 __flags=$3
   local -n __fds=${__p}wfds

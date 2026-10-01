@@ -9,9 +9,9 @@ int wasi_fd_readdir(int fd, int bufPtr, int bufLen, long cookie, int bufusedPtr)
     }
     Dir dir = (Dir) e;
     // Every cookie-0 (fresh-start) call re-snapshots.
-    // So a directory mutated between full reads is seen.
-    // A nonzero cookie resumes the snapshot the cookie was minted against.
-    // That is the opaque-resume-point contract.
+    // So a directory changed between full reads is seen.
+    // A nonzero cookie resumes the snapshot the cookie was issued against.
+    // That is the contract of a cookie as an opaque position to continue from.
     if (!dir.loaded || cookie == 0) {
         dir.entries = readdir_entries(dir.hostPath);
         dir.loaded = true;
@@ -23,8 +23,9 @@ int wasi_fd_readdir(int fd, int bufPtr, int bufLen, long cookie, int bufusedPtr)
     long i = cookie;
     while (Long.compareUnsigned(i, dir.entries.size()) < 0 && out.size() < lim) {
         Dirent ent = dir.entries.get((int) i);
-        // dirent: d_next (u64, resume cookie) + d_ino (u64) + d_namlen (u32) + d_type (u8) + 3 pad.
-        // The (unpadded) name follows.
+        // A `dirent` is `d_next` (u64 cookie), `d_ino` (u64), `d_namlen` (u32), `d_type` (u8).
+        // Then come 3 padding bytes.
+        // The name (without padding) follows.
         byte[] hdr = new byte[24];
         java.nio.ByteBuffer h = java.nio.ByteBuffer.wrap(hdr).order(java.nio.ByteOrder.LITTLE_ENDIAN);
         h.putLong(0, i + 1);
@@ -36,7 +37,7 @@ int wasi_fd_readdir(int fd, int bufPtr, int bufLen, long cookie, int bufusedPtr)
         i++;
     }
     byte[] bytes = out.toByteArray();
-    // A dirent may be legally truncated at the tail once buf_len runs out.
+    // A `dirent` may be legally truncated at the tail once `buf_len` runs out.
     if (bytes.length > lim) {
         bytes = java.util.Arrays.copyOf(bytes, (int) lim);
     }
@@ -45,15 +46,15 @@ int wasi_fd_readdir(int fd, int bufPtr, int bufLen, long cookie, int bufusedPtr)
     return WASI_OK;
 }
 
-// The readdir cookie is a 1-based index into this snapshot.
-// The snapshot is cached on the Dir at the first call for that fd.
+// The `fd_readdir` cookie is a 1-based index into this snapshot.
+// The snapshot is cached on the Dir at the first call for that descriptor.
 // "." and ".." lead.
 // The rest are sorted by name, so the listing is deterministic across runs.
 private java.util.List<Dirent> readdir_entries(java.nio.file.Path hostPath) {
     java.util.List<Dirent> entries = new java.util.ArrayList<>();
     // "." and ".." carry the real inode of the directory and its parent.
-    // So a guest that cross-checks d_ino against fd_filestat_get(dir).ino agrees.
-    // The parent's ino falls back to 0 outside the sandbox.
+    // So a guest that cross-checks `d_ino` against `fd_filestat_get(dir).ino` agrees.
+    // The parent's `ino` falls back to 0 outside the sandbox.
     entries.add(new Dirent(
         ".".getBytes(java.nio.charset.StandardCharsets.UTF_8), (byte) 3, readdir_ino(hostPath)));
     entries.add(new Dirent(
@@ -85,9 +86,9 @@ private java.util.List<Dirent> readdir_entries(java.nio.file.Path hostPath) {
     return entries;
 }
 
-// The host inode of a path via the "unix:ino" attribute view (the same source pack_filestat reads).
-// It is 0 on a non-unix filesystem or a null/unreadable path.
-// NOFOLLOW so a symlink entry reports the link's own inode.
+// A path's host inode, from the "unix:ino" attribute view (the same source `pack_filestat` reads).
+// It is 0 on a file system without Unix attributes, or for a null/unreadable path.
+// NOFOLLOW so a symbolic link entry reports the link's own inode.
 private static long readdir_ino(java.nio.file.Path p) {
     if (p == null) {
         return 0;

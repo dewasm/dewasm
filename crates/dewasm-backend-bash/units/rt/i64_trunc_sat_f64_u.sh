@@ -1,4 +1,4 @@
-# See rt/i64_trunc_f64_u for the deliberate e == 63 wrap.
+# See `rt/i64_trunc_f64_u` for the intended e == 63 wrap.
 rt_i64_trunc_sat_f64_u() {
   local a=$1 pa s e m
   (( pa = a & 0x7fffffffffffffff, s = (a >> 63) & 1 ))

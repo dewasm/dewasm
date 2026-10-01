@@ -1,6 +1,6 @@
 # requires: mem/check
-# /dev/urandom through the read builtin: no external commands and no SRANDOM.
-# SRANDOM needs bash 5.1+, and the floor is 5.0.
+# `/dev/urandom` through the `read` builtin: no external commands and no `SRANDOM`.
+# `SRANDOM` needs Bash 5.1+, and the floor is 5.0.
 # A NUL byte reads as ''.
 wasi_random_get() {
   local __p=$1 __ptr=$2 __len=$3

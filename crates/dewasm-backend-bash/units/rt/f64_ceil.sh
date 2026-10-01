@@ -1,4 +1,4 @@
-# Ceil of a negative in (-1, 0) must give -0 (Ruby fceil parity).
+# `ceil` of a negative in (-1, 0) must give -0 (as Ruby `fceil` does).
 rt_f64_ceil() {
   local a=$1 pa s e mask
   (( pa = a & 0x7fffffffffffffff, s = (a >> 63) & 1 ))

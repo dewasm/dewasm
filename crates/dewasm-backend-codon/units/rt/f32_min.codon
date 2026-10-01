@@ -1,6 +1,6 @@
 # requires: rt/f32_from_bits, rt/f32_bits
 # A NaN operand yields the wasm canonical NaN.
-# It is always a legal min result and, being quiet, satisfies nan:arithmetic too.
+# It is always a legal `min` result and, being quiet, satisfies `nan:arithmetic` too.
 @staticmethod
 def f32_min(a: float32, b: float32) -> float32:
     if a != a or b != b:

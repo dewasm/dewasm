@@ -1,6 +1,6 @@
 # requires: memory/init
-# /dev/urandom is the core-perl entropy source.
-# The rand() tail is a non-cryptographic fallback for hosts without it.
+# `/dev/urandom` is the source of random bytes that core Perl can read.
+# The `rand()` tail is a fallback for hosts without it, and it is not cryptographic.
 sub wasi_random_get {
     my ($self, $buf_ptr, $len) = @_;
     my $bytes = '';

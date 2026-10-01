@@ -7,8 +7,8 @@ int wasi_fd_filestat_get(int fd, int bufPtr) {
     } else if (e instanceof Handle) {
         p = ((Handle) e).path;
     } else if (isStdio(e)) {
-        // Stdio has no host path to stat.
-        // So report a zeroed filestat tagged as a character device (filetype 2).
+        // Stdio has no host path to `stat`.
+        // So report a zeroed `filestat` tagged as a character device (`filetype` 2).
         // That is the best-effort for an inherited stream.
         byte[] buf = new byte[64];
         buf[16] = 2;

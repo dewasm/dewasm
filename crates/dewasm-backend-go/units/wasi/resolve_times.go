@@ -1,5 +1,5 @@
 // requires: wasi/errno_fs
-// resolve_times turns fstflags + the two timestamps into an (atime, mtime) pair.
+// `resolve_times` turns `fstflags` + the two timestamps into an (`atime`, `mtime`) pair.
 // That is the pair os.Chtimes expects.
 // A zero time.Time there leaves that field unchanged.
 // Setting both the explicit bit and the *_NOW bit for one field is EINVAL.

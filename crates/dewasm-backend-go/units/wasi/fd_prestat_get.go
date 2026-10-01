@@ -4,7 +4,7 @@ func (w *WASI) wasi_fd_prestat_get(fd, outPtr uint32) uint32 {
     if !ok || d.preopenName == nil {
         return wasiBadf
     }
-    // prestat: tag (u8, 0 = dir) + 3 pad + pr_name_len (u32).
+    // `prestat`: tag (u8, 0 = directory) + 3 bytes of padding + `pr_name_len` (u32).
     buf := make([]byte, 8)
     binary.LittleEndian.PutUint32(buf[4:8], uint32(len(d.preopenName)))
     w.memory.init(uint64(outPtr), buf, 0, 8)

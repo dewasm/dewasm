@@ -1,4 +1,4 @@
-# i32 values stay below 2^32, so shifts by up to 32 never hit bash's mod-64 shift-count wraparound.
+# i32 values are below 2^32, so shifts by up to 32 never hit Bash's modulo-64 shift wraparound.
 # So r == 0 needs no special case.
 rt_i32_rotl() {
   local a=$1 r=$(( $2 & 31 ))

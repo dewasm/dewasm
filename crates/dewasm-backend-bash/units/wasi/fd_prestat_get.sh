@@ -1,9 +1,9 @@
 # requires: mem/fill, mem/i32_store
-# prestat for a preopen dir fd: tag u8 = 0 (dir) at +0, 3 pad.
+# `prestat` for a preopen directory `fd`: tag u8 = 0 (directory) at +0, 3 bytes of padding.
 # The guest-name byte length follows as u32 at +4.
-# Only a preopen (dir fd with <p>wname set) answers.
-# Anything else is EBADF (8), which is what stops a libc's preopen scan.
-# Preopens are dense from fd 3, so the first non-preopen fd ends the scan.
+# Only a preopen (directory `fd` with `<p>wname` set) answers.
+# Anything else is EBADF (8), which is what stops a `libc`'s preopen scan.
+# Preopens are dense from `fd` 3, so the first non-preopen `fd` ends the scan.
 wasi_fd_prestat_get() {
   local __p=$1 __fd=$2 __out=$3
   local -n __fds=${__p}wfds

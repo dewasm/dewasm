@@ -1,13 +1,13 @@
 # requires: wasi/read_path, wasi/resolve_path
-# WASI path_rename: one of the four namespace-mutation units licensed to shell out.
+# WASI `path_rename`: one of the four namespace-mutation units licensed to shell out.
 # It runs a single `--`-guarded `mv` on the two resolved physical paths.
-# rename(2) never follows trailing symlinks on either side.
+# rename(2) never follows trailing symbolic links on either side.
 # It moves the link itself and replaces the destination link.
-# So both resolutions use follow_last=0.
-# This mirrors crates/dewasm-backend-ruby/units/wasi/path_rename.rb.
+# So both resolutions use `follow_last=0`.
+# This mirrors `crates/dewasm-backend-ruby/units/wasi/path_rename.rb`.
 #
-# `mv`'s own semantics diverge from rename(2) whenever the destination already exists.
-# So the divergent cases are probed and handled *before* `mv` ever runs.
+# `mv`'s own semantics differ from rename(2) whenever the destination already exists.
+# So the differing cases are probed and handled *before* `mv` ever runs.
 # `mv`'s exit status/diagnostics are not trusted for them:
 # - missing source: ENOENT.
 # - destination exists, source is a directory, destination is not: ENOTDIR.
@@ -16,9 +16,10 @@
 #   This is renaming a file onto a directory.
 # - destination exists and both sides are directories:
 #   rename(2) replaces an *empty* destination directory atomically.
-#   `mv olddir newdir` instead moves olddir *inside* newdir when newdir already exists.
+#   `mv olddir newdir` instead moves `olddir` *inside* `newdir` when `newdir` already exists.
 #   To match rename(2), an existing empty destination directory is `rmdir`'d first.
-#   That stays within the mkdir/rmdir/rm/mv license, and then the `mv` renames onto the freed name.
+#   That stays within the `mkdir`/`rmdir`/`rm`/`mv` license.
+#   The `mv` then renames onto the freed name.
 #   A *non-empty* destination directory is ENOTEMPTY, since it cannot be replaced.
 # - destination exists, both sides are non-directories: falls through to `mv`.
 #   `mv` replaces the destination like rename(2) does.
@@ -26,7 +27,7 @@
 # - a slash-suffixed existing non-directory is ENOTDIR on either side;
 # - a nonexistent slash-suffixed source is ENOENT;
 # - a nonexistent slash-suffixed destination just loses the slash, and the rename proceeds.
-#   wasmtime does the same.
+#   Wasmtime does the same.
 # Anything else `mv` fails on defaults to EIO.
 wasi_path_rename() {
   local __p=$1 __old_dirfd=$2 __old_path_ptr=$3 __old_path_len=$4
@@ -87,7 +88,7 @@ wasi_path_rename() {
         # So the `mv` below would nest the source inside it instead of replacing it.
         # Report the failure.
         # Re-probe emptiness: an entry that appeared since the check above is rename(2)'s ENOTEMPTY.
-        # Anything else (e.g. a permission error on the parent) is the unit's default EIO.
+        # Anything else (for example a permission error on the parent) is the unit's default EIO.
         __save=$(shopt -p dotglob nullglob)
         shopt -s dotglob nullglob
         __entries=("$__new_host"/*)

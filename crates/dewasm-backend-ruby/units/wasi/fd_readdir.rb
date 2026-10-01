@@ -4,7 +4,7 @@ def wasi_fd_readdir(fd, buf_ptr, buf_len, cookie, bufused_ptr)
   return ERRNO_BADF unless entry.is_a?(WasiDir)
   return ERRNO_NOTCAPABLE unless fd_has_right?(fd, RIGHT_FD_READDIR)
   # cookie 0 starts a fresh scan, so re-snapshot the listing.
-  # A directory mutated between two full readdirs must show the new state.
+  # A directory changed between two full `readdir` scans must show the new state.
   # cookie > 0 continues the snapshot taken when this scan began.
   entry.entries = readdir_entries(entry.host_path) if cookie.zero? || entry.entries.nil?
   entries = entry.entries
@@ -13,12 +13,13 @@ def wasi_fd_readdir(fd, buf_ptr, buf_len, cookie, bufused_ptr)
   i = cookie
   while i < entries.size && out.bytesize < buf_len
     name, filetype, ino = entries[i]
-    # dirent: d_next (u64, resume cookie) + d_ino (u64) + d_namlen (u32) + d_type (u8) + 3 pad.
-    # The (unpadded) name follows immediately.
+    # `dirent`: `d_next` (u64, cookie to continue from) + `d_ino` (u64) + `d_namlen` (u32).
+    # Then `d_type` (u8) + 3 padding bytes.
+    # The name, without padding, follows immediately.
     out << [i + 1, ino, name.bytesize, filetype].pack("Q<Q<L<Cx3") << name.b
     i += 1
   end
-  # A dirent may be legally truncated at the tail once buf_len runs out.
+  # A `dirent` may be legally truncated at the tail once `buf_len` runs out.
   out = out.byteslice(0, buf_len) if out.bytesize > buf_len
   @memory.init(buf_ptr, out, 0, out.bytesize)
   @memory.iws(bufused_ptr, out.bytesize)

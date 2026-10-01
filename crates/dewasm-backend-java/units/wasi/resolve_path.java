@@ -1,38 +1,38 @@
 // requires: wasi/errno_fs
 // within reports whether path is base itself or lies under it.
-// It is component-wise containment against the already-realpath'd base.
-// Path.startsWith is safer than a raw string prefix, so /base does not "contain" /baseball.
+// It is component-wise containment against the base, which `realpath` has already resolved.
+// Path.startsWith is safer than a raw string prefix, so `/base` does not "contain" `/baseball`.
 private static boolean within(java.nio.file.Path base, java.nio.file.Path path) {
     return path.equals(base) || path.startsWith(base);
 }
 
-// Resolve a guest-relative path against a directory fd to an absolute host path.
-// The result is confined to that directory fd's own (already-realpath'd) root.
-// Every call re-validates against its own dirfd's root.
-// So nested path_opens can't be used to launder an escape one level cheaper.
-// Returns a Resolved; an errno of WASI_OK means success.
+// Resolve a guest-relative path against a directory descriptor to an absolute host path.
+// The result is confined to that directory descriptor's own root, already resolved by `realpath`.
+// Every call re-validates against the root of its own `dirfd`.
+// So nested `path_open` calls can't be used to launder an escape one level cheaper.
+// Returns a Resolved; an `errno` of WASI_OK means success.
 //
 // The join mirrors Go's filepath.Join: an absolute `rel` is still confined under base.
-// It becomes base + "/" + rel, then normalize.
+// It becomes `base + "/" + rel`, then normalize.
 // So a guest cannot escape by passing a leading slash.
 // normalize() collapses "." / ".." lexically.
-// The realpath + within() check below then rejects anything that still escapes.
+// The `realpath` + `within()` check below then rejects anything that still escapes.
 //
-// followLast=false resolves the parent but leaves the final component untouched.
+// `followLast=false` resolves the parent but leaves the final component untouched.
 // That is the AT_SYMLINK_NOFOLLOW shape.
-// It serves syscalls that operate on a symlink itself.
-// Those are lstat, unlink, rename, rmdir, mkdir, link, symlink, readlink.
-// A trailing "." or ".." is never a symlink, so those fall back to full resolution.
+// It serves system calls that operate on a symbolic link itself.
+// Those are `lstat`, `unlink`, `rename`, `rmdir`, `mkdir`, `link`, `symlink`, `readlink`.
+// A trailing "." or ".." is never a symbolic link, so those fall back to full resolution.
 //
-// Known limitation: this is a check-then-open, not an atomic openat(2)-beneath resolution.
+// Known limitation: this is a check-then-open, not an atomic `openat(2)`-beneath resolution.
 // A TOCTOU race could in principle escape.
-// So could a symlink planted inside the sandbox between the check and the actual filesystem call.
-// Accepted for a single-process research/demo runtime.
+// So could a symbolic link planted inside the sandbox between the check and the file system call.
+// Accepted for a single-process research/example runtime.
 Resolved resolve_path(int dirfd, String rel, boolean followLast) {
     Object e = fds.get(dirfd);
     if (!(e instanceof Dir)) {
-        // A non-directory fd (a regular file, or stdio) used as a dirfd is
-        // ENOTDIR; only an fd absent from the table is EBADF.
+        // A non-directory descriptor (a regular file, or stdio) used as a `dirfd` is
+        // ENOTDIR; only a descriptor missing from the table is EBADF.
         return new Resolved(null, fds.containsKey(dirfd) ? WASI_NOTDIR : WASI_BADF);
     }
     Dir dir = (Dir) e;
@@ -40,8 +40,8 @@ Resolved resolve_path(int dirfd, String rel, boolean followLast) {
         return new Resolved(null, WASI_INVAL);
     }
     // A leading slash is an absolute path, and WASI confines the guest to the preopen tree.
-    // So it is rejected outright rather than reinterpreted relative to the dirfd.
-    // That is the wasmtime behaviour interesting_paths asserts.
+    // So it is rejected outright rather than reinterpreted relative to the `dirfd`.
+    // That is the Wasmtime behaviour `interesting_paths` asserts.
     if (rel.startsWith("/")) {
         return new Resolved(null, WASI_NOTCAPABLE);
     }
@@ -49,18 +49,19 @@ Resolved resolve_path(int dirfd, String rel, boolean followLast) {
     java.nio.file.Path joined = java.nio.file.Paths.get(base.toString() + "/" + rel).normalize();
     // Lexical containment check.
     // Enough ".." components can normalize to a path above base even though every prefix exists.
-    // So reject it here (NOTCAPABLE) before the filesystem is consulted.
+    // So reject it here (NOTCAPABLE) before the file system is consulted.
     // Otherwise a nonexistent escaped target would surface as NOENT.
     // The guest expects the capability error instead.
-    // The realpath + within() checks below still catch symlink escapes.
+    // The `realpath` + `within()` checks below still catch symbolic link escapes.
     if (!within(base, joined)) {
         return new Resolved(null, WASI_NOTCAPABLE);
     }
     // A slash-suffixed name may only resolve to a directory (issue #42).
-    // Paths.get has normalized the slash away, so enforce it here.
-    // The probes follow symlinks as the slash requires; a missing target is each syscall's case.
+    // `Paths.get` has normalized the slash away, so check it here.
+    // The probes follow symbolic links as the slash requires.
+    // A missing target is each system call's case.
     // The slash is also stripped from `last` below.
-    // `last` would otherwise be "" and silently degrade followLast.
+    // `last` would otherwise be "" and silently degrade `followLast`.
     boolean trailing = rel.endsWith("/");
     String core = rel;
     while (core.endsWith("/")) {
@@ -72,7 +73,7 @@ Resolved resolve_path(int dirfd, String rel, boolean followLast) {
     }
     // The final component as the *guest* wrote it.
     // joined.getFileName() would not do: it has Cleaned "." / ".." away.
-    // A trailing "." or ".." is never a symlink, so those fall through to full resolution.
+    // A trailing "." or ".." is never a symbolic link, so those fall through to full resolution.
     String last = core;
     int idx = core.lastIndexOf('/');
     if (idx >= 0) {
@@ -96,7 +97,7 @@ Resolved resolve_path(int dirfd, String rel, boolean followLast) {
         try {
             real = joined.toRealPath();
         } catch (java.io.IOException ex) {
-            // A dangling symlink or a race: fall back to the literal path.
+            // A dangling symbolic link or a race: fall back to the literal path.
             // So the containment check still runs against it.
             real = joined;
         }
@@ -106,7 +107,7 @@ Resolved resolve_path(int dirfd, String rel, boolean followLast) {
         return new Resolved(real.toString(), WASI_OK);
     }
     // The final component is missing: resolve the parent and re-attach it.
-    // So a create (path_open O_CREAT) still gets a sandboxed target path.
+    // So a create (`path_open` O_CREAT) still gets a sandboxed target path.
     java.nio.file.Path parent = joined.getParent();
     java.nio.file.Path realParent;
     try {

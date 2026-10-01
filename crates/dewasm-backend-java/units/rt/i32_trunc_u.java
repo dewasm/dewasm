@@ -1,6 +1,6 @@
 // requires: rt/trap
 // i32.trunc_f32_u / i32.trunc_f64_u: trapping unsigned truncation.
-// The result is the u32 value carried in the low 32 bits of an `int` (e.g. 0xffffffff for
+// The result is the u32 value carried in the low 32 bits of an `int` (for example 0xffffffff for
 // 4294967295).
 // Java's cast saturates, so NaN/out-of-range are checked.
 static int i32_trunc_u(double x) {

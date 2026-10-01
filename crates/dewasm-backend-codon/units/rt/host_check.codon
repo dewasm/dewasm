@@ -1,15 +1,15 @@
 # requires: rt/trap
-# stat_read and readdir_entries decode libc struct layouts.
-# Those layouts are verified on darwin arm64 and linux x86_64, the two CI host shapes.
-# On darwin x86_64 the un-suffixed stat/readdir symbols are the legacy 32-bit-inode variants.
-# linux aarch64 glibc lays struct stat out differently.
-# So any other machine must refuse loudly instead of decoding garbage.
+# `stat_read` and `readdir_entries` decode `libc` struct layouts.
+# Those layouts are verified on Darwin arm64 and Linux x86_64, the two CI host shapes.
+# On Darwin x86_64 the un-suffixed `stat`/`readdir` symbols are the legacy 32-bit-inode variants.
+# Linux aarch64 `glibc` lays `struct stat` out differently.
+# So any other machine must refuse loudly instead of decoding the wrong layout.
 @staticmethod
 def host_check() -> None:
     from C import uname(Ptr[byte]) -> int
     from C import strlen(cobj) -> int
-    # struct utsname: fixed-size fields; machine is the fifth.
-    # Each field is 256 bytes on darwin and 65 on linux glibc.
+    # `struct utsname`: fixed-size fields; machine is the fifth.
+    # Each field is 256 bytes on Darwin and 65 on Linux `glibc`.
     buf = Ptr[byte](1536)
     if uname(buf) != 0:
         return

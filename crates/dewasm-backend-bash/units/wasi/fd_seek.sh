@@ -1,9 +1,9 @@
 # requires: mem/i64_store
-# A file fd (kind 2) seeks within its whole-file byte buffer.
-# whence 0/1/2 is SET/CUR/END against 0 / current offset / buffer length.
+# A file `fd` (kind 2) seeks within its whole-file byte buffer.
+# `whence` 0/1/2 is SET/CUR/END against 0 / current offset / buffer length.
 # A negative result is EINVAL (28); otherwise the new offset is stored back.
-# stdio pipes cannot seek (ESPIPE); a directory fd is EBADF.
-# The i64 offset arrives as bash's signed-64 pattern.
+# stdio pipes cannot seek (ESPIPE); a directory `fd` is EBADF.
+# The i64 offset arrives as Bash's signed-64 pattern.
 wasi_fd_seek() {
   local __p=$1 __fd=$2 __offset=$3 __whence=$4 __out=$5
   local -n __fds=${__p}wfds

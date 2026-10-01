@@ -1,5 +1,5 @@
 # requires: rt/path_stat
-# Whether the path itself exists (a dangling symlink counts).
+# Whether the path itself exists (a dangling symbolic link counts).
 @staticmethod
 def lexists(path: str) -> bool:
     return Rt.path_stat(path, False) is not None

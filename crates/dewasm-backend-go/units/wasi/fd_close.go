@@ -7,6 +7,6 @@ func (w *WASI) wasi_fd_close(fd uint32) uint32 {
     if f, ok := entry.(*os.File); ok && !w.isStdio(f) {
         f.Close()
     }
-    // Fds are never reused after close; a *wasiDir has no OS handle.
+    // `fd`s are never reused after close; a `*wasiDir` has no OS handle.
     return wasiOk
 }

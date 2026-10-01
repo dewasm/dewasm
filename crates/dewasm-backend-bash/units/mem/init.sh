@@ -1,8 +1,8 @@
 # requires: mem/check, rt/trap
-# mem_init <prefix> <data-array-name> <dst> <src> <len>
-# A dropped data segment is an empty array, so its length check traps like the spec asks.
+# `mem_init <prefix> <data-array-name> <dst> <src> <len>`
+# A dropped data segment is an empty array, so its length check traps as the specification asks.
 # The source <data-array-name> is an indexed byte array, where an arithmetic subscript is ok.
-# Only the assoc destination needs a pre-expanded key.
+# Only the associative array destination needs a pre-expanded key.
 mem_init() {
   local -n __m=${1}mem
   local -n __d=$2

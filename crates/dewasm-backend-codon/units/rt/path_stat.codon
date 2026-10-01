@@ -1,5 +1,5 @@
 # requires: rt/stat, rt/stat_read
-# stat/lstat into a decoded Stat; None on failure (the caller maps errno).
+# `stat`/`lstat` into a decoded Stat; None on failure (the caller maps `errno`).
 @staticmethod
 def path_stat(path: str, follow: bool) -> Optional[Rt.Stat]:
     from C import stat(cobj, Ptr[byte]) -> int

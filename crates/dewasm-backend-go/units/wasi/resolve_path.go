@@ -1,6 +1,6 @@
 // requires: wasi/errno_fs
 // within reports whether path is base itself or lies under it.
-// It checks prefix containment against the already-realpath'd base.
+// It checks prefix containment against the base, which `realpath` has already resolved.
 func (w *WASI) within(base, path string) bool {
     if path == base {
         return true
@@ -12,21 +12,21 @@ func (w *WASI) within(base, path string) bool {
     return strings.HasPrefix(path, prefix)
 }
 
-// Resolve a guest-relative path against a directory fd to an absolute host path.
-// The result is confined to that directory fd's own (already-realpath'd) root.
-// Every call re-validates against its own dirfd's root.
-// So nested path_opens can't be used to launder an escape one level cheaper.
-// Returns (hostPath, errno); an errno of wasiOk means success.
+// Resolve a guest-relative path against a directory `fd` to an absolute host path.
+// The result is confined to that directory `fd`'s own root (already resolved by `realpath`).
+// Every call re-validates against its own `dirfd`'s root.
+// So nested `path_open` calls can't be used to launder an escape one level cheaper.
+// Returns (`hostPath`, `errno`); an `errno` of `wasiOk` means success.
 //
-// followLast=false resolves the parent but leaves the final component untouched.
-// That is the AT_SYMLINK_NOFOLLOW shape, for syscalls that operate on a symlink itself.
-// Those are lstat, unlink, rename, rmdir, mkdir, link, symlink, and readlink.
-// A trailing "." or ".." is never a symlink, so those fall back to full resolution.
+// `followLast=false` resolves the parent but leaves the final component untouched.
+// That is the AT_SYMLINK_NOFOLLOW shape, for system calls that operate on a symbolic link itself.
+// Those are `lstat`, `unlink`, `rename`, `rmdir`, `mkdir`, `link`, `symlink`, and `readlink`.
+// A trailing "." or ".." is never a symbolic link, so those fall back to full resolution.
 //
-// Known limitation: this is a check-then-open, not an atomic openat(2)-beneath resolution.
+// Known limitation: this is a check-then-open, not an atomic `openat(2)`-beneath resolution.
 // A TOCTOU race could in principle escape.
-// So could a symlink planted inside the sandbox between the check and the filesystem call.
-// Accepted for a single-process research/demo runtime.
+// So could a symbolic link planted inside the sandbox between the check and the file system call.
+// Accepted for a single-process research/example runtime.
 func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, uint32) {
     raw, present := w.fds[dirfd]
     if !present {
@@ -34,8 +34,8 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
     }
     entry, ok := raw.(*wasiDir)
     if !ok {
-        // A base fd that exists but is a file, not a directory: NOTDIR.
-        // So a guest opening a path underneath a plain file gets the POSIX errno rather than BADF.
+        // A base `fd` that exists but is a file, not a directory: NOTDIR.
+        // So a guest opening a path under a plain file gets the POSIX `errno` rather than BADF.
         return "", wasiNotdir
     }
     if strings.ContainsRune(rel, 0) {
@@ -48,16 +48,16 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
     if strings.HasPrefix(rel, "/") {
         return "", wasiNotcapable
     }
-    // Strip a trailing slash before the final-component bookkeeping below.
-    // An empty last component silently degrades followLast.
-    // Then re-check via trailingDirCheck (issue #42).
+    // Strip a trailing slash before the handling of the final component below.
+    // An empty last component silently degrades `followLast`.
+    // Then re-check via `trailingDirCheck` (issue #42).
     trailing := strings.HasSuffix(rel, "/")
     if trailing {
         rel = strings.TrimRight(rel, "/")
     }
     base := entry.hostPath
     joined := filepath.Join(base, rel)
-    // Lexical containment on the cleaned path, before touching the filesystem.
+    // Lexical containment on the cleaned path, before touching the file system.
     // It catches a "../.." escape even when the (nonexistent) target would reach a NOENT branch.
     // The suite wants NOTCAPABLE there.
     if !w.within(base, filepath.Clean(joined)) {
@@ -66,7 +66,8 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
     // The final component as the *guest* wrote it, not filepath.Base(joined).
     // filepath.Base Cleans "." / ".." away and would report the parent's own name.
     // Go's filepath.Join Cleans, unlike Python's os.path.join.
-    // A trailing "." or ".." is never a symlink, so those must fall through to full resolution.
+    // A trailing "." or ".." is never a symbolic link.
+    // So those must fall through to full resolution.
     last := rel
     if idx := strings.LastIndexByte(rel, '/'); idx >= 0 {
         last = rel[idx+1:]
@@ -89,7 +90,7 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
     if _, err := os.Lstat(joined); err == nil {
         real, err := filepath.EvalSymlinks(joined)
         if err != nil {
-            // A dangling symlink or a race: fall back to the literal path.
+            // A dangling symbolic link or a race: fall back to the literal path.
             // The containment check then still runs against it.
             real = joined
         }
@@ -102,7 +103,7 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
         return real, wasiOk
     }
     // The final component is missing: resolve the parent and re-attach it.
-    // So a create (path_open O_CREAT) still gets a sandboxed target path.
+    // So a create (`path_open` O_CREAT) still gets a sandboxed target path.
     parent := filepath.Dir(joined)
     realParent, err := filepath.EvalSymlinks(parent)
     if err != nil {
@@ -114,9 +115,10 @@ func (w *WASI) resolve_path(dirfd uint32, rel string, followLast bool) (string, 
     return filepath.Join(realParent, filepath.Base(joined)), wasiOk
 }
 
-// trailingDirCheck: a slash-suffixed name may only resolve to a directory.
+// `trailingDirCheck`: a slash-suffixed name may only resolve to a directory.
 // An existing non-directory is ENOTDIR (issue #42).
-// os.Stat follows symlinks, as the slash requires; a missing target is each caller's case.
+// `os.Stat` follows symbolic links, as the slash requires.
+// A missing target is each caller's case.
 func (w *WASI) trailingDirCheck(trailing bool, host string) uint32 {
     if !trailing {
         return wasiOk

@@ -1,5 +1,5 @@
 # Shared by i32.popcnt and i64.popcnt.
-# i32 values are non-negative, and i64 bit patterns peel their sign bit first.
+# i32 values are non-negative, and i64 bit patterns count and clear their sign bit first.
 # So the loop always ends.
 rt_popcnt() {
   local x=$1 n=0

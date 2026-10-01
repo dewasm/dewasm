@@ -7,7 +7,8 @@ def wasi_fd_allocate(self, fd: UInt[32], offset: UInt[64], length: UInt[64]) -> 
     st = Rt.fstat(f.host_fd)
     if st is None:
         return self.fs_errno()
-    # fallocate never shrinks: grow the file to offset+len when that exceeds the current size.
+    # `fallocate` never makes a file smaller.
+    # Grow the file to `offset+len` when that exceeds the current size.
     # Otherwise leave it untouched.
     # Either operand at or above 2^63, or a sum that wraps, cannot be a valid file size.
     # So refuse it instead of comparing a wrapped negative.

@@ -7,9 +7,9 @@ func (w *WASI) wasi_fd_readdir(fd, bufPtr, bufLen uint32, cookie uint64, bufused
     if e := w.checkRight(fd, rightFdReaddir); e != wasiOk {
         return e
     }
-    // A cookie of 0 starts a fresh enumeration, so re-snapshot the directory.
+    // A cookie of 0 starts a fresh listing, so re-snapshot the directory.
     // A file created since the previous listing must appear.
-    // Continuation cookies read the cached snapshot for a stable resume.
+    // Continuation cookies read the cached snapshot, so a continued listing stays stable.
     if !entry.loaded || cookie == 0 {
         entry.entries = w.readdir_entries(entry.hostPath)
         entry.loaded = true
@@ -18,8 +18,8 @@ func (w *WASI) wasi_fd_readdir(fd, bufPtr, bufLen uint32, cookie uint64, bufused
     i := cookie
     for i < uint64(len(entry.entries)) && uint32(len(out)) < bufLen {
         e := entry.entries[i]
-        // dirent: d_next (u64, resume cookie) + d_ino (u64) + d_namlen (u32) + d_type (u8) + 3 pad.
-        // The (unpadded) name follows.
+        // `dirent`: `d_next` (u64, next cookie) + `d_ino` (u64) + `d_namlen` (u32) + `d_type` (u8).
+        // Then come 3 bytes of padding and the name, with no padding of its own.
         hdr := make([]byte, 24)
         binary.LittleEndian.PutUint64(hdr[0:8], i+1)
         binary.LittleEndian.PutUint64(hdr[8:16], e.ino)
@@ -29,7 +29,7 @@ func (w *WASI) wasi_fd_readdir(fd, bufPtr, bufLen uint32, cookie uint64, bufused
         out = append(out, e.name...)
         i++
     }
-    // A dirent may be legally truncated at the tail once buf_len runs out.
+    // A `dirent` may be legally truncated at the tail once `buf_len` runs out.
     if uint32(len(out)) > bufLen {
         out = out[:bufLen]
     }
@@ -38,11 +38,11 @@ func (w *WASI) wasi_fd_readdir(fd, bufPtr, bufLen uint32, cookie uint64, bufused
     return wasiOk
 }
 
-// The readdir cookie is a 1-based index into this snapshot.
-// The snapshot is cached on the *wasiDir at the first call for that fd.
+// The `readdir` cookie is a 1-based index into this snapshot.
+// The snapshot is cached on the `*wasiDir` at the first call for that `fd`.
 // os.ReadDir returns entries already sorted by name, matching the Python backend's explicit sort.
-// Real inodes are read via Lstat + syscall.Stat_t.Ino, so d_ino matches fd_filestat_get.
-// That is the portable field the filestat units already rely on.
+// Real inodes are read via `Lstat` + `syscall.Stat_t.Ino`, so `d_ino` matches `fd_filestat_get`.
+// That is the portable field the `filestat` units already rely on.
 func (w *WASI) readdir_entries(hostPath string) []wasiDirent {
     entries := []wasiDirent{
         {name: []byte("."), filetype: 3, ino: w.inode(hostPath)},
@@ -66,8 +66,8 @@ func (w *WASI) readdir_entries(hostPath string) []wasiDirent {
     return entries
 }
 
-// inode returns the host inode of path, or 0 when it cannot be determined.
-// It uses Lstat, so a symlink reports its own inode.
+// `inode` returns the host inode of `path`, or 0 when it cannot be determined.
+// It uses `Lstat`, so a symbolic link reports its own inode.
 func (w *WASI) inode(path string) uint64 {
     fi, err := os.Lstat(path)
     if err != nil {

@@ -1,5 +1,5 @@
-# Map a stat mode word to a WASI filetype tag (S_IFMT bits, avoiding a
-# POSIX-constant dependency).
+# Map a `stat` mode word to a WASI `filetype` tag through the S_IFMT bits.
+# The bits avoid a dependency on POSIX constants.
 sub wasi_filetype {
     my ($self, $mode) = @_;
     my $fmt = $mode & 0170000;

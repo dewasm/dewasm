@@ -1,4 +1,4 @@
-# See rt/f64_ceil; 23-bit fraction, u32 patterns.
+# See `rt/f64_ceil`; 23-bit fraction, u32 patterns.
 rt_f32_ceil() {
   local a=$1 pa s e mask
   (( pa = a & 0x7fffffff, s = (a >> 31) & 1 ))

@@ -1,12 +1,12 @@
 # requires: memory/fill, memory/i32_load, memory/i32_load8_u, memory/i32_load16_u, memory/i64_load, memory/i32_store, memory/i32_store8, memory/i32_store16, memory/i64_store, wasi/fd_entry, rt/clock_ns, rt/fstat, rt/raw_store32, rt/raw_store16, rt/raw_load16, rt/raw_store64
-# poll_oneoff waits until at least one subscription is ready.
+# `poll_oneoff` waits until at least one subscription is ready.
 # Then it writes one event per ready subscription.
 # The WASI p1 layout is 48-byte subscriptions in and 32-byte events out.
-# Only fd_read on stdin blocks (via poll(2)).
-# Regular files, stdout/stderr, and every fd_write are treated as immediately ready.
-# Unknown fds report EBADF.
+# Only `fd_read` on `stdin` blocks (via poll(2)).
+# Regular files, `stdout`/`stderr`, and every `fd_write` are treated as immediately ready.
+# An unknown `fd` reports EBADF.
 # Clock subscriptions set the wait deadline.
-# If it elapses with no fd ready, the due clock subs fire.
+# If it elapses with no `fd` ready, the due clock subs fire.
 def wasi_poll_oneoff(self, in_ptr: UInt[32], out_ptr: UInt[32], nsubs: UInt[32], nevents_ptr: UInt[32]) -> UInt[32]:
     from C import poll(Ptr[byte], int, int) -> int
     from C import nanosleep(Ptr[byte], Ptr[byte]) -> int
@@ -25,7 +25,7 @@ def wasi_poll_oneoff(self, in_ptr: UInt[32], out_ptr: UInt[32], nsubs: UInt[32],
             clock_id = int(m.i32_load(base + 16))
             # The timeout field is unsigned.
             # A deadline at or above 2^63 ns clamps to 2^62 ns.
-            # This includes the common infinite-wait sentinel.
+            # This includes the common value for an infinite wait.
             # So the signed arithmetic below cannot wrap.
             timeout = int(Int[64](m.i64_load(base + 24)))
             if timeout < 0:
@@ -65,7 +65,7 @@ def wasi_poll_oneoff(self, in_ptr: UInt[32], out_ptr: UInt[32], nsubs: UInt[32],
                     if c[1] < best:
                         best = c[1]
                 timeout_ms = best // 1000000
-                # poll(2) takes a C int of milliseconds; cap what cannot fit.
+                # poll(2) takes a C `int` of milliseconds; cap what cannot fit.
                 if timeout_ms > 2147483647:
                     timeout_ms = 2147483647
             pfd = Ptr[byte](8)

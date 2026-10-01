@@ -3,7 +3,7 @@
 // It resolves a tail call rather than an ordinary one.
 // A tail entry is bound to the instance that built it and reads *that* instance's parked slots.
 // So it is only returned to its owner.
-// Every other caller gets the ordinary func value and completes the call itself.
+// Every other caller gets the ordinary `func` value and completes the call itself.
 // That costs one frame per instance switch.
 func (t *Table) tailRef(i uint32, typeKey string, owner any) (any, any) {
     if i >= uint32(len(t.slots)) {

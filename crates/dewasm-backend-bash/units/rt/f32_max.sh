@@ -1,4 +1,4 @@
-# wasm max on u32 patterns; see rt/f64_max.
+# wasm `max` on u32 patterns; see `rt/f64_max`.
 rt_f32_max() {
   local a=$1 b=$2 ka kb
   if (( (a & 0x7fffffff) > 0x7f800000 || (b & 0x7fffffff) > 0x7f800000 )); then

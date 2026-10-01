@@ -1,10 +1,10 @@
 # requires: mem/check, mem/i32_load, mem/i32_store
-# WASI fd_pread: byte-wise binary-safe read from a file fd's whole-file buffer.
+# WASI `fd_pread`: byte-wise binary-safe read from a file `fd`'s whole-file buffer.
 # The read is at an explicit offset.
-# It leaves <p>wtell untouched.
-# It mirrors fd_read's kind-2 path, minus the offset tracking.
-# stdio (kind 1) cannot seek (ESPIPE, matching fd_seek/Ruby's ERRNO_SPIPE).
-# A directory fd is EBADF.
+# It leaves `<p>wtell` untouched.
+# It mirrors the kind-2 path of `fd_read`, minus the offset tracking.
+# stdio (kind 1) cannot seek (ESPIPE, matching `fd_seek`/Ruby's ERRNO_SPIPE).
+# A directory `fd` is EBADF.
 # This matches Ruby, which checks `io.is_a?(WasiDir)` before the stdio/ESPIPE check.
 wasi_fd_pread() {
   local __p=$1 __fd=$2 __iovs=$3 __iovs_len=$4 __offset=$5 __nread_ptr=$6

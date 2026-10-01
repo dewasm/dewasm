@@ -5,7 +5,7 @@ int wasi_fd_prestat_get(int fd, int outPtr) {
         return WASI_BADF;
     }
     byte[] name = ((Dir) e).preopenName;
-    // prestat: tag (u8, 0 = dir) + 3 pad + pr_name_len (u32).
+    // `prestat`: tag (u8, 0 = directory) + 3 padding + `pr_name_len` (u32).
     byte[] buf = new byte[8];
     java.nio.ByteBuffer.wrap(buf).order(java.nio.ByteOrder.LITTLE_ENDIAN).putInt(4, name.length);
     memory.init(Integer.toUnsignedLong(outPtr), buf, 0, 8);

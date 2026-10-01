@@ -1,4 +1,4 @@
-# The host errno, read through the platform's thread-local accessor.
+# The host `errno`, read through the platform's thread-local accessor.
 @staticmethod
 def cerr() -> int:
     if __apple__:

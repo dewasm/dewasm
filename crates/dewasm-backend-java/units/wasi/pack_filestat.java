@@ -1,11 +1,12 @@
 // requires: wasi/wasi_filetype
-// Pack a host file's attributes into a WASI filestat (64 bytes).
-// The fields are dev, ino, filetype (+7 pad), nlink, size, atim/mtim/ctim.
+// Pack a host file's attributes into a WASI `filestat` (64 bytes).
+// The fields are `dev`, `ino`, `filetype` (+7 padding), `nlink`, `size`, `atim`/`mtim`/`ctim`.
 // All are u64, and times are in nanoseconds.
-// dev/ino/nlink come from the "unix:*" attribute view when the platform supports it (macOS/Linux).
-// The times all use the portable lastModifiedTime (Java exposes no faithful atim/ctim).
-// That suffices for the guests we target.
-// `follow` selects stat vs lstat.
+// `dev`/`ino`/`nlink` come from the "unix:*" attribute view.
+// That view needs platform support (macOS/Linux).
+// The times all use the portable `lastModifiedTime` (Java exposes no accurate `atim`/`ctim`).
+// That is enough for the guests we target.
+// `follow` selects `stat` or `lstat`.
 byte[] pack_filestat(java.nio.file.Path p, boolean follow) throws java.io.IOException {
     java.nio.file.LinkOption[] opts = follow
         ? new java.nio.file.LinkOption[0]
@@ -21,13 +22,14 @@ byte[] pack_filestat(java.nio.file.Path p, boolean follow) throws java.io.IOExce
         ino = ((Number) u.get("ino")).longValue();
         nlink = ((Number) u.get("nlink")).longValue();
     } catch (Exception e) {
-        // Non-unix filesystem: leave dev/ino at 0 and nlink at 1.
+        // A file system without Unix attributes: leave `dev`/`ino` at 0 and `nlink` at 1.
     }
-    // Report the three timestamps separately (atim/mtim/ctim) rather than collapsing them to mtime.
-    // A guest sets one and checks the others stay put (fd_filestat_set_times).
+    // Report the three timestamps (`atim`/`mtim`/`ctim`) separately.
+    // Do not collapse them to `mtime`.
+    // A guest sets one and checks the others stay put (`fd_filestat_set_times`).
     // That guest then sees the distinction.
-    // Java exposes no faithful ctim.
-    // So the change-time slot reuses creationTime as a best-effort stand-in.
+    // Java exposes no accurate `ctim`.
+    // So the change-time slot reuses `creationTime` as a best-effort stand-in.
     long atime = a.lastAccessTime().to(java.util.concurrent.TimeUnit.NANOSECONDS);
     long mtime = a.lastModifiedTime().to(java.util.concurrent.TimeUnit.NANOSECONDS);
     long ctime = a.creationTime().to(java.util.concurrent.TimeUnit.NANOSECONDS);

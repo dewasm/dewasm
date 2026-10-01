@@ -1,12 +1,12 @@
 # requires: wasi/read_path, wasi/resolve_path
-# WASI path_link: create a hard link <new_path> under <new_fd>.
-# The link points to the existing <old_path> under <old_fd>.
-# It runs a licensed `--`-guarded `ln -P`, beyond the four mkdir/rmdir/rm/mv commands.
-# `-P` hard-links a symlink source itself rather than its pointee.
-# So a link to a dangling or looping symlink is created without ever following it.
+# WASI `path_link`: create a hard link `<new_path>` under `<new_fd>`.
+# The link points to the existing `<old_path>` under `<old_fd>`.
+# It runs a licensed `--`-guarded `ln -P`, beyond the four `mkdir`/`rmdir`/`rm`/`mv` commands.
+# `-P` hard-links a symbolic link source itself rather than its target.
+# So a link to a dangling or looping symbolic link is created without ever following it.
 # Both endpoints are resolved with sandbox containment, NOFOLLOW.
-# Hard-linking never dereferences a trailing symlink.
-# Symlink-following (LOOKUPFLAGS_SYMLINK_FOLLOW on old_flags) is rejected with EINVAL (28).
+# Hard-linking never dereferences a trailing symbolic link.
+# Following a symbolic link (`LOOKUPFLAGS_SYMLINK_FOLLOW` on `old_flags`) is EINVAL (28).
 # A missing source is ENOENT (44); a directory source is EPERM (63).
 # An existing destination is EEXIST (20); a destination with a trailing slash is ENOENT (44).
 wasi_path_link() {

@@ -1,11 +1,11 @@
 // Only APPEND is behaviorally honored.
-// When Handle.append is set, fd_write seeks to end before each write.
-// So toggling APPEND here flips that behavior.
-// The remaining flags (DSYNC/RSYNC/SYNC, NONBLOCK) are stored so fd_fdstat_get reflects them.
+// When `Handle.append` is set, `fd_write` seeks to end before each write.
+// So turning APPEND on or off here flips that behavior.
+// The remaining flags (DSYNC/RSYNC/SYNC, NONBLOCK) are stored so `fd_fdstat_get` reflects them.
 // They carry no distinct behavior in this runtime.
-// Any open fd is accepted, stdio included.
-// toywasm's WASI setup sets NONBLOCK on stdin and treats failure as fatal.
-// So wasmtime's regular-files-only EBADF answer is not copied.
+// Any open descriptor is accepted, stdio included.
+// The WASI set-up of `toywasm` sets NONBLOCK on `stdin` and treats failure as fatal.
+// So the regular-files-only EBADF answer of Wasmtime is not copied.
 int wasi_fd_fdstat_set_flags(int fd, int flags) {
     Object e = fds.get(fd);
     if (!fds.containsKey(fd)) {

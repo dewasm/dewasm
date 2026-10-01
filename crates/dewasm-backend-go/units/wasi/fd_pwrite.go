@@ -15,9 +15,9 @@ func (w *WASI) wasi_fd_pwrite(fd, iovsPtr, iovsLen uint32, offset uint64, nwritt
         ptr := w.memory.i32_load(uint64(iovsPtr) + uint64(i)*8)
         length := w.memory.i32_load(uint64(iovsPtr)+uint64(i)*8 + 4)
         chunk := w.memory.read_string(uint64(ptr), uint64(length))
-        // syscall.Pwrite rather than f.WriteAt: WriteAt rejects a fd opened O_APPEND.
+        // `syscall.Pwrite` rather than `f.WriteAt`: `WriteAt` rejects an `fd` opened O_APPEND.
         // Its error is "invalid use of WriteAt", and a positional write must ignore append anyway.
-        // Portable on darwin+linux.
+        // Portable on Darwin and Linux.
         n, err := syscall.Pwrite(int(f.Fd()), chunk, int64(offset+uint64(written)))
         written += uint32(n)
         if err != nil {

@@ -1,5 +1,5 @@
 # The linear memory: a raw byte buffer.
-# Codon's GC does not zero atomic allocations, so every fresh region is memset here.
+# Codon's GC does not zero atomic allocations, so every fresh region is set with `memset` here.
 # `n` is the byte size; `max_pages` caps grow (65536 when the module declares none).
 data: Ptr[byte]
 n: int

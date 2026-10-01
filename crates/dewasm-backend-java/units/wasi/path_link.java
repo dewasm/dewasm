@@ -1,16 +1,16 @@
 // requires: memory/read_string, wasi/resolve_path, wasi/errno_fs
 // Create a hard link.
-// Both endpoints are confined to their dir fds and resolved NOFOLLOW.
+// Both endpoints are confined to their directory descriptors and resolved NOFOLLOW.
 // So the link is made to the source name itself.
-// A symlink source is hard-linked as the symlink, not its target.
-// Following the source symlink (LOOKUPFLAGS_SYMLINK_FOLLOW) is rejected.
+// A symbolic link source is hard-linked as the symbolic link, not its target.
+// Following the source symbolic link (LOOKUPFLAGS_SYMLINK_FOLLOW) is rejected.
 // Hard-linking a directory is EPERM; a trailing slash on the destination is ENOENT.
 //
-// macOS link(2) follows a symlink source.
-// Linux does not, and neither does the AT_SYMLINK_NOFOLLOW linkat the suite expects.
+// macOS `link(2)` follows a symbolic link source.
+// Linux does not, and neither does the AT_SYMLINK_NOFOLLOW `linkat` the suite expects.
 // Files.createLink cannot express NOFOLLOW.
-// So createLink on a symlink source follows the (dangling) link and throws.
-// Emulate a NOFOLLOW hard-link-to-a-symlink by recreating the symlink at the destination.
+// So `createLink` on a symbolic link source follows the (dangling) link and throws.
+// Emulate a NOFOLLOW hard link of a symbolic link by recreating it at the destination.
 // This mirrors the Go backend's fallback.
 int wasi_path_link(int oldFd, int oldFlags, int oldPtr, int oldLen, int newFd, int newPtr,
                    int newLen) {

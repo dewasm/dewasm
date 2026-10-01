@@ -1,5 +1,5 @@
-# r == 0 must be special-cased, since bash takes shift counts mod 64.
-# So the complementary shift by 64 would be a shift by 0, not a clear-out.
+# r == 0 must be special-cased, since Bash takes shift counts modulo 64.
+# So the second shift, by 64, would be a shift by 0, not a clear-out.
 rt_i64_rotl() {
   local a=$1 r=$(( $2 & 63 ))
   if (( r == 0 )); then

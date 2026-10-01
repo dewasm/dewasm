@@ -1,5 +1,5 @@
 # requires: rt/f32, rt/f32_bits, rt/f32_from_bits
-# Demotion of a NaN yields the canonical NaN payload with the sign kept.
+# `f32.demote_f64` of a NaN yields the canonical NaN payload with the sign kept.
 sub f32_demote {
     my $x = $_[0];
     if ($x != $x) {

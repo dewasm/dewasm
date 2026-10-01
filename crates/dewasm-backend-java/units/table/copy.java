@@ -1,6 +1,6 @@
 // requires: rt/trap
 // Both ranges are bounds-checked before any write.
-// `other` may be this table: System.arraycopy handles overlap like memmove.
+// `other` may be this table: System.arraycopy handles overlap like `memmove`.
 void copy(int dst, Table other, int src, int length) {
     long d = Integer.toUnsignedLong(dst);
     long s = Integer.toUnsignedLong(src);

@@ -3,26 +3,26 @@ def within(self, base, path):
     prefix = base if base.endswith(os.sep) else base + os.sep
     return path == base or path.startswith(prefix)
 
-# Resolves a guest-relative path against a directory fd to an absolute host path.
-# The result is confined to that directory fd's own (already-realpath'd) root.
-# Every call re-validates against its own dirfd's root.
-# So nested path_opens can't be used to launder an escape one level cheaper.
+# Resolves a guest-relative path against a directory descriptor to an absolute host path.
+# The result is confined to that directory descriptor's own root, already resolved by `realpath`.
+# Every call re-validates against its own `dirfd`'s root.
+# So nested `path_open` calls can't be used to launder an escape one level cheaper.
 #
-# A non-directory base fd is NOTDIR (a file used as a dirfd); an absent one is BADF.
+# A non-directory base descriptor is NOTDIR (a file used as a `dirfd`); a missing one is BADF.
 # A leading "/" is NOTCAPABLE before any join (an absolute guest path escapes the preopen).
 # A trailing slash is preserved on the returned host path.
-# So the underlying os.* call enforces the POSIX "must be a directory" rule.
+# So the underlying `os.*` call checks the POSIX "must be a directory" rule.
 #
 # `follow_last=False` resolves the parent but leaves the final component untouched.
 # That is the AT_SYMLINK_NOFOLLOW shape.
-# It serves syscalls that operate on a symlink itself.
-# Those are lstat, unlink, rename, rmdir, mkdir, link, symlink, readlink.
-# A trailing "." or ".." is never a symlink, so those fall back to full resolution.
+# It serves system calls that operate on a symbolic link itself.
+# Those are `lstat`, `unlink`, `rename`, `rmdir`, `mkdir`, `link`, `symlink`, `readlink`.
+# A trailing "." or ".." is never a symbolic link, so those fall back to full resolution.
 #
-# Known limitation: this is a check-then-open, not an atomic openat(2)-beneath resolution.
+# Known limitation: this is a check-then-open, not an atomic `openat(2)`-beneath resolution.
 # A TOCTOU race could in principle escape.
-# So could a symlink planted inside the sandbox between the check and the actual filesystem call.
-# Accepted for a single-process research/demo runtime, not a multi-tenant sandbox host.
+# So could a symbolic link planted inside the sandbox between the check and the file system call.
+# Accepted for a single-process research and example runtime, not a multi-tenant sandbox host.
 def resolve_path(self, dirfd, rel, follow_last=True):
     if dirfd not in self.fds:
         return (None, self.ERRNO_BADF)
@@ -51,10 +51,10 @@ def resolve_path(self, dirfd, rel, follow_last=True):
     # A final "." resolves to its parent, but os.path.join left "<parent>/.".
     # os.path.lexists reports that missing once the parent is a non-directory preopen.
     # os.open then rejects it with ENOTDIR.
-    # This happens because wasi-libc rewrites a path that *is* a preopen to ".".
-    # An example is the zeroperl reactor's "/dev/null".
+    # This happens because `wasi-libc` rewrites a path that *is* a preopen to ".".
+    # An example is the `zeroperl` reactor's "/dev/null".
     # Ruby's File.realpath collapses it and Go's filepath.Join cleans it.
-    # Do the same, after `last` has had its say above, so the symlink rules are unchanged.
+    # Do the same, after `last` has had its say above, so the symbolic link rules are unchanged.
     if last == ".":
         joined = os.path.dirname(joined)
     if os.path.lexists(joined):
@@ -63,7 +63,7 @@ def resolve_path(self, dirfd, rel, follow_last=True):
             return (None, self.ERRNO_NOTCAPABLE)
         return (real + os.sep if trailing else real, None)
     # The final component is missing: resolve the parent and re-attach it.
-    # So a create (path_open O_CREAT) still gets a sandboxed target path.
+    # So a create (`path_open` with `O_CREAT`) still gets a sandboxed target path.
     real_parent = os.path.realpath(os.path.dirname(joined))
     if not self.within(base, real_parent):
         return (None, self.ERRNO_NOTCAPABLE)

@@ -1,4 +1,4 @@
-# wasm max: NaN operand -> canonical NaN; max(-0,+0) = +0 via a&b.
+# wasm `max`: NaN operand -> canonical NaN; `max(-0,+0) = +0` via `a&b`.
 rt_f64_max() {
   local a=$1 b=$2 ka kb
   if (( (a & 0x7fffffffffffffff) > 0x7ff0000000000000 || (b & 0x7fffffffffffffff) > 0x7ff0000000000000 )); then

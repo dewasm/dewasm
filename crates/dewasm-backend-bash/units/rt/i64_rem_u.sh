@@ -1,5 +1,5 @@
 # requires: rt/trap
-# See rt/i64_div_u for the unsigned-over-signed-patterns strategy.
+# See `rt/i64_div_u` for the unsigned-over-signed-patterns strategy.
 rt_i64_rem_u() {
   local a=$1 b=$2 q r
   if (( b == 0 )); then rt_trap 'integer divide by zero'; return $?; fi

@@ -1,4 +1,4 @@
-// fst_flags selects which of atim and mtim to set, and whether to set it to "now".
+// `fst_flags` selects which of `atim` and `mtim` to set, and whether to set it to "now".
 // Setting a timestamp both explicitly and to "now" is EINVAL.
 // A null FileTime leaves that timestamp untouched.
 // So a guest can change one without disturbing the other.

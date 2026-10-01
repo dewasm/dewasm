@@ -1,5 +1,5 @@
 # requires: rt/trap
-# tab_copy <dst-base> <src-base> <d> <s> <n>
+# `tab_copy <dst-base> <src-base> <d> <s> <n>`
 # Copies function command names, their structural type keys, and their tail commands.
 # The copy runs between tables or within one table.
 # The loop is direction-aware, so overlapping ranges in a single table copy correctly.

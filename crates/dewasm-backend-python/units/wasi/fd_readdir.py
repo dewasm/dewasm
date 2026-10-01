@@ -6,9 +6,9 @@ def wasi_fd_readdir(self, fd, buf_ptr, buf_len, cookie, bufused_ptr):
     if not (self.fd_meta[fd][0] & self.RIGHTS_FD_READDIR):
         return self.ERRNO_NOTCAPABLE
     try:
-        # cookie 0 starts a fresh enumeration, so re-scan the directory then.
+        # cookie 0 starts a fresh listing, so re-scan the directory then.
         # A non-zero cookie resumes the snapshot cached from that start.
-        # That is the opaque-resume-point contract.
+        # That is the contract: a cookie is an opaque point to continue from.
         if entry.entries is None or cookie == 0:
             entry.entries = self.readdir_entries(entry.host_path)
         entries = entry.entries
@@ -16,11 +16,11 @@ def wasi_fd_readdir(self, fd, buf_ptr, buf_len, cookie, bufused_ptr):
         i = cookie
         while i < len(entries) and len(out) < buf_len:
             name, filetype, ino = entries[i]
-            # dirent: d_next (u64, resume cookie) + d_ino (u64) + d_namlen
-            # (u32) + d_type (u8) + 3 pad, followed by the (unpadded) name.
+            # `dirent`: `d_next` (u64, cookie to continue from) + `d_ino` (u64) + `d_namlen` (u32).
+            # Then `d_type` (u8) + 3 padding bytes, followed by the name without padding.
             out += struct.pack("<QQIBxxx", i + 1, ino, len(name), filetype) + name
             i += 1
-        # A dirent may be legally truncated at the tail once buf_len runs out.
+        # A `dirent` may be legally truncated at the tail once `buf_len` runs out.
         if len(out) > buf_len:
             out = out[:buf_len]
         self.memory.init(buf_ptr, bytes(out), 0, len(out))

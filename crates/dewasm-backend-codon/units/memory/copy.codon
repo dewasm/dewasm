@@ -1,6 +1,6 @@
 # requires: rt/trap
-# memory.copy requires memmove semantics; llvm.memcpy (str.memcpy) forbids any overlap.
-# So the copy goes through libc memmove.
+# `memory.copy` requires `memmove` semantics; `llvm.memcpy` (`str.memcpy`) allows no overlap.
+# So the copy goes through the `memmove` of `libc`.
 def copy(self, d: UInt[32], s: UInt[32], ln: UInt[32]) -> None:
     from C import memmove(Ptr[byte], Ptr[byte], int) -> Ptr[byte]
     dst = int(d)

@@ -1,10 +1,10 @@
-# WASI fd_fdstat_set_rights: narrow an fd's stored rights.
+# WASI `fd_fdstat_set_rights`: narrow an `fd`'s stored rights.
 # Rights can only be dropped, never regained.
 # Any requested bit not already held (in base or inheriting) is ENOTCAPABLE (76).
 # An equal-or-narrower set is applied and returns success.
 # That is why `supports_rights` reports the backend as rights-supporting.
 # `supports_rights` re-grants the current set.
-# An unopened fd is EBADF (8).
+# An unopened `fd` is EBADF (8).
 wasi_fd_fdstat_set_rights() {
   local __p=$1 __fd=$2 __base=$3 __inheriting=$4
   local -n __fds=${__p}wfds

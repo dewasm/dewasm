@@ -1,5 +1,5 @@
 def wasi_fd_renumber(self, fd, to):
-    # Both endpoints must be open fds: renumbering onto an unused number is BADF.
+    # Both endpoints must be open descriptors: renumbering onto an unused number is BADF.
     if fd not in self.fds or to not in self.fds:
         return self.ERRNO_BADF
     dst = self.fds[to]

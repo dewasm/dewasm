@@ -1,4 +1,4 @@
-# 4-arg substr copies the extracted source before replacing, so overlapping ranges are safe.
+# 4-argument `substr` copies the extracted source before replacing, so overlapping ranges are safe.
 sub copy {
     my ($self, $dst, $src, $len) = @_;
     $self->check($dst, $len);

@@ -1,6 +1,6 @@
-# A wasm exception in flight; the object itself is the exnref value.
-# Deliberately unrelated to Trap and Exit: a try_table rescues this class alone.
-# So traps and the exit path structurally cannot be caught by catch_all.
+# A wasm exception in flight; the object itself is the `exnref` value.
+# Deliberately unrelated to Trap and Exit: a `try_table` rescues this class alone.
+# So traps and the exit path structurally cannot be caught by `catch_all`.
 class WasmException < StandardError
   attr_reader :tag, :values
 

@@ -2,14 +2,14 @@
 sub wasi_path_symlink {
     my ($self, $old_path_ptr, $old_path_len, $fd, $new_path_ptr, $new_path_len) = @_;
     my $target = $self->{memory}->read_string($old_path_ptr, $old_path_len);
-    # The symlink target is stored verbatim (never pre-resolved);
-    # containment is enforced when the link is later followed.
+    # The symbolic link target is stored unchanged (never resolved in advance);
+    # containment is checked when the link is later followed.
     # An absolute target can never be confined to the preopen, so it is rejected up front.
     return ERRNO_NOTCAPABLE if rindex($target, '/', 0) == 0;
     my $new_rel = $self->{memory}->read_string($new_path_ptr, $new_path_len);
     my ($link_host, $err) = $self->resolve_path($fd, $new_rel, 0);
     return $err if defined $err;
-    # Slash-suffixed link name, per wasmtime:
+    # Slash-suffixed link name, per Wasmtime:
     # - EEXIST on a directory;
     # - ENOTDIR on a non-directory (raw Linux would say EEXIST);
     # - ENOENT when missing.

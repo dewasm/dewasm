@@ -3,23 +3,23 @@ int wasi_path_remove_directory(int dirfd, int pathPtr, int pathLen) {
     String rel = new String(
         memory.read_string(Integer.toUnsignedLong(pathPtr), Integer.toUnsignedLong(pathLen)),
         java.nio.charset.StandardCharsets.UTF_8);
-    // rmdir(2) never follows a trailing symlink.
+    // `rmdir(2)` never follows a trailing symbolic link.
     Resolved r = resolve_path(dirfd, rel, false);
     if (r.errno != WASI_OK) {
         return r.errno;
     }
     java.nio.file.Path p = java.nio.file.Paths.get(r.path);
     // A missing target is ENOENT before any shape check.
-    // Files.isDirectory is false for "missing" and "not a directory" alike.
+    // `Files.isDirectory` is false for both "missing" and "not a directory".
     if (!java.nio.file.Files.exists(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
         return WASI_NOENT;
     }
     // Files.delete would happily remove a regular file or an empty directory;
-    // rmdir must fail (ENOTDIR) on a non-directory, so pre-check.
+    // `rmdir` must fail (ENOTDIR) on a non-directory, so pre-check.
     if (!java.nio.file.Files.isDirectory(p, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
         return WASI_NOTDIR;
     }
-    // rmdir through a trailing slash on an existing directory is EINVAL per wasmtime.
+    // `rmdir` through a trailing slash on an existing directory is EINVAL per Wasmtime.
     if (rel.endsWith("/")) {
         return WASI_INVAL;
     }
