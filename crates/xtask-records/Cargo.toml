@@ -1,0 +1,35 @@
+[package]
+name = "xtask-records"
+description = "The speed and size measurements, the records under `records/` they write, and their results pages"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+dewasm-test-helper.workspace = true
+# The commands drive every backend directly through the `Backend` trait.
+# They never shell out to the `dewasm` binary.
+# They also reuse each backend crate's own `find_*` function that locates its toolchain.
+# The runner-availability probes use it.
+dewasm-core.workspace = true
+dewasm-backend.workspace = true
+dewasm-backend-ruby.workspace = true
+dewasm-backend-bash.workspace = true
+dewasm-backend-python.workspace = true
+dewasm-backend-perl.workspace = true
+dewasm-backend-go.workspace = true
+dewasm-backend-java.workspace = true
+dewasm-backend-codon.workspace = true
+# The machine-readable records.
+# Timings are not reproducible, so a record is a data drop, not a compared snapshot.
+serde.workspace = true
+# `float_roundtrip`: `migrate-records` re-parses and re-serializes stored measurements.
+# The default parser can drift a value's last ulp.
+serde_json = { workspace = true, features = ["float_roundtrip"] }

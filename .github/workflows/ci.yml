@@ -214,7 +214,7 @@ jobs:
         run: cargo build -p xtask
       - name: Test
         if: github.event_name == 'pull_request'
-        run: cargo test -p dewasm-core -p dewasm-backend -p dewasm -p dewasm-test-helper -p xtask --no-fail-fast
+        run: cargo test -p dewasm-core -p dewasm-backend -p dewasm -p dewasm-test-helper -p xtask -p xtask-feature-audit -p xtask-records -p xtask-snapshot -p xtask-support-docs --no-fail-fast
       - name: Test (slow)
         if: github.event_name != 'pull_request'
-        run: cargo test -p dewasm-core -p dewasm-backend -p dewasm -p dewasm-test-helper -p xtask --no-fail-fast --features dewasm/slow_test,dewasm-test-helper/wasmtime_test
+        run: cargo test -p dewasm-core -p dewasm-backend -p dewasm -p dewasm-test-helper -p xtask -p xtask-feature-audit -p xtask-records -p xtask-snapshot -p xtask-support-docs --no-fail-fast --features dewasm/slow_test,dewasm-test-helper/wasmtime_test

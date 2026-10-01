@@ -1,0 +1,18 @@
+[package]
+name = "xtask-feature-audit"
+description = "The app audit test: the post-baseline feature needs and WASI p1 imports of a wasm binary"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+# Validates candidate app binaries against raw feature bits.
+# It can then name proposals the converter itself no longer models.
+wasmparser.workspace = true

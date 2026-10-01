@@ -1,10 +1,11 @@
-//! Rendering for `docs/support.md`.
+//! `cargo xtask update-support-docs`: rendering for `docs/support.md`.
 //! The support matrix is rendered from the code's own declarations.
 //! So the document cannot drift from reality.
 //! `cargo xtask update-support-docs` writes the rendered output to disk.
 //! The compare-only `support_docs_in_sync` unit test below fails while that file is out of date.
 
 use std::fmt::Write as _;
+use std::path::{Path, PathBuf};
 
 use dewasm_backend::{Backend, SupportStatus, WASI_PREVIEW1_FUNCTIONS};
 use dewasm_backend_bash::BashBackend;
@@ -33,7 +34,20 @@ const IN_SCOPE_FEATURES: &[Feature] = &[
     Feature::TailCall,
 ];
 
-pub fn render_support_docs() -> String {
+/// `update-support-docs`: renders `docs/support.md` and writes it to disk.
+pub fn update() -> anyhow::Result<()> {
+    let path = support_docs_path();
+    let rendered = render_support_docs();
+    std::fs::write(&path, &rendered)?;
+    println!("wrote {} ({} bytes)", path.display(), rendered.len());
+    Ok(())
+}
+
+fn support_docs_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/support.md")
+}
+
+fn render_support_docs() -> String {
     let backends: Vec<&dyn Backend> = vec![
         &RubyBackend,
         &BashBackend,
@@ -116,13 +130,11 @@ pub fn render_support_docs() -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
-    use super::render_support_docs;
+    use super::{render_support_docs, support_docs_path};
 
     #[test]
     fn support_docs_in_sync() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/support.md");
+        let path = support_docs_path();
         let rendered = render_support_docs();
         let current = std::fs::read_to_string(&path).unwrap_or_default();
         assert!(

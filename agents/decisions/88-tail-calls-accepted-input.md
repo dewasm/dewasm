@@ -105,7 +105,7 @@ Code this governs:
 - `crates/dewasm-backend/src/lib.rs`: `stmts_use_tail_calls` and the `check_module_support` requirement.
 - `src/extract.rs`: a tail call sets an extraction boundary exactly as a return does.
 - `src/licm.rs`: a tail call is a memory barrier.
-- `crates/xtask/src/{support_docs,feature_audit}.rs`: the per-backend row.
+- `crates/xtask-{support-docs,feature-audit}/src/lib.rs`: the per-backend row.
   An app needing only accepted-per-backend proposals stays in scope.
 
 ## Rejected alternatives

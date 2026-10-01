@@ -43,7 +43,7 @@ It belongs under `agents/` even when it describes user-facing behavior.
 
 - **`docs/support.md` is generated** from the backend declarations.
   Never edit it by hand; regenerate it with `cargo xtask update-support-docs`.
-  `cargo test -p xtask support_docs_in_sync` fails while the file is out of date.
+  `cargo test -p xtask-support-docs support_docs_in_sync` fails while the file is out of date.
   Everywhere else, **link** to it rather than copying the matrix.
 - **Decisions go in a decision record, not in other documents.**
   Anything with real alternatives is recorded under `agents/decisions/`.

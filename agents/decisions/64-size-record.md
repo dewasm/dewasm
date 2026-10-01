@@ -3,7 +3,7 @@
 **Status:** Accepted (2026-08-06).
 Landed:
 
-- `cargo xtask size` (`crates/xtask/src/size/`);
+- `cargo xtask size` (`crates/xtask-records/src/size/`);
 - the record under `benchmarks/results/` as `<timestamp>Z-size.json`;
 - the generated `docs/sizes/results.md` with its figures, beside a hand-written `docs/sizes/README.md`.
 

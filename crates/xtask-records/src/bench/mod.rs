@@ -649,7 +649,7 @@ fn samples_of(min_s: f64, median_s: f64, samples_s: Vec<f64>) -> Samples {
 }
 
 /// The repository root, canonicalized.
-/// The `crates/xtask/../..` spelling then never reaches a message a human reads.
+/// The `crates/xtask-records/../..` spelling then never reaches a message a human reads.
 fn repo_root() -> PathBuf {
     let raw = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     raw.canonicalize().unwrap_or(raw)

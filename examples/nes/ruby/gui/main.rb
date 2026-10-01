@@ -255,7 +255,7 @@ def run_smoke(rom_path)
   puts "smoke: final frame is #{frame_w}x#{frame_h} with #{distinct} distinct colors"
   # The NES PPU palette tops out at 64 colors total, so a healthy frame lands in the dozens.
   # A degenerate (blank/solid) frame lands in the single digits.
-  # This mirrors the >4 threshold the snapshot oracle uses (`crates/xtask/src/nes_snapshot.rs`).
+  # It is the >4 threshold of the snapshot oracle (`crates/xtask-snapshot/src/nes_snapshot.rs`).
   if distinct <= 4
     warn "smoke: FAIL: frame looks degenerate (too few distinct colors)"
     exit 1

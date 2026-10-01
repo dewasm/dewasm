@@ -64,7 +64,7 @@ Code this governs:
   That is because a handler must stay lexically inside its frame.
 - the five backend lowerings with their `runtime/<lang>/units/rt/` exception units;
 - `crates/dewasm-test-helper/src/apps_convert.rs` (the per-entry required feature);
-- `crates/xtask/src/feature_audit.rs` (exception handling never defers an app by itself).
+- `crates/xtask-feature-audit/src/lib.rs` (exception handling never defers an app by itself).
 
 ## Rejected alternatives
 

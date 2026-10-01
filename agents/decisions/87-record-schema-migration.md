@@ -2,7 +2,7 @@
 
 Status: **Accepted, 2026-08-30.**
 A new record schema version ships with a migration in `cargo xtask migrate-records`.
-The command is in [`crates/xtask/src/migrate.rs`](../../crates/xtask/src/migrate.rs).
+The command is in [`crates/xtask-records/src/migrate.rs`](../../crates/xtask-records/src/migrate.rs).
 It rewrites every stored record under `records/` in place.
 Every command that reads a record supports only the current schema.
 When such a command meets an older schema, it names the migrate command.

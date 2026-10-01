@@ -199,3 +199,7 @@ Each rule is stated here in full; the cited decision holds its reasons and rejec
   Check the name in `Backend::generate` only, never in the `*_with_units` APIs.
   Test tables carry `kebab-case` names, converted with `dewasm_test_helper::derive_module_name`.
   No name transformation belongs in the product.
+- A `cargo xtask` command lives in an `xtask-<name>` library crate (decision 100).
+  It joins the crate whose internal items it uses, or a new crate when it uses none.
+  The `xtask` binary only maps the command name to that crate's function.
+  A new crate joins the `cargo test -p` list in `.github/workflows/ci.yml`.

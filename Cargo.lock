@@ -2443,6 +2443,26 @@ name = "xtask"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "xtask-feature-audit",
+ "xtask-records",
+ "xtask-snapshot",
+ "xtask-support-docs",
+ "xtask-text-check",
+]
+
+[[package]]
+name = "xtask-feature-audit"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "wasmparser 0.254.0",
+]
+
+[[package]]
+name = "xtask-records"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
  "dewasm-backend",
  "dewasm-backend-bash",
  "dewasm-backend-codon",
@@ -2453,13 +2473,36 @@ dependencies = [
  "dewasm-backend-ruby",
  "dewasm-core",
  "dewasm-test-helper",
- "png",
  "serde",
  "serde_json",
- "wasmparser 0.254.0",
+]
+
+[[package]]
+name = "xtask-snapshot"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dewasm-backend",
+ "dewasm-test-helper",
+ "png",
  "wasmtime",
  "wasmtime-wasi",
- "xtask-text-check",
+]
+
+[[package]]
+name = "xtask-support-docs"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dewasm-backend",
+ "dewasm-backend-bash",
+ "dewasm-backend-codon",
+ "dewasm-backend-go",
+ "dewasm-backend-java",
+ "dewasm-backend-perl",
+ "dewasm-backend-python",
+ "dewasm-backend-ruby",
+ "dewasm-core",
 ]
 
 [[package]]
