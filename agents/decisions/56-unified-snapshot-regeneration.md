@@ -6,7 +6,7 @@ That pair was `update-repl-snapshot` / `update-doom-snapshot`.
 The subcommand is driven by capture entry points in `crates/dewasm-test-helper`.
 The new ones are `capture_app_stdout`, `capture_gzip_compress`, and `capture_fs_app_stdout`.
 The existing `capture_qjs_repl_transcript` is the fourth.
-The DOOM frame capture is folded in from `crates/xtask/src/doom_snapshot.rs`.
+The DOOM frame capture is folded in from `crates/xtask-snapshot/src/doom_snapshot.rs`.
 It runs on the embedded `wasmtime` crate.
 That capture also emits a `doom_frame.png` rendering of the same frame for a human to look at.
 No test compares the PNG.
@@ -69,8 +69,9 @@ Remove the two commands made for one snapshot each.
 - **The DOOM frame stays on the embedded `wasmtime` crate.**
   `doom.wasm`'s custom-import interface can't run under `wasmtime run` (decision 53).
   So its capture keeps driving the embedded `wasmtime` crate.
-  That crate is a dependency of `xtask` only, and it must never enter the test-helper crate's tree.
-  `xtask` folds that one target into the same loop as the nine registry targets.
+  That crate is a dependency of `xtask-snapshot` only.
+  It must never enter the test-helper crate's tree.
+  `xtask-snapshot` folds that one target into the same loop as the nine registry targets.
   The helper crate stays free of the `wasmtime` crate.
   That target writes two files.
   One is the compared `doom_frame.ppm` oracle.

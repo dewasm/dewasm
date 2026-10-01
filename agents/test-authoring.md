@@ -44,7 +44,7 @@ They list their inputs at runtime as named trials.
   Each starts the binary via `CARGO_BIN_EXE_dewasm`.
 - The `docs/support.md` freshness check is the `support_docs_in_sync` unit test.
   It fails while the generated file is out of date, over all backends.
-  It sits in `crates/xtask/src/support_docs.rs`.
+  It sits in `crates/xtask-support-docs/src/lib.rs`.
   That file also holds the `update-support-docs` command, which regenerates `docs/support.md`.
 - **`crates/dewasm-test-helper/tests/apps_wasmtime.rs`**: Wasmtime as a `BackendUnderTest`.
   It runs the `apps`/`gzip`/`fs_apps` snapshot-freshness checks through the shared runners.
@@ -142,8 +142,8 @@ After changing an app's fixed version in `examples/apps/setup.sh`:
 3. Re-run the `wasmtime_test` freshness suite.
 4. If the exit status changed, update the app's `expect_code` in `crates/dewasm-test-helper/src/apps.rs`.
 
-Every snapshot is captured through the `wasmtime` crate embedded in `xtask`.
-That crate is a dependency of `xtask` only.
+Every snapshot is captured through the `wasmtime` crate embedded in the `xtask` binary.
+That crate is a dependency of `xtask-snapshot` only.
 The DOOM and NES custom-import interfaces are not WASI commands.
 Their frames therefore go through their own capture code rather than the WASI runner.
 After a change to the DOOM version, re-run the per-backend `doom_frame` cases.

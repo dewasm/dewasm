@@ -6,7 +6,7 @@ Landed:
 - the stored records moved from `benchmarks/results/` to `records/`;
 - each carries a kind suffix (`-speed.json`, `-size.json`);
 - the two commands split into four: `record-speed`, `record-size`, `render-speed`, `render-size`;
-- the commands live in `crates/xtask/src/bench/mod.rs` and `crates/xtask/src/size/mod.rs`;
+- the commands live in `crates/xtask-records/src/bench/mod.rs` and `crates/xtask-records/src/size/mod.rs`;
 - `records/README.md` carries one line per record file;
 - the command that writes a record adds that line as a placeholder.
 
@@ -80,7 +80,7 @@ The line goes under that kind's heading, and is added only when the file has no 
 A run therefore leaves an unexplained record visible in the diff of the commit that would add it.
 There the person committing it still knows the answer.
 A unit test asserts that every stored record has a line and a kind suffix.
-The test is in `crates/xtask/src/bench/mod.rs`.
+The test is in `crates/xtask-records/src/bench/mod.rs`.
 
 **Deciding criterion:** *name a thing for what it is rather than for the command that made it.*
 *Give the two halves of a workflow equal standing when one of them is cheap.*

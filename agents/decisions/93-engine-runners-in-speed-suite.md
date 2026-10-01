@@ -32,7 +32,7 @@ So did how their availability and their gaps are handled.
 An alternative engine joins the matrix when it runs the backend's unmodified output.
 A gap is bridged by *refusing*, never by shimming what is measured.
 
-- Every engine runner follows the `dewasm-pypy` shape (`crates/xtask/src/bench/runner.rs`).
+- Every engine runner follows the `dewasm-pypy` shape (`crates/xtask-records/src/bench/runner.rs`).
   It runs the same generated artifact as the incumbent's rows.
   It takes a host-provided binary from an environment variable, then from PATH.
   The variables are `$DEWASM_MONORUBY`, `$DEWASM_JRUBY`, and `$DEWASM_GRAALPY`.

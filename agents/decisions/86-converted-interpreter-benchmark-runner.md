@@ -2,7 +2,7 @@
 
 Status: **Accepted, 2026-08-29.**
 The speed suite carries four `wasm3-*` runners.
-Their kind is `Kind::ConvertedInterpreter` in [`crates/xtask/src/bench/runner.rs`](../../crates/xtask/src/bench/runner.rs).
+Their kind is `Kind::ConvertedInterpreter` in [`crates/xtask-records/src/bench/runner.rs`](../../crates/xtask-records/src/bench/runner.rs).
 They take the MetaWASI wasm3 build from the app cache (fixed at v0.9.0).
 The Ruby and Python backends convert it standalone.
 The converted builds interpret each workload on Ruby, Ruby with YJIT, CPython, and PyPy.
@@ -66,7 +66,7 @@ Both rows were measured on 2026-08-29 with the same harness discipline.
   The nesting lasts until a loop or return unwinds it.
   So the Ruby runners carry `RUBY_THREAD_VM_STACK_SIZE` in their launch environment.
   Workloads that still exceed a host's limits get measured exclusions.
-  Those are in [`crates/xtask/src/bench/workload.rs`](../../crates/xtask/src/bench/workload.rs).
+  Those are in [`crates/xtask-records/src/bench/workload.rs`](../../crates/xtask-records/src/bench/workload.rs).
 - Carry-over: `wasm3-*` labels classify as the interpreter family in the charts.
   The native `wasm3` runner stays in the native family.
   So the two readings of "wasm3" never share a color.

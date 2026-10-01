@@ -1,0 +1,24 @@
+[package]
+name = "xtask-support-docs"
+description = "The generated `docs/support.md`, rendered from the backends' capability declarations"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+dewasm-core.workspace = true
+dewasm-backend.workspace = true
+dewasm-backend-ruby.workspace = true
+dewasm-backend-bash.workspace = true
+dewasm-backend-python.workspace = true
+dewasm-backend-perl.workspace = true
+dewasm-backend-go.workspace = true
+dewasm-backend-java.workspace = true
+dewasm-backend-codon.workspace = true

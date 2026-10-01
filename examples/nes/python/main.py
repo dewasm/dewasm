@@ -398,7 +398,7 @@ def run_smoke(rom_path, frames=SMOKE_FRAMES):
     # The comment on `NES_FRAMES` in `crates/dewasm-test-helper/src/nes.rs` records that.
     # So a healthy frame is far from the thousands of colors a 24-bit color renderer would produce.
     # A degenerate (blank/solid) frame is the real signal to catch, and lands in the single digits.
-    # Mirrors the >4 threshold the snapshot oracle uses (`crates/xtask/src/nes_snapshot.rs`).
+    # It is the >4 threshold of the snapshot oracle (`crates/xtask-snapshot/src/nes_snapshot.rs`).
     # The Ruby/Perl frontends use it too.
     ok = True
     if len(distinct) <= 4:

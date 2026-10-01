@@ -1,0 +1,31 @@
+[package]
+name = "xtask-snapshot"
+description = "The execution snapshots: their regeneration and the embedded Wasmtime runner that captures them"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow.workspace = true
+dewasm-backend.workspace = true
+dewasm-test-helper.workspace = true
+# Encodes the human-facing PNG of the DOOM frame snapshot.
+# Default settings are kept fixed so regeneration is byte-stable.
+png = "0.18.1"
+# `std` makes `wasmtime::Error` an `anyhow::Error`, so `?` composes with our `anyhow` flow.
+# `cranelift` and `runtime` are the embedder.
+# `gc` is what compiles in the exception-handling proposal.
+# Wasmtime implements `exnref` on its GC machinery.
+# `gc-drc` is the collector Wasmtime defaults to.
+# mruby's snapshots need both, and without `gc` `Config::wasm_exceptions` does not exist.
+wasmtime = { version = "47.0.2", default-features = false, features = ["cranelift", "gc", "gc-drc", "runtime", "std", "parallel-compilation"] }
+# WASI p1 for the `test-wasmtime-wasi` runner.
+# The version tracks `wasmtime` exactly: every snapshot is captured through this crate.
+# So the fixed version is what makes regeneration reproducible across hosts.
+wasmtime-wasi = { version = "47.0.2", default-features = false, features = ["p1"] }

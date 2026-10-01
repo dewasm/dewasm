@@ -1,4 +1,5 @@
-//! Report, per wasm binary, the minimal set of post-baseline proposals it needs to validate.
+//! `cargo xtask feature-audit` reports the post-baseline proposals each wasm binary needs.
+//! The set is the minimal one the binary needs to validate.
 //! The report also lists its WASI p1 import surface.
 //!
 //! This is the app audit test: run it on an app's binary before the app is added as a target.
@@ -276,7 +277,8 @@ fn audit(path: &str) -> Result<bool> {
     Ok(clean)
 }
 
-pub fn main(argv: impl Iterator<Item = String>) -> Result<()> {
+/// `feature-audit <file.wasm>...`: audits each binary and fails when one needs more.
+pub fn run(argv: impl Iterator<Item = String>) -> Result<()> {
     let paths: Vec<String> = argv.collect();
     if paths.is_empty() {
         bail!("usage: cargo xtask feature-audit <file.wasm>...");
