@@ -100,7 +100,7 @@ fn main() -> Result<()> {
         Some("render-size") => size::render(args),
         Some("feature-audit") => feature_audit::main(args),
         Some("migrate-records") => migrate::run(),
-        Some("check-text") => check_text(args),
+        Some("check-text") => xtask_text_check::run(args),
         Some("-h") | Some("--help") | Some("help") => {
             print!("{USAGE}");
             Ok(())
@@ -214,40 +214,6 @@ fn update_snapshots(filter: Option<&str>) -> Result<()> {
             Some(needle) => bail!("no snapshot label matched filter {needle:?}"),
             None => bail!("no snapshots to regenerate"),
         }
-    }
-    Ok(())
-}
-
-/// `check-text [path]...`: prints every defect in the named files, or in every tracked text file.
-fn check_text(args: impl Iterator<Item = String>) -> Result<()> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let mut paths: Vec<String> = args.collect();
-    let all = paths.is_empty();
-    if all {
-        paths = text_check::tracked_files(&root);
-    }
-    let vocabulary = text_check::vocabulary::Vocabulary::load(&root).map_err(anyhow::Error::msg)?;
-    let mut count = 0;
-    for path in &paths {
-        if !text_check::is_checked_text(path) {
-            bail!("{path} is neither Markdown nor a source file with known comment markers");
-        }
-        let mut defects = text_check::file_defects(&root, path);
-        defects.extend(vocabulary.file_defects(&root, path));
-        for defect in defects {
-            println!("{defect}");
-            count += 1;
-        }
-    }
-    // Whether a table word is used shows only after every file was read.
-    if all {
-        for defect in vocabulary.table_defects() {
-            println!("{defect}");
-            count += 1;
-        }
-    }
-    if count > 0 {
-        bail!("{count} text defects");
     }
     Ok(())
 }

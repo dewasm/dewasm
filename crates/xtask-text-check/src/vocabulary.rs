@@ -12,10 +12,10 @@ use crate::{comment_lines, comment_markers, markdown_lines};
 /// The file that holds the vocabulary tables, relative to the repository root.
 pub const VOCABULARY: &str = "agents/vocabulary.md";
 
-/// The base lists that `crates/text-check/setup.sh` fetches, relative to the repository root.
+/// The base lists that `crates/xtask-text-check/setup.sh` fetches, relative to the repository root.
 const BASE_LISTS: &[&str] = &[
-    "crates/text-check/cache/NGSL_12_lemmatized_for_research.csv",
-    "crates/text-check/cache/NAWL_12_lemmatized_for_research.csv",
+    "crates/xtask-text-check/cache/NGSL_12_lemmatized_for_research.csv",
+    "crates/xtask-text-check/cache/NAWL_12_lemmatized_for_research.csv",
 ];
 
 /// The "Number" source of `agents/vocabulary.md`: a number written as a word.
@@ -129,7 +129,7 @@ impl Vocabulary {
         let mut base = HashSet::new();
         for list in BASE_LISTS {
             let bytes = std::fs::read(root.join(list)).map_err(|e| {
-                format!("{list} is not cached ({e}): run crates/text-check/setup.sh")
+                format!("{list} is not cached ({e}): run crates/xtask-text-check/setup.sh")
             })?;
             // NAWL 1.2 is Latin-1; each byte is its own code point.
             let text: String = bytes.iter().map(|&b| b as char).collect();

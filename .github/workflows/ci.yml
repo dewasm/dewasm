@@ -31,10 +31,10 @@ jobs:
       # The vocabulary check reads two word lists, which its `setup.sh` fetches by sha256.
       - uses: actions/cache@v6
         with:
-          path: crates/text-check/cache
-          key: word-lists-${{ hashFiles('crates/text-check/setup.sh') }}
-      - run: crates/text-check/setup.sh
-      - run: cargo test -p text-check
+          path: crates/xtask-text-check/cache
+          key: word-lists-${{ hashFiles('crates/xtask-text-check/setup.sh') }}
+      - run: crates/xtask-text-check/setup.sh
+      - run: cargo test -p xtask-text-check
       - run: git ls-files '*.sh' | grep -v '^crates/dewasm-backend-bash/units/' | xargs shellcheck -x
 
   apps-cache:

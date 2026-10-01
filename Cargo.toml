@@ -20,6 +20,7 @@ dewasm-backend-go = { path = "crates/dewasm-backend-go", version = "0.1.0" }
 dewasm-backend-java = { path = "crates/dewasm-backend-java", version = "0.1.0" }
 dewasm-backend-codon = { path = "crates/dewasm-backend-codon", version = "0.1.0" }
 dewasm-test-helper = { path = "crates/dewasm-test-helper" }
+xtask-text-check = { path = "crates/xtask-text-check" }
 anyhow = "1"
 wasmparser = "0.254"
 # DWARF reader, core-only (backends never see it).

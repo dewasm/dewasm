@@ -5,11 +5,12 @@
 //! A comment line has at most 100 columns, counting its indentation and comment marker.
 //! Table rows, code blocks, and HTML are not text in this sense.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
-pub mod vocabulary;
+mod vocabulary;
 
+use anyhow::{bail, Result};
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
 const MAX_LENGTH: usize = 100;
@@ -263,7 +264,7 @@ fn strip_list_number(text: &str) -> &str {
 }
 
 /// The tracked files the checks read: Markdown, and source files with known comment markers.
-pub fn tracked_files(root: &Path) -> Vec<String> {
+fn tracked_files(root: &Path) -> Vec<String> {
     let output = Command::new("git")
         .args(["ls-files", "-z"])
         .current_dir(root)
@@ -279,12 +280,12 @@ pub fn tracked_files(root: &Path) -> Vec<String> {
 }
 
 /// Whether the checks read `path`.
-pub fn is_checked_text(path: &str) -> bool {
+fn is_checked_text(path: &str) -> bool {
     path.ends_with(".md") || comment_markers(path).is_some()
 }
 
 /// Each defect of the text file `path` under `root`, as `path:line: what`.
-pub fn file_defects(root: &Path, path: &str) -> Vec<String> {
+fn file_defects(root: &Path, path: &str) -> Vec<String> {
     let text = std::fs::read_to_string(root.join(path))
         .unwrap_or_else(|e| panic!("{path} is tracked text and must read as UTF-8: {e}"));
     let (lines, unit) = match comment_markers(path) {
@@ -303,15 +304,47 @@ pub fn file_defects(root: &Path, path: &str) -> Vec<String> {
     report
 }
 
+fn repo_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
+
+/// `check-text [path]...`: prints every defect in the named files, or in every tracked text file.
+pub fn run(args: impl Iterator<Item = String>) -> Result<()> {
+    let root = repo_root();
+    let mut paths: Vec<String> = args.collect();
+    let all = paths.is_empty();
+    if all {
+        paths = tracked_files(&root);
+    }
+    let vocabulary = vocabulary::Vocabulary::load(&root).map_err(anyhow::Error::msg)?;
+    let mut count = 0;
+    for path in &paths {
+        if !is_checked_text(path) {
+            bail!("{path} is neither Markdown nor a source file with known comment markers");
+        }
+        let mut defects = file_defects(&root, path);
+        defects.extend(vocabulary.file_defects(&root, path));
+        for defect in defects {
+            println!("{defect}");
+            count += 1;
+        }
+    }
+    // Whether a table word is used shows only after every file was read.
+    if all {
+        for defect in vocabulary.table_defects() {
+            println!("{defect}");
+            count += 1;
+        }
+    }
+    if count > 0 {
+        bail!("{count} text defects");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
     use super::*;
-
-    fn repo_root() -> PathBuf {
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
-    }
 
     #[test]
     fn text_meets_the_writing_style() {
