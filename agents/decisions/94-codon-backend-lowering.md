@@ -163,5 +163,6 @@ It also names where Codon forced a different one.
   WASI p1 rests on `libc` through calls into C, with `__apple__`-conditional layouts.
   Those layouts are verified on Darwin arm64 and Linux x86_64.
   Any other machine is refused when the bundled WASI is constructed (`rt/host_check`).
-  That is because on Darwin x86_64 the un-suffixed `stat`/`readdir` symbols are 32-bit-inode variants.
+  That is because of the un-suffixed `stat`/`readdir` symbols on Darwin x86_64.
+  They are the legacy 32-bit-inode variants.
   Linux aarch64 `glibc` lays `struct stat` out differently.

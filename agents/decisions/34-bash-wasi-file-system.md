@@ -96,7 +96,8 @@ With no `readlink`, a **file** symbolic link as the final path component cannot 
 It resolves to `ELOOP`, stricter than Ruby, which follows it.
 A **directory** symbolic link is still followed because `cd -P` resolves it.
 Decision 14's check-then-open TOCTOU limit carries over unchanged.
-That is because this is a single-process research and example runtime, not a shared sandbox host.
+That is because this is a single-process research and example runtime.
+It is not a sandbox host shared by many users.
 
 ### D4: `poll_oneoff` waits in pure Bash
 
