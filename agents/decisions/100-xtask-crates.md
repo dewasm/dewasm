@@ -2,7 +2,8 @@
 
 Status: **Accepted, 2026-10-01.**
 The `xtask` binary only selects a command; each command lives in a library crate named `xtask-<name>`.
-The crates are `xtask-snapshot`, `xtask-support-docs`, `xtask-feature-audit`, `xtask-records`, and `xtask-text-check`.
+The crates are `xtask-snapshot`, `xtask-support-docs`, and `xtask-feature-audit`.
+The other two are `xtask-records` and `xtask-text-check`.
 The list of commands is in [`crates/xtask/src/main.rs`](../../crates/xtask/src/main.rs).
 
 ## Context
