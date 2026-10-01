@@ -22,7 +22,7 @@ out=doom.bash
 #   1. The 1993 DOOM engine (`doomgeneric`), compiled to a WebAssembly module.
 #      `jacobenget/doom.wasm` v0.1.0 built it, with the DOOM shareware WAD embedded.
 #      dewasm then converted that module into Bash source (`https://github.com/dewasm/dewasm`).
-#      The same wasm binary also runs there as Go, Java, Ruby, and Python; see `examples/doom`.
+#      The same wasm binary also runs there as Go, Java, Ruby, or Python alone; see `examples/doom`.
 #   2. A terminal frontend: half-block rendering in 24-bit ANSI color, and raw-mode input.
 #
 # Run:      `bash doom.bash`          (needs Bash 5 or later and a 24-bit color terminal)

@@ -1,5 +1,6 @@
-;; `_start` recurses 5000 wasm frames, far past the default limit of CPython (about 1000 frames).
-;; It then reports the depth check through `proc_exit` (42 on success).
+;; `_start` recurses 5000 wasm frames.
+;; That is far past, for example, CPython's default recursion limit of about 1000 frames.
+;; `_start` then reports the depth check through `proc_exit` (42 on success).
 ;; So a standalone entrypoint that does nothing against deep recursion fails with an error.
 ;; It does not exit 42.
 (module

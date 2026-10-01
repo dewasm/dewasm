@@ -103,7 +103,7 @@ static void bench_print(u64 v) {
  * So any fixed cost it has lands in the <iterations> = 0 baseline run the harness subtracts.
  * Per-iteration numbers then stay pure; most leave it empty.
  * It is an explicit hook rather than `__attribute__((constructor))`.
- * `-nostartfiles` means nothing calls `__wasm_call_ctors`. */
+ * That is because with `-nostartfiles`, nothing calls `__wasm_call_ctors`. */
 static void bench_setup(void);
 static u64 bench_run(u32 iterations);
 

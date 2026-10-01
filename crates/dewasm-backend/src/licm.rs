@@ -1,7 +1,8 @@
 //! Hoist constant-address loads out of loops, with a runtime store guard instead of an alias proof.
 //!
 //! Code compiled to wasm re-reads memory-resident globals every loop iteration.
-//! Its own compiler could not prove the loop's stores leave them alone, and neither can this pass.
+//! It does so because its own compiler could not prove the loop's stores leave them alone.
+//! Neither can this pass.
 //! What it can check is the run-time address.
 //! It hoists each constant-address load into a local before the loop.
 //! After every store inside the loop, it compares the store's address against the hoisted window.

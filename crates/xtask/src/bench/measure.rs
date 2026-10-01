@@ -2,7 +2,7 @@
 //!
 //! * [`run_once`] times one whole process, spawn to exit, under a hard timeout.
 //!   The timer starts *before* `spawn`: process start is deliberately inside.
-//!   The `<iterations> = 0` run subtracts it back out.
+//!   That is because the `<iterations> = 0` run subtracts it back out.
 //! * [`calibrate`] raises the iteration count per runner until the compute time reaches the target.
 //!   A fixed count cannot serve runners thousands of times apart.
 //! * [`stats`] reports minimum *and* median, so noise is visible instead of hidden.
@@ -148,7 +148,7 @@ pub fn run_once(
 /// App sampling: one sample is the mean of `k` back-to-back executions.
 /// `k` is chosen from the warm-up run's wall time so a sample lasts roughly `target`.
 /// This is the iteration calibration applied at the process level.
-/// An app has no `<iterations>` to scale.
+/// It is needed because an app has no `<iterations>` to scale.
 /// A run slower than the target keeps `k = 1`.
 /// Returns `(k, samples, last outcome)`.
 /// The measured quantity is still one whole execution; batching only steadies it.

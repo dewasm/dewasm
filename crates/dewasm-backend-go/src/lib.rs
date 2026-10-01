@@ -2412,7 +2412,7 @@ impl<'a> Gen<'a> {
         // Laundering one operand makes the operation a runtime one, which wraps.
         // It applies to every operator, not only the ones known to overflow today.
         // Those are `+`, `-`, `*`, and `<<`.
-        // The rule is about the operands being constants at all.
+        // That is because the rule is about the operands being constants at all.
         // And the lowering below may rewrite an operator into arithmetic that overflows.
         // The operator itself would not overflow there.
         let (a, b) = if int_const(a) && int_const(b) {

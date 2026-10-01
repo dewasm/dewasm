@@ -5,8 +5,8 @@
 # - a directory and a file each carry a different default set;
 # - `path_open` narrows requested rights against the parent's inheriting set, then per `filetype`;
 # - `fd_fdstat_set_rights` can only drop bits.
-# This state is kept in the always-bundled prelude.
-# `new()` seeds the `fd -> [base, inheriting, fdflags]` `meta` map for every preopen and for stdio.
+# This state is kept in the always-bundled prelude because `new()` seeds the `meta` map.
+# That map, `fd -> [base, inheriting, fdflags]`, gets an entry for every preopen and for stdio.
 # So the constants must exist whenever any WASI import is used.
 use Cwd ();
 

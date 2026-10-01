@@ -1,12 +1,12 @@
 // requires: wasi/wasi_filetype
 // Pack an `os.FileInfo` into a WASI `filestat` (64 bytes).
 // The fields are `dev`, `ino`, `filetype` (+7 padding), `nlink`, `size`, `atim`/`mtim`/`ctim`.
-// All are u64, and times are in nanoseconds.
+// `atim`/`mtim`/`ctim` are each a u64, in nanoseconds.
 // `dev`/`ino`/`nlink` come from the Unix `syscall.Stat_t`.
 // `mtim` is the portable `ModTime`.
 // `atim`/`ctim` are read from the `Stat_t`'s platform time field via `reflect`.
 // That is the only way to reach it with the standard library and no build tags.
-// The field is named `Atim` on Linux and `Atimespec` on Darwin.
+// That is because the field is named `Atim` on Linux and `Atimespec` on Darwin.
 // A distinct `atim` matters for `fd_filestat_set_times`.
 // That system call changes `mtim` while leaving `atim` untouched.
 func (w *WASI) pack_filestat(fi os.FileInfo) []byte {

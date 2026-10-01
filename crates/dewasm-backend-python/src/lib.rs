@@ -1816,7 +1816,7 @@ impl<'a> Gen<'a> {
                 }
                 // Addressed by value: one assignment and one jump, the same cost from any depth.
                 // The `continue` reaches the dispatch loop.
-                // Every frame this branch escapes was dissolved with it.
+                // That is because every frame this branch escapes was dissolved with it.
                 // That is the path closure in [`flat::plan`].
                 // So no surviving `while True:` sits in between.
                 if let Some(st) = self.state_of(*label) {
@@ -2083,8 +2083,8 @@ impl<'a> Gen<'a> {
     }
 
     /// The rendered operands of an integer equality whose one side is a constant.
-    /// They exist when the shared analysis shows that one raw value of the other side matches.
-    /// That value is the one that masks to the constant.
+    /// They exist when the shared analysis shows exactly one raw value of the other side.
+    /// That value is the only one that masks to the constant.
     /// See [`eq_const_rewrite`].
     /// `None` renders both sides exact.
     fn eq_rewrite_operands(&self, op: BinOp, a: &Expr, b: &Expr) -> Option<(String, String)> {

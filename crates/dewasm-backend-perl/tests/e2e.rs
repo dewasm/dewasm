@@ -560,12 +560,11 @@ print $rgb;
 "#;
 
 /// NES (issue #114, mirrors the DOOM glue above).
-/// Load the ROM into `allocRom`'s buffer and tick `{frames}` times with no input.
-/// The ROM is checked against a fixed checksum.
+/// Load the example ROM into `allocRom`'s buffer and tick `{frames}` times with no input.
 /// Compose the frame from the palette-index screen buffer of `agnes` and its palette (issue #117).
 /// The `& 0x3f` mask is load-bearing.
 /// Dump the frame as a P6 PPM matching the Wasmtime snapshot.
-/// `{rom}` (the cached ROM's host path) and `{frames}` filled by the runner.
+/// `{rom}` (the example ROM's host path) and `{frames}` filled by the runner.
 const PERL_NES_FRAME_GLUE: &str = r#"my $rom = do {
     local $/;
     open my $fh, '<:raw', "{rom}" or die $!;

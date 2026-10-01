@@ -87,9 +87,9 @@ public class Main {
             }
         }
         System.out.println("smoke: " + colors.size() + " distinct colors in final frame");
-        // DOOM's renderer shades a 256-entry palette through a few distance-based light levels.
+        // DOOM's renderer shades a 256-entry palette through a few levels of reduced light.
         // So even a busy 3D scene tops out at a few hundred distinct colors per frame.
-        // A first-level view with HUD, water, and blood measured ~150.
+        // A first-level view with HUD, water, and one patch of blood measured ~150.
         // 1000 is unreachable by construction.
         // 100 is comfortably above a blank/solid-color buffer.
         // Such a buffer would mean the memory read was set up wrong.
@@ -102,7 +102,7 @@ public class Main {
     }
 
     // Drawn on screen over the frame (mirrors `mapKey`).
-    // There's no other discoverability path for a window app.
+    // That is because there's no other discoverability path for a window app.
     private static final String CONTROLS_TEXT =
         "arrows move  ctrl fire  space use  shift run  tab automap  ,/. strafe  1-7 weapon  esc menu";
 

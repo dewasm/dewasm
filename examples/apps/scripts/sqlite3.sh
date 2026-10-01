@@ -58,7 +58,7 @@ BINDING_EXPORTS=(
 
 # The C-source half of the `sqlite3-mod` build; the patch's header states what it changes and why.
 SQLITE_SPLIT_PATCH="src/sqlite3-vdbe-split.patch"
-# The `wasm-opt` half of the `sqlite3-mod` build, and the reason it stays out of the shared recipe.
+# The `wasm-opt` half of the `sqlite3-mod` build, and why it cannot join the shared recipe.
 # -O2 inlines a function with a single caller.
 # That puts every `vdbeOp*` body straight back into the interpreter.
 # The artifact then cannot be told apart from the stock shell.
@@ -190,8 +190,7 @@ wasm_opt_inplace "$tmp/sqlite3-mod-inlined.wasm" "${SQLITE_MOD_STRIP[@]}"
 # Undoing the split changes nothing an app case or a snapshot can see.
 # So the `sqlite3-mod` artifact would go on passing every test while being a copy of the stock one.
 # The control is the same module optimized without --no-inline.
-# The split survived exactly when the artifact carries the functions the patch adds.
-# The control must not carry them.
+# The split survived exactly when the artifact has the patch's functions and the control lacks them.
 split_fns=$(grep -c '^static SQLITE_NOINLINE [a-z]* vdbeOp' "$tmp/$SQLITE_DIR-mod/sqlite3.c")
 kept_fns=$(($(wasm_func_count cache/sqlite3-mod.wasm) - $(wasm_func_count "$tmp/sqlite3-mod-inlined.wasm")))
 [ "$kept_fns" -ge "$split_fns" ] || {

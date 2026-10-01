@@ -52,7 +52,7 @@ Two interface decisions, each the deciding criterion for future emulator-style e
   The guest never sees a file system.
   Criterion: *data the example exists to swap stays outside the artifact.*
   *Data the example never varies (DOOM's WAD) may stay inside.*
-  The example's ROM is [Alter Ego](https://forums.nesdev.org/viewtopic.php?t=7999) by Shiru.
+  The example ROM is [Alter Ego](https://forums.nesdev.org/viewtopic.php?t=7999) by Shiru.
   It is public domain, mapper 0, and fetched with a fixed checksum.
   Any ROM within `agnes`'s mappers works via the frontends' optional path argument.
 - **The interface is export-only: the import section is empty.**

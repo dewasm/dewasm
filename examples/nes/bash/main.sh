@@ -303,7 +303,7 @@ drain_input() {
           esac
         fi
       elif [[ -n $c2 ]]; then
-        # Not a CSI sequence: the ESC was a lone key press, `c2` is a fresh byte.
+        # Not a CSI sequence: the ESC carries no meaning, and `c2` is a fresh byte.
         handle_char "$c2"
       fi
     else

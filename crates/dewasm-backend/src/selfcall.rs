@@ -30,7 +30,7 @@ pub fn rewrite(funcs: &mut [Func], types: &[FuncType], num_imported: u32) {
 ///
 /// Two conditions beyond having a self tail call at all.
 /// The body must never fall off its end.
-/// A body that can fall off its end would spin in the loop rather than return.
+/// That is because a body that can fall off its end would spin in the loop rather than return.
 /// And every declared local must have a constant zero.
 /// The reason is that a fresh call zeroes the locals and the loop has to do the same.
 /// A reference-typed local has no such expression in the IR.

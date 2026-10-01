@@ -1,7 +1,7 @@
 # File system `errno` codes, kept out of the always-bundled `wasi/_package` prelude.
 # A stdio-only WASI module (no `path_*` or file system `fd_*` imports) then doesn't carry them.
 # ERRNO_NOTCAPABLE (76) lives in the prelude.
-# Rights checks in `fd_read`, `fd_write`, etc. need it.
+# That is because rights checks in `fd_read`, `fd_write`, etc. need it.
 # That holds even when `errno_fs` is not otherwise bundled.
 use Errno ();
 

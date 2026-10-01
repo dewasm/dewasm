@@ -391,7 +391,7 @@ def run_interactive(rom_path)
   end
   at_exit(&restore)
   # Ctrl-C is handled explicitly as a byte in InputHandler.
-  # Raw mode disables the terminal's own SIGINT generation.
+  # That is because raw mode disables the terminal's own SIGINT generation.
   # These traps are only a fallback for ending the process from outside (for example `kill`).
   Signal.trap("INT") { restore.call; exit(0) }
   Signal.trap("TERM") { restore.call; exit(0) }

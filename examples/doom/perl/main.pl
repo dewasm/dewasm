@@ -474,7 +474,7 @@ sub run_interactive {
         print EXIT_ALT_SCREEN;
     };
     # Ctrl-C is handled explicitly as a byte in InputHandler.
-    # Raw mode disables the terminal's own SIGINT generation.
+    # That is because raw mode disables the terminal's own SIGINT generation.
     # These handlers are only a fallback, for a signal sent from outside (for example by `kill`).
     local $SIG{INT}  = sub { $restore->(); exit 0; };
     local $SIG{TERM} = sub { $restore->(); exit 0; };

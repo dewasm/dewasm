@@ -57,7 +57,7 @@ public class Main {
     private static final int FPS = 60;
 
     // Shown on the screen over the game (mirrors `mapKey`).
-    // There's no other discoverability path for a window app.
+    // That is because there's no other discoverability path for a window app.
     private static final String CONTROLS_TEXT = "arrows d-pad  x A  z B  enter start  space select  esc quit";
 
     private static final String WINDOW_TITLE = "NES (dewasm) - Alter Ego";

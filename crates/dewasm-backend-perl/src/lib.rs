@@ -1047,7 +1047,7 @@ impl<'a> Gen<'a> {
         // The explicit call-depth limit.
         // `local` restores the counter on every exit path, including a trap's die-unwind.
         // Each call adds a frame-size weight, not 1.
-        // A pure count lets unbounded fat-frame recursion allocate several GB before the limit.
+        // A pure count lets unbounded fat-frame recursion use several GB of heap before the limit.
         // The specification's `skip-stack-guard-page` has such a frame, with 1056 locals.
         // Byte-bounded native stacks exhaust in a few hundred frames instead.
         self.use_unit("rt/exhausted");
@@ -1364,7 +1364,7 @@ impl<'a> Gen<'a> {
                 w.line(format!("$self->{{data{seg}}} = '';"));
             }
             // A thunk, never a plain call.
-            // The callee must run once this frame is gone, with every `eval` a `try_table` opened.
+            // The callee must run after this frame and every `eval` a `try_table` opened are gone.
             // Escaping the thunk as a return is what unwinds them.
             // The target is the callee's *body* where it has one.
             // So a mutual chain runs in the one outermost trampoline.
@@ -1609,8 +1609,8 @@ impl<'a> Gen<'a> {
     /// A branch's target is always either the frame it is emitted in or one of its ancestors.
     /// Wasm's structured control flow admits nothing else.
     /// Frame label IDs are assigned in strictly increasing frame-opening order.
-    /// Consider a target opened no later than the barrier (its label id `<= barrier_id`).
-    /// It is the barrier's own frame or an ancestor of it: outside the `eval`.
+    /// So a target opened no later than the barrier is the barrier's own frame or an ancestor.
+    /// Such a target has a label id `<= barrier_id` and is outside the `eval`.
     /// A target opened after the barrier is inside its body: still reachable directly.
     /// A `Return` (`Escape::target_label` is `None`) always crosses.
     /// The function frame is beyond every possible barrier.

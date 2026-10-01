@@ -322,8 +322,8 @@ except RgRt.Exit:
     pass
 "#;
 
-/// The whole app cache is preopened at `/apps`.
 /// The guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
+/// So the whole app cache is preopened at `/apps`.
 const CODON_TOYWASM_GLUE: &str = r#"_pre = Dict[str, str]()
 _pre["/apps"] = "{cache}"
 _i = Toywasm(Dict[str, Dict[str, ToywasmRt.Extern]](), ["toywasm", "--wasi", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"], Dict[str, str](), _pre)
@@ -798,13 +798,12 @@ for _k in range(_w * _h):
 write(1, _rgb, _w * _h * 3)
 "#;
 
-/// NES (mirrors the DOOM glue): load the ROM into `allocRom`'s buffer.
-/// The ROM is checked against a fixed checksum.
+/// NES (mirrors the DOOM glue): load the example ROM into `allocRom`'s buffer.
 /// Then tick `{frames}` times with no input.
 /// Compose the frame from the palette-index screen buffer of `agnes` and its palette.
 /// The `& 0x3f` mask is load-bearing.
 /// Dump the frame as a P6 PPM matching the Wasmtime snapshot.
-/// The runner fills `{rom}` (the cached ROM's host path) and `{frames}`.
+/// The runner fills `{rom}` (the example ROM's host path) and `{frames}`.
 const CODON_NES_FRAME_GLUE: &str = r#"from C import write(int, Ptr[byte], int) -> int
 from C import read(int, Ptr[byte], int) -> int
 from C import open(cobj, int) -> int
@@ -871,7 +870,8 @@ dewasm_test_helper::wasi_suite!(Codon, Poll);
 dewasm_test_helper::wasi_suite!(Codon, Fs, CODON_FS_GLUE, ultra);
 dewasm_test_helper::wasi_root_containment_e2e!(Codon, CODON_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Codon);
-// The native 8 MB main stack carries the 5000-frame recursion as is (like Ruby's host stack).
+// The native 8 MB main stack carries the 5000-frame recursion, like Ruby's host stack.
+// So the entrypoint needs no special handling for it.
 dewasm_test_helper::deep_recursion_e2e!(Codon);
 dewasm_test_helper::folded_temp_reuse_e2e!(Codon);
 

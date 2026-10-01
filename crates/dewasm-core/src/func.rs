@@ -131,11 +131,10 @@ pub struct FuncBuilder<'a> {
     /// It is resolved while streaming this body.
     /// Updated per operator, then consulted when a statement is emitted.
     /// It holds its last *known* value across offsets that map to nothing.
-    /// It is tracked as operators stream.
-    /// It is not resolved only for the emit-triggering operator.
-    /// A folded expression's consuming operator may sit on a line-table gap.
-    /// The function `end` is an example.
-    /// Then the expression still carries the source line of the operators that built it.
+    /// It is tracked as operators stream, not resolved only for the emit-triggering operator.
+    /// The tracking lets a folded expression carry the source line of the operators that built it.
+    /// That holds even when its consuming operator sits on a line-table gap.
+    /// The function `end` is an example of such an operator.
     cur_pos: Option<SourcePos>,
     /// The last source position emitted as a marker in this function.
     /// Only change points then produce one.
@@ -531,7 +530,7 @@ impl<'a> FuncBuilder<'a> {
     /// That is the same arithmetic as [`Self::branch_target`], sourced from the exception.
     /// Since the source is not the stack, the branch itself carries no assigns.
     /// Called before the `try_table` frame is pushed.
-    /// The specification validates catch labels against the outer context.
+    /// That is because the specification validates catch labels against the outer context.
     fn catch_clause(
         &mut self,
         captures_exnref: bool,

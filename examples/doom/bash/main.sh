@@ -20,7 +20,7 @@
 # This script never uses `set -u`, because sparse reads of `doom_mem` are meant to default to 0.
 # That matches the rest of the Bash backend.
 # The script also never relies on `set -e` around any `doom_*` call.
-# A generated function's internal arithmetic routinely computes an intermediate value of exactly 0.
+# That is because a generated function's internal arithmetic often yields an intermediate 0.
 # Bash treats that as a "failed" command.
 # The backend's own status chain convention already covers this.
 # Every generated function returns its real status explicitly via `return 0`/`return $?`.
@@ -117,7 +117,7 @@ imp_time_ms() {
 # Only records where the framebuffer lives.
 # `doom_mem` is already a global array, so there is nothing to copy out of it.
 # `../ruby` and `../python` snapshot the buffer here instead.
-# Their host languages don't share address space with the module's memory representation.
+# The reason: their host languages share no address space with the module's memory representation.
 imp_draw_frame() {
   FRAME_BUF_OFF=$1
   R0=
@@ -193,8 +193,8 @@ echo "doom (bash): sourced in $(fmt_secs $((T_SOURCE_END - T_SOURCE_START)))s" >
 # One character cell shows two vertically-stacked source pixels.
 # So cell rows are half of sampled logical-pixel rows.
 # Capped at 160 columns, far short of DOOM's native 320-wide resolution.
-# 640x400 sampled at 320 would be 128000 byte reads/frame.
-# This script wants to keep the render under a second of a 34-SECOND tick.
+# That is because 640x400 sampled at 320 would be 128000 byte reads/frame.
+# That is too many for a render this script wants to keep under a second of a 34-SECOND tick.
 # And 160 columns is already wider than most terminals people actually run this in.
 compute_grid() {
   local term_rows=$1 term_cols=$2 w=$3 h=$4
@@ -223,7 +223,7 @@ compute_grid() {
 # Deliberately flat inside the nested loops: no helper-function calls, no command substitution.
 # It also has no per-cell `printf`.
 # Only string concatenation (+=) and arithmetic ($(( ))) are used.
-# Either of the first two is the standard way to make a Bash render loop slow.
+# That is because either of the first two is the standard way to make a Bash render loop slow.
 # There is no frame-to-frame diffing (compare `../ruby`, which needs it).
 # At ~34s/tick a full redraw every frame costs nothing next to the tick itself.
 # An SGR code is still skipped when it repeats the previous cell's.
@@ -453,7 +453,7 @@ run_interactive() {
     printf '%s' "${ESC}[0m${ESC}[?25h${ESC}[?1049l"
   }
   # Ctrl-C is handled explicitly as a byte in `drain_input` (once raw mode is active).
-  # Raw mode disables the terminal's own SIGINT generation.
+  # That is because raw mode disables the terminal's own SIGINT generation.
   # The INT/TERM traps are only a fallback, for a signal sent from outside (for example by `kill`).
   # They also cover boot, before `drain_input` ever runs.
   # Unlike EXIT, a custom INT/TERM trap does not itself end the process.

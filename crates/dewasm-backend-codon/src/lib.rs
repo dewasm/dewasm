@@ -10,11 +10,11 @@
 //!   Codon's `int` is 64-bit signed, so masked-unsigned i64 values would not fit.
 //! - f32/f64 are native `float32`/`float`.
 //!   Float division goes through an `@llvm` `fdiv` unit.
-//!   Codon's `/` raises on a zero divisor.
+//!   That is because Codon's `/` raises on a zero divisor.
 //!   A float `add`/`sub`/`mul`/`div` with a constant operand is wrapped in `Rt.f32_q`/`Rt.f64_q`.
-//!   Under `-release`, LLVM folds `x * 1.0`, `x / 1.0` and `x + -0.0` to `x`.
+//!   That is because under `-release`, LLVM folds `x * 1.0`, `x / 1.0` and `x + -0.0` to `x`.
+//!   The fold would skip the signaling-NaN quieting wasm requires.
 //!   This was measured on Codon 0.20.1.
-//!   That would skip the signaling-NaN quieting wasm requires.
 //! - Control flow uses the Python backend's branch-register model.
 //!   Block bodies are spliced inline.
 //!   Forward branches set a per-function `_br` register read by guarded regions.

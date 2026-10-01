@@ -17,7 +17,7 @@
 # The exit status is then nonzero.
 # It needs no network, so a consumer can call it before reading the cache.
 # The consumer can then refuse to proceed on an out-of-date cache.
-# It does not measure or test the wrong artifact.
+# That way the consumer does not measure or test the wrong artifact.
 
 set -euo pipefail
 

@@ -2,7 +2,8 @@
  * nes_demo.c: our own committed C source.
  * First-party source is fine to commit; only third-party *artifacts* stay out of the tree.
  *
- * A thin reactor wrapper around `agnes` (`kgabis/agnes`, version fixed in `scripts/nes.sh`).
+ * A thin reactor wrapper around `agnes` (`kgabis/agnes`).
+ * Its version is fixed in `examples/apps/scripts/nes.sh`.
  * It exposes a minimal driving surface with no imports for the NES frame snapshot example.
  * That example is issue #114, and it mirrors the shape of the DOOM example.
  * A host allocates the ROM and loads it.

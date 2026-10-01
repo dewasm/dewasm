@@ -5,7 +5,7 @@
 // Then it drives the game loop with Ebiten for rendering and keyboard input.
 //
 // The frontend lives *inside* the generated package rather than beside it.
-// It reads the module's linear memory (`nesInst.memory.data`) directly.
+// That is because it reads the module's linear memory (`nesInst.memory.data`) directly.
 // That is an unexported identifier only a file in the same package can name.
 // `../main.go` is the command: it imports this package and calls `Run`.
 //
@@ -126,7 +126,7 @@ func drawFrame(setInput func(uint32), tickGame func(), screenOffset func() uint3
 
 // `controlsText` mirrors the key mapping in `buttonMask`.
 // It is shown on the screen, drawn over the game.
-// There's no other discoverability path for a window app.
+// That is because there's no other discoverability path for a window app.
 const controlsText = "arrows d-pad  x A  z B  enter start  space select  esc quit"
 
 // `titleUpdateEvery` limits how often `ebiten.SetWindowTitle` is called.

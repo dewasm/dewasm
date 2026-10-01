@@ -13,7 +13,7 @@ This is the same shape as the DOOM Bash frontend ([`../../doom/bash`](../../doom
 The NES CPU + PPU emulator is entirely the generated Bash.
 Nothing about the emulator is reimplemented here.
 
-The demonstration ROM is **Alter Ego by Shiru**, released into the [public domain](https://shiru.untergrund.net).
+The example ROM is **Alter Ego by Shiru**, released into the [public domain](https://shiru.untergrund.net).
 Pass a path to `run.sh`/`main.sh` to play a different iNES ROM.
 
 ## Honest performance

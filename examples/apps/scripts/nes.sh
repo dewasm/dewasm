@@ -11,7 +11,7 @@
 # nes_demo.c provides `allocRom`/`initGame`/`setInput`/`tickGame` + the frame accessors.
 # The host drives it and composes pixels from the palette-index screen buffer and the palette.
 # `agnes` keeps that palette internally.
-# The ROM (Shiru's public-domain Alter Ego) lands separately at cache/alter_ego.nes.
+# The example ROM (Shiru's public-domain Alter Ego) lands separately at cache/alter_ego.nes.
 # The host copies it into the module via `allocRom`.
 #
 # `agnes` has no upstream wasm32-wasi build, so it is compiled here.

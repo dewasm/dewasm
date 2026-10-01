@@ -5,7 +5,7 @@
 // It also runs the game loop with Ebiten for rendering and keyboard input.
 //
 // The frontend lives *inside* the generated package rather than beside it.
-// It reads the module's linear memory (doomInst.memory.data) directly.
+// That is because it reads the module's linear memory (doomInst.memory.data) directly.
 // It also reads the exported globals (*global[uint32]) directly.
 // Those are unexported identifiers only a file in the same package can name.
 // ../main.go is the command: it imports this package and calls Run.
@@ -213,7 +213,7 @@ func mapKey(k ebiten.Key) (uint32, bool) {
 
 // `controlsText` mirrors the key mapping in `mapKey`.
 // It is drawn on screen over the frame.
-// There's no other discoverability path for a window app.
+// That is because there's no other discoverability path for a window app.
 const controlsText = "arrows move  ctrl fire  space use  shift run  tab automap  ,/. strafe  1-7 weapon  esc menu"
 
 // `titleUpdateEvery` limits how often `ebiten.SetWindowTitle` is called.

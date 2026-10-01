@@ -23,7 +23,7 @@
 # It recomputes the bit mask every tick instead of calling anything on press/release.
 #
 # Run with `--smoke` for a headless self-check (no terminal needed).
-# It loads the default ROM, initializes the game, and ticks it a fixed number of times.
+# It loads the example ROM, initializes the game, and ticks it a fixed number of times.
 # It measures tick rate and render cost, and writes the final frame to screenshot.ppm.
 # Core modules only; raw mode goes through `stty` (`Term::ReadKey` is not core).
 use strict;
@@ -436,7 +436,7 @@ sub run_interactive {
         print EXIT_ALT_SCREEN;
     };
     # Ctrl-C is handled explicitly as a byte in InputHandler.
-    # Raw mode disables the terminal's own SIGINT generation.
+    # That is because raw mode disables the terminal's own SIGINT generation.
     # These handlers are only a fallback for ending the process from outside (for example `kill`).
     local $SIG{INT}  = sub { $restore->(); exit 0; };
     local $SIG{TERM} = sub { $restore->(); exit 0; };

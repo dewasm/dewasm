@@ -7,7 +7,7 @@ ERRNO_NOSYS = 52
 ERRNO_NOTSUP = 58
 ERRNO_SPIPE = 70
 # NOTCAPABLE lives in this always-bundled prelude, not `errno_fs`.
-# The per-descriptor rights model raises it from the stdio-core `fd_*` units too.
+# That is because the per-descriptor rights model raises it from the stdio-core `fd_*` units too.
 # It is not raised only from the `path_*` units that pull in `errno_fs`.
 ERRNO_NOTCAPABLE = 76
 

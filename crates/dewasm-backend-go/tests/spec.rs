@@ -52,11 +52,18 @@ mod common;
 ///   Those backends' kind-only check misses them.
 ///   So only the mutability/limit/tag-type cases remain.
 ///   The two `linking` failures are both global-mutability mismatches.
-/// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature.
-///   That feature is multi-memory, inside a module that also uses `register`.
-///   That module never converts.
-///   So a later assertion against the module it would have written into observes out-of-date state.
-///   Not a cross-module-linking gap itself.
+/// - `linking` (`linking0`, `load1`): out-of-date state left by a module that never converts.
+///   The module that calls `register` is not the one that uses multi-memory.
+///   `linking0` registers `$Mt`, which has one table and no memory.
+///   `load1` registers `$M`, which exports its one memory.
+///   A later module imports that table or memory and writes into it as it instantiates.
+///   That later module declares several memories, and multi-memory is declared unsupported.
+///   So it never converts, and its writes never happen.
+///   A later assertion against the registered module then observes out-of-date state.
+///   In `linking0`, slot 7 of `$Mt`'s table stays null (1 failure).
+///   The write must persist there although the writing module's instantiation then traps.
+///   In `load1`, bytes 20 to 24 of `$M`'s memory stay zero (5 failures).
+///   This is not a gap in cross-module linking itself.
 ///
 /// `skip-stack-guard-page` is *not* here.
 /// Its `function-with-many-locals` has 1056 locals.
@@ -102,7 +109,7 @@ impl dewasm_test_helper::SpecBackend for GoSpec {
     /// Go compiles each `.wast` file to one program (dominated by compile time).
     /// So a plain `cargo test` runs only the shared curated list, plus `skip-stack-guard-page`.
     /// One function in the suite has a frame cost that trips the recursion guard.
-    /// It is this file's `function-with-many-locals`.
+    /// It is `function-with-many-locals` in `skip-stack-guard-page`.
     /// So its exhaustion cases are worth running by default.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
         Some(dewasm_test_helper::curated_with(&[

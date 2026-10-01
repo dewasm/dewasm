@@ -24,7 +24,7 @@ An embedder that only calls exports needs none of this: it can import the packag
 ./run.sh
 ```
 
-builds and opens a window with the bundled demonstration ROM.
+builds and opens a window with the example ROM.
 That ROM is [Alter Ego](https://forums.nesdev.org/viewtopic.php?t=7999) by Shiru, public domain.
 Pass a path to run a different ROM: `./run.sh path/to/game.nes`.
 `./run.sh -smoke` instead runs a headless self-check.

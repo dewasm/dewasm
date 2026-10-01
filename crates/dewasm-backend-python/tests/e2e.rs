@@ -251,8 +251,8 @@ except RgRt.Exit:
     pass
 "#;
 
-/// The whole app cache is preopened at `/apps`.
 /// The guest module this converted interpreter loads (`cowsay.wasm`) is itself a cached app.
+/// So the whole app cache is preopened at `/apps`.
 const PYTHON_TOYWASM_GLUE: &str = r#"inst = Toywasm({}, args=["toywasm", "--wasi", "/apps/cowsay.wasm", "Hello", "from", "dewasm!"], env={}, preopens={"/apps": "{cache}"})
 try:
     inst.invoke("_start")
@@ -637,12 +637,11 @@ out.flush()
 "#;
 
 /// NES (issue #114, mirrors the DOOM glue above).
-/// Load the ROM into `allocRom`'s buffer, and tick `{frames}` times with no input.
-/// The ROM is checked against a fixed checksum.
+/// Load the example ROM into `allocRom`'s buffer, and tick `{frames}` times with no input.
 /// Compose the frame from the palette-index screen buffer of `agnes` and its palette (issue #117).
 /// The `& 0x3f` mask in that step is required.
 /// Then dump the frame as a P6 PPM matching the Wasmtime snapshot.
-/// `{rom}` (the cached ROM's host path) and `{frames}` filled by the runner.
+/// `{rom}` (the example ROM's host path) and `{frames}` filled by the runner.
 const PYTHON_NES_FRAME_GLUE: &str = r#"import sys
 
 nes = Nes()

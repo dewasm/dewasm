@@ -46,11 +46,18 @@ use wast::{WastArg, WastRet};
 ///   imports.wast contributes 59 of them: its fixture module exports tags.
 ///   So it converts only now that tags are represented.
 ///   Every type-mismatch check downstream of it then became reachable at once (28 before).
-/// - `linking` (`linking0`/`load1`): downstream of an *unrelated* declared-unsupported feature.
-///   That feature is multi-memory, inside a module that also uses `register`.
-///   That module never converts.
-///   So a later assertion against the module it would have written into observes out-of-date state.
-///   Not a cross-module-linking gap itself.
+/// - `linking` (`linking0`, `load1`): out-of-date state left by a module that never converts.
+///   The module that calls `register` is not the one that uses multi-memory.
+///   `linking0` registers `$Mt`, which has one table and no memory.
+///   `load1` registers `$M`, which exports its one memory.
+///   A later module imports that table or memory and writes into it as it instantiates.
+///   That later module declares several memories, and multi-memory is declared unsupported.
+///   So it never converts, and its writes never happen.
+///   A later assertion against the registered module then observes out-of-date state.
+///   In `linking0`, slot 7 of `$Mt`'s table stays null (1 failure).
+///   The write must persist there although the writing module's instantiation then traps.
+///   In `load1`, bytes 20 to 24 of `$M`'s memory stay zero (5 failures).
+///   This is not a gap in cross-module linking itself.
 const EXPECTED_FAILURES: &[(&str, u32, &str)] = &[
     ("imports", 59, "import-limits"),
     ("imports2", 2, "import-limits"),

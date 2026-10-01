@@ -1,7 +1,7 @@
 // requires: wasi/wasi_filetype
 // Pack a host file's attributes into a WASI `filestat` (64 bytes).
 // The fields are `dev`, `ino`, `filetype` (+7 padding), `nlink`, `size`, `atim`/`mtim`/`ctim`.
-// All are u64, and times are in nanoseconds.
+// `atim`/`mtim`/`ctim` are each a u64, in nanoseconds.
 // `dev`/`ino`/`nlink` come from the "unix:*" attribute view.
 // That view needs platform support (macOS/Linux).
 // The times all use the portable `lastModifiedTime` (Java exposes no accurate `atim`/`ctim`).

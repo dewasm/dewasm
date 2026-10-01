@@ -1,8 +1,8 @@
 ;; `i64_div`: i64 division and remainder, signed and unsigned.
 ;;
 ;; The `i32_div` chain widened to i64.
-;; Against `i32_div` it separates the cost of the 64-bit value representation.
-;; The other cost is the division correction itself, as `i64_alu` does against `i32_alu`.
+;; Against `i32_div` it separates two costs, the way `i64_alu` does against `i32_alu`.
+;; One is the cost of the 64-bit value representation; the other is the division correction itself.
 ;; Every divisor is `(x & 0xffff) | 3`, which is at least 3.
 ;; That covers two requirements at once.
 ;; Nothing traps: division by zero and the INT64_MIN / -1 overflow are both out of reach.
@@ -26,15 +26,14 @@
 ;; That axis is f32 in `f32_alu`, and exception handling in `eh_throw` and `eh_try`.
 ;; This keeps every other case within reach of the pure-Ruby and pure-Python interpreters.
 ;; Those are the interpreters this suite compares.
-;; A runner that cannot execute a case's axis is excluded for that case in the workload table.
+;; A runner that cannot run a case's axis is excluded for that case in the harness's workload table.
 ;; The reason is stated there.
 ;;
 ;; Memory map, shared by every microbenchmark.
-;; It starts at 0x1000 rather than at 0.
 ;; wasm3 traps whenever a WASI out parameter is written to linear-memory address 0.
 ;; The trap message is "out of bounds memory access".
 ;; Address 0 is valid linear memory, and every other runtime in the matrix accepts it.
-;; So the whole block is moved up out of wasm3's way:
+;; So the whole block starts at 0x1000 rather than at 0, out of wasm3's way:
 ;;
 ;; 0x1000   4  `argc`                   (`args_sizes_get` out parameter)
 ;; 0x1004   4  `argv` buffer size       (`args_sizes_get` out parameter)

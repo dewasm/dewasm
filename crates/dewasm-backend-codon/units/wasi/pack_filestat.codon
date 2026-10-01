@@ -1,7 +1,7 @@
 # requires: memory/fill, memory/i64_store, memory/i32_store8, wasi/wasi_filetype, rt/stat
 # Write a WASI `filestat` (64 bytes) into guest memory.
 # Its fields are `dev`, `ino`, `filetype` (+7 padding), `nlink`, `size`, `atim`/`mtim`/`ctim`.
-# All are u64, and times are in nanoseconds.
+# `atim`/`mtim`/`ctim` are each a u64, in nanoseconds.
 # Host fields are signed: `dev_t` can be negative on macOS, and timestamps can precede the epoch.
 # Wasmtime copies the bits, so each field wraps to u64 rather than being range-checked.
 def pack_filestat(self, st: Rt.Stat, buf: int):

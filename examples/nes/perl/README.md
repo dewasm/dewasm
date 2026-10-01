@@ -5,7 +5,7 @@ It needs no window and no GPU.
 `build.sh` builds the reactor library (`examples/apps/scripts/nes.sh`, cached).
 It converts the library to Perl with dewasm, into `nes_gen.pl`.
 That file is ignored by Git and regenerated on every build.
-`main.pl` loads the demonstration ROM into guest memory and ticks the emulator.
+`main.pl` loads the example ROM into guest memory and ticks the emulator.
 It draws the framebuffer as 24-bit-color half-blocks, reading keys from the terminal in raw mode.
 Core modules only: no CPAN installs.
 Raw mode goes through `stty` because `Term::ReadKey` is not core.
@@ -25,7 +25,7 @@ It is in the emulator's own representation: one palette *index* per pixel at `sc
 Each index resolves against the fixed 64-entry palette at `paletteOffset()` (masked with `0x3f`).
 At terminal resolution that means only the sampled pixels are ever looked up.
 
-The bundled ROM is *Alter Ego* by Shiru, released into the public domain.
+The example ROM is *Alter Ego* by Shiru, released into the public domain.
 
 ## Run
 

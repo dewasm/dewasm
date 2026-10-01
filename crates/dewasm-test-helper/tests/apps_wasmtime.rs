@@ -105,8 +105,8 @@ fn gzip() {
 // `WASM3_COWSAY` has no such problem and runs below.
 // It runs `cowsay` through wasm3 under Wasmtime, against the same snapshot.
 // Hand-written rather than via the per-case `*_e2e!` macros.
-// Those cannot carry the `wasmtime_test` `#[ignore]` attribute.
-// That is the same reason `apps`/`gzip` above are hand-written.
+// That is because the macros cannot carry the `wasmtime_test` `#[ignore]` attribute.
+// The same reason makes `apps`/`gzip` above hand-written.
 #[cfg_attr(not(feature = "wasmtime_test"), ignore)]
 #[test]
 fn fs_apps() {

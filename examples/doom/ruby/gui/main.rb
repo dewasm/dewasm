@@ -6,7 +6,7 @@
 # ../build.sh produces it from `jacobenget/doom.wasm`.
 #
 # The parent ../main.rb draws into a terminal.
-# The Ruby backend only manages ~15 ticks/sec under YJIT.
+# That is because the Ruby backend only manages ~15 ticks/sec under YJIT.
 # And a terminal has orders of magnitude fewer cells than a window has pixels.
 # This one takes the window anyway.
 # That is affordable because the module's 640x400 framebuffer is an exact 2x upscale of 320x200.
@@ -348,7 +348,7 @@ def run_smoke
   end
 
   # Timed separately from the loop above.
-  # Conversion runs inside the tick, as part of ui.drawFrame.
+  # That is because conversion runs inside the tick, as part of ui.drawFrame.
   convert_start = Process.clock_gettime(Process::CLOCK_MONOTONIC)
   10.times { converter.convert(doom.memory.buffer, frame_state.fetch(:buf_off)) }
   convert_ms = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - convert_start) / 10 * 1000

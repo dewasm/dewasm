@@ -47,7 +47,7 @@ KEY_NAMES = (
 # A pressed key stays down for `reportKeyDown` until this many seconds pass without seeing it again.
 # Terminals only deliver key-down events (no key-up), so releases have to be generated.
 # The window is wider than a typical "typematic" gap.
-# Under CPython this frontend manages under two ticks/sec.
+# That is because under CPython this frontend manages under two ticks/sec.
 # So `tickGame()` calls, and therefore chances to notice a repeat, are ~700ms apart.
 RELEASE_TIMEOUT = 0.4
 

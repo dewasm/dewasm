@@ -65,7 +65,7 @@ pub fn build_module(bytes: &[u8]) -> Result<ir::Module> {
 }
 
 /// Build the line table in a pre-pass of its own.
-/// `.debug_line` custom sections normally appear *after* the code section.
+/// That is because `.debug_line` custom sections normally appear *after* the code section.
 /// The table must exist before any function body is translated.
 fn collect_line_table(bytes: &[u8]) -> Result<Option<LineTable>> {
     let mut debug_sections: HashMap<String, Vec<u8>> = HashMap::new();

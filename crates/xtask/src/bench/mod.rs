@@ -4,7 +4,7 @@
 //! It answers one question with numbers.
 //! What does a wasm program cost once dewasm has converted it?
 //! The targets are Ruby, Python, Perl, Go, Java, and Bash source.
-//! The cost is measured against the AOT baseline (Wasmtime).
+//! The cost is measured against the AOT upper bound on speed (Wasmtime).
 //! It is also measured against the wasm interpreters in those same languages (`pywasm`, `wardite`).
 //! The `wasm3-*` runners add the same-category counterpart to those interpreters.
 //! They are the converted wasm3 build, interpreting the workload at run time.
@@ -283,7 +283,7 @@ fn describe(workload: &Workload) -> String {
 }
 
 fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()> {
-    // `wasmtime` is not optional: it is the baseline every ratio is taken against.
+    // `wasmtime` is not optional: it is the upper bound on speed every ratio is taken against.
     // It is also the oracle every runner's `stdout` is diffed against.
     // Without it the suite would produce numbers with nothing to check them.
     // So it fails loud instead.

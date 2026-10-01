@@ -1,7 +1,7 @@
 # requires: wasi/wasi_filetype
 # Packs an `os.stat_result` into a WASI `filestat` (64 bytes).
 # Its fields are `dev`, `ino`, `filetype` (+7 padding), `nlink`, `size`, `atim`/`mtim`/`ctim`.
-# All are u64, times in nanoseconds.
+# `atim`/`mtim`/`ctim` are each a u64, in nanoseconds.
 # The host fields are signed, and Wasmtime copies the bits.
 # `dev_t` is signed, and macOS reports negative `st_dev` for pipes and `devfs` nodes.
 # Timestamps can sit before the epoch.

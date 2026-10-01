@@ -177,7 +177,7 @@ pub const ZEROPERL_EVAL: CApiCase = CApiCase {
 /// ExifTool 13.42 on `zeroperl` (issue #70).
 /// The flattened `exiftool` CLI driver runs on the *same* `cache/zeroperl.wasm` reactor.
 /// The driver is `src/exiftool` of `6over3/exiftool`, fetched into `cache/exiftool-lib/`.
-/// Its `@6over3/zeroperl-ts` SFS blob already embeds the full `Image::ExifTool` module tree.
+/// The reactor's `@6over3/zeroperl-ts` SFS blob embeds the full `Image::ExifTool` module tree.
 /// So `use Image::ExifTool` resolves in-guest with no module preopen.
 /// The glue drives `_initialize` → `zeroperl_init` → `zeroperl_eval` of a driver snippet.
 /// The snippet sets `@ARGV`/`$0` and `do`es the script; `zeroperl_flush` follows.
