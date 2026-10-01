@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Populate crates/text-check/cache/ with the word lists the vocabulary check reads.
+# Populate `crates/xtask-text-check/cache/` with the word lists the vocabulary check reads.
 # They are NGSL 1.2 and NAWL 1.2 by Browne, Culligan, and Phillips.
 # The official source is `https://www.newgeneralservicelist.com`.
 # Both lists are licensed under CC BY-SA 4.0, so they are fetched, never committed.
@@ -47,7 +47,7 @@ for entry in "${lists[@]}"; do
     continue
   fi
   if [ -n "$check" ]; then
-    echo "text-check: $out does not match its sha256; run crates/text-check/setup.sh" >&2
+    echo "xtask-text-check: $out does not match its sha256; run crates/xtask-text-check/setup.sh" >&2
     stale=1
     continue
   fi
@@ -67,5 +67,5 @@ for entry in "${lists[@]}"; do
   echo "fetched $out"
 done
 [ "$stale" = 0 ] || exit 1
-[ -n "$check" ] && echo "text-check: every cached list matches its sha256"
+[ -n "$check" ] && echo "xtask-text-check: every cached list matches its sha256"
 exit 0

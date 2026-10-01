@@ -1661,13 +1661,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "text-check"
-version = "0.1.0"
-dependencies = [
- "pulldown-cmark",
-]
-
-[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2463,10 +2456,18 @@ dependencies = [
  "png",
  "serde",
  "serde_json",
- "text-check",
  "wasmparser 0.254.0",
  "wasmtime",
  "wasmtime-wasi",
+ "xtask-text-check",
+]
+
+[[package]]
+name = "xtask-text-check"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "pulldown-cmark",
 ]
 
 [[package]]

@@ -35,16 +35,16 @@ The following tools and set-up steps are required to run all tests correctly:
       Local development and CI use `wasi-sdk-34`.
     - A host Ruby with `rake`, for `mruby`.
   * Each `scripts/*.sh` fails loudly naming what it is missing.
-- **The word lists of the text check**: fetch them once with `crates/text-check/setup.sh`.
-  `cargo test -p text-check` reads them from `crates/text-check/cache`.
-  `crates/text-check/setup.sh --check` names any that do not match their sha256.
+- **The word lists of the text check**: fetch them once with `crates/xtask-text-check/setup.sh`.
+  `cargo test -p xtask-text-check` reads them from `crates/xtask-text-check/cache`.
+  `crates/xtask-text-check/setup.sh --check` names any that do not match their sha256.
 
 ## Commands
 
 ```console
 $ git submodule update --init
 $ examples/apps/setup.sh
-$ crates/text-check/setup.sh
+$ crates/xtask-text-check/setup.sh
 $ cargo test
 ```
 

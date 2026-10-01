@@ -1,5 +1,5 @@
 [package]
-name = "text-check"
+name = "xtask-text-check"
 description = "The checks of the AGENTS.md writing style that a program can run over the repository's text"
 version.workspace = true
 edition.workspace = true
@@ -12,5 +12,6 @@ publish = false
 workspace = true
 
 [dependencies]
+anyhow.workspace = true
 # Counting the characters a reader sees in Markdown takes a CommonMark parser.
 pulldown-cmark = { version = "0.13", default-features = false }
