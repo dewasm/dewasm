@@ -43,14 +43,14 @@ It builds **two artifacts from the one source**:
 The decision 9 rule ("version-pinned, checksum-verified, never committed") is unchanged.
 The stamp records the source checksum; only the producing step moved from "extract" to "compile".
 The library test's expectation is a fixed string rather than a Wasmtime snapshot.
-The `wasmtime` CLI cannot drive a C API whose results live in guest memory.
+That is because the `wasmtime` CLI cannot drive a C API whose results live in guest memory.
 Every expected value is determined by the source version.
 
 Cost accepted: `setup.sh` now requires `zig` and `unzip`, failing loudly per decision 15 when missing.
 Only `setup.sh` requires them, never `cargo test` with a warm cache.
 Build output bytes vary across Zig versions.
 That is fine because nothing fixes the bytes of the *artifact*.
-The snapshots compare program behavior, which the source version decides.
+That is because the snapshots compare program behavior, which the source version decides.
 
 ## Rejected alternatives
 

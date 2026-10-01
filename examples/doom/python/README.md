@@ -81,7 +81,7 @@ Terminals only report key-down events, never key-up, so a release is generated.
 After a key press, `reportKeyUp` fires automatically once ~400ms pass without seeing that key again.
 Key repeat from holding a key down keeps extending the deadline.
 That window is wider than a typical key-repeat gap.
-Under CPython this backend manages under two ticks/sec.
+That is because under CPython this backend manages under two ticks/sec.
 So the game barely gets a chance to notice a repeat before the next poll.
 
 Save games are written to `.savegame/` (ignored by Git) relative to wherever the script runs.

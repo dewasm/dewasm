@@ -1,7 +1,7 @@
 # Documentation policy
 
 This file states where each kind of dewasm document belongs.
-New content then lands in one obvious place, and nothing is written twice.
+So new content lands in one obvious place, and nothing is written twice.
 Everything is written in English.
 
 Two top-level directories, split by audience:

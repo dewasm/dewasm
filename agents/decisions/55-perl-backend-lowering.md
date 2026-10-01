@@ -97,17 +97,17 @@ An unbounded recursion just uses up memory.
   The weighted scheme (weight 133 → ~750 frames) traps on it in ~70 MB.
   Small functions keep weight 1, so legitimate deep recursion is unchanged.
   The measured cost is ~1.75x per call, and it is accepted.
-  Without the counter, `assert_exhaustion` is an OOM kill.
+  That is because without the counter, `assert_exhaustion` is an OOM kill.
 - **Module = one package of blessed hash reference instances; the embedded runtime is prefix-namespaced.**
   `Package->new(\%imports)` builds a blessed hash reference.
   It holds memory/table/global objects, import code references, and an `exports` closure map.
   `invoke`/`global_get`/`wasm_import` mirror Python's [decision 7](7-import-providers.md) surface.
   So `register`ed instances serve as import providers.
-  The harness then runs with `supports_registered_imports`.
+  So the harness runs with `supports_registered_imports`.
   Runtime units live in `Rt`-rooted packages (`Rt`, `Rt::Memory`, `Rt::Table`, `Rt::Global`).
   Perl package names are absolute (no lexical nesting).
   So `Embedded` linkage rewrites the `Rt::` prefix to `<Package>::Rt::` at bundle time.
-  Two generated artifacts in one process then keep independent runtimes.
+  So two generated artifacts in one process keep independent runtimes.
   Ruby gets this from constant nesting; Perl gets it by a text rewrite.
   `Alias("Rt")` (the specification harness) keeps the shared top-level name.
 - **Linear memory is one byte string changed in place.**

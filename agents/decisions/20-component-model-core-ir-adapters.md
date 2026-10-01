@@ -80,7 +80,7 @@ A D0 probe of a real Rust `wasm32-wasip2` binary fixed the required shape:
   Flat-position variants *with payloads* are refused.
   They do not occur in CLI-world signatures; memory-position variants are general.
   The Ruby declaration is deliberately **`Partial`, never `Supported`**.
-  The specification harness's component-model-tagged directive skips must stay legitimate.
+  That is because the specification harness's component-model-tagged skips must stay legitimate.
   Decision 8's anti-regression turns a `Supported` flip into hard failures.
   Those failures would come from the unexecuted `.wast` component directives.
 - **Connecting instances follows instantiation arguments, never name matching.**

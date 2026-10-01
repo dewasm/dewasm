@@ -78,7 +78,8 @@ The credits fade-in completes at ~37.
 Every extra frame is real wall time in Bash's `ultra` category.
 `crates/xtask/src/nes_snapshot.rs` guards against a blank or near-blank frame.
 That guard accepts ≥5 distinct colors.
-NES palettes are small (the recorded frame has 7), so DOOM's >50 threshold does not transfer.
+That is because NES palettes are small (the recorded frame has 7).
+So DOOM's >50 threshold does not transfer.
 
 ## Rejected alternatives
 
@@ -90,7 +91,7 @@ NES palettes are small (the recorded frame has 7), so DOOM's >50 threshold does 
   Natural in C.
   But it pushes preopen and `argv` set-up into all six frontends and the snapshot oracle.
   That gives up the empty import section for nothing the example would show.
-  WASI file I/O is already exercised by CPython, CRuby, and sqlite3.
+  That is because WASI file I/O is already exercised by CPython, CRuby, and sqlite3.
 - **Other emulator cores.**
   `binjnes` (more accurate, more mappers) is tied to its Emscripten/SDL host layers.
   `smolnes` is code-golfed beyond modification; the Rust cores target `wasm-bindgen`.

@@ -27,7 +27,7 @@ The mechanism was isolated with a minimal C model:
 - Clang performs no such fold.
 
 `x - (+0.0)` is the only affected identity.
-`x - (-0.0)` and `x + (±0.0)` are not foldable under signed zeros.
+That is because `x - (-0.0)` and `x + (±0.0)` are not foldable under signed zeros.
 Only +0.0 has the literal decode branch.
 Upstream, NaN payloads are explicitly not considered by Ruby (bugs.ruby-lang.org #20662).
 So this is behavior dewasm must own, not a bug fix to wait for.

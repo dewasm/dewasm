@@ -19,7 +19,7 @@ Pass a path to `run.sh`/`main.sh` to play a different iNES ROM.
 ## Honest performance
 
 This is an existence-proof example, not a playable emulator.
-Each `tickGame` (one NES video frame) takes tens of seconds.
+That is because each `tickGame` (one NES video frame) takes tens of seconds.
 Early boot frames take ~17s, and the full 40-frame boot-to-credits run averages ~30s.
 Rendering itself is well under 1s.
 These were measured on an Apple Silicon laptop, headless.

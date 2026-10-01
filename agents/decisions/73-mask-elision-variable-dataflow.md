@@ -11,7 +11,7 @@ This is stage 2 of issue #164.
 
 Decision 71 loosened the storage invariant to "masked at its observation points".
 But it kept every store an observation point: a local or temp assignment always masks.
-Proving that every future read accepts an unmasked value needs a whole-function analysis.
+That is because proving every future read accepts an unmasked value needs a whole-function analysis.
 Store masks are the largest group of what remains.
 A folded expression tree carries one final mask at its store.
 A hot loop re-masks its counter every iteration.
@@ -24,7 +24,7 @@ So the within-tree stage left them all in place.
 Every read of it is modular.
 Its value interval converges within the backend's unboxed-integer limit.
 The analysis lives beside the consumption table in `dewasm_backend::masking`.
-It follows from the shared masked-unsigned convention (decision 2), not from any one language.
+That is because it follows from decision 2's shared masked-unsigned convention, not one language.
 Only the limit and the emission are per backend.
 
 **Qualification: every read must be modular.**
@@ -87,7 +87,7 @@ A variable proven byte-narrow lets a product elide a mask that masked-width oper
 Decision 77's constant-equality rewrite also reasons about raw intervals.
 So a backend holding a per-function `Elision` routes the rewrite through that same analysis.
 It routes the rendering through it as well.
-The two must agree on which masks drop.
+That is because the two must agree on which masks drop.
 Otherwise a rewritten comparison would read a raw value the rewrite never accounted for.
 Under the uniform limit an i64 variable qualifies only if every definition is provably narrow.
 That is because full masked i64 width already exceeds the limit.
@@ -134,7 +134,7 @@ It is the same careful choice decision 71 made for i64, applied per variable.
   | ISeq `memsize` | 43,390,448 bytes | 43,347,776 bytes |
 
 - Coverage is small by design.
-  In C-derived code most integers are eventually compared or passed across a boundary.
+  That is because in C-derived code most integers are eventually compared or passed across a boundary.
   One such read removes qualification from the whole variable.
   What does clear are variables read purely as arithmetic and bitwise operands.
   Wider coverage needs a finer-grained model (per definition-use region instead of per variable).

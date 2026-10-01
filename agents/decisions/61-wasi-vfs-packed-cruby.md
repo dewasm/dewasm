@@ -60,7 +60,7 @@ The `wasmtime_test` suite revalidates it against a live engine.
   It leaves the pack step itself (the thing this decision wants covered) outside the test.
 - **No coverage (the current state).**
   Leaves ruby.wasm's intended usage untested and the Wizer data-segment shape unexercised.
-  The whole point of the app suite is the shapes users actually run (decision 9).
+  That is because the whole point of the app suite is the shapes users actually run (decision 9).
 - **Packing CPython the same way.**
   `wasi-vfs` can only pack modules linked against `libwasi_vfs.a`.
   The `brettcannon/cpython-wasi-build` binary the cache holds at a fixed version is not.
@@ -79,7 +79,7 @@ The `wasmtime_test` suite revalidates it against a live engine.
   Python was moved to `ultra` by issue #126 (a CI-runner memory limit).
   Bash was added with its other giants in issue #143.
   Go and Java are excluded for the unpacked CRuby's own reasons.
-  The packed module is the same interpreter, strictly larger.
+  That is because the packed module is the same interpreter, strictly larger.
 - `setup.sh` gains a required tool: `wasi-vfs`.
   It is a prebuilt CLI or `cargo install wasi-vfs-cli`; `require_tool` fails loudly without it.
   Its version participates in the stamp and the CI cache key, so a new CLI version packs again.

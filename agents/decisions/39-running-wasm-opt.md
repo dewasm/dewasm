@@ -37,7 +37,7 @@ The `libpcap`/tree-sitter modules are converted on every heavy-conditional e2e r
 As a side effect it re-encodes the `call_indirect` immediates.
 So the modules audit as *pure* baseline rather than baseline + the reference-types bit.
 Only modules we build qualify.
-A fetched upstream artifact is checked against its published checksum.
+That is because a fetched upstream artifact is checked against its published checksum.
 It must not be silently rewritten.
 
 ## Decision
@@ -45,15 +45,16 @@ It must not be silently rewritten.
 Run `wasm-opt -O2` in-place over each locally-built module immediately after it is compiled.
 This happens before the module lands in the cache.
 The deciding rule: **run `wasm-opt` over a module only if `setup.sh` builds it from source.**
-`setup.sh` can then re-verify it; a fetched artifact is never rewritten.
+So `setup.sh` can re-verify it; a fetched artifact is never rewritten.
 Concretely this is every built-from-source module, with two exceptions.
 The modules are the three sqlite3 shapes, `minigzip`, `libpcap`, tree-sitter, and `ripgrep`.
 The exceptions are these:
 
 - The DWARF fixture (`dwarf-fixture.sh`) is skipped.
-  Its `-g` debug information is the whole point of the case (decision 38), and `wasm-opt` would strip it.
+  That is because its `-g` debug information is the whole point of the case (decision 38).
+  `wasm-opt` would strip it.
 - `mruby` (`mruby.sh`) is skipped.
-  The fixed baseline flag set below cannot parse mruby's exception-handling instructions.
+  That is because the fixed baseline flag set cannot parse mruby's exception-handling instructions.
   See [decision 69](69-exception-handling-accepted-input.md).
   So that build strips debug information at link time with `-Wl,--strip-debug` instead.
 
@@ -88,7 +89,7 @@ After adoption, the `libpcap` / tree-sitter C-API cases and `ripgrep`'s `rg_sear
 `ripgrep`'s Wasmtime snapshot was re-checked too, and all passed.
 The command was `cargo test -p dewasm-test-helper --features wasmtime_test --test apps_wasmtime`.
 `ripgrep` needs that extra ground-truth test.
-It is the one module rewritten by `wasm-opt` with a committed Wasmtime snapshot.
+That is because it is the one module rewritten by `wasm-opt` with a committed Wasmtime snapshot.
 When the pass was extended to sqlite3 and `minigzip`, the same re-run confirmed it.
 The sqlite3 shell/C-API cases stayed identical against the optimized binaries.
 So did the byte-exact `minigzip` `gzip` snapshot.

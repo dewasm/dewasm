@@ -54,7 +54,7 @@ Concretely, in [`runtime/ruby/units/memory/`](../../runtime/ruby/units/memory/) 
   Narrow stores were already reducing, and float stores do not touch the value.
 - A unit that calls another unit forwards the base and offset separately.
   `f32_loado` calls `i32_loado(a, off)`, not `i32_load(a + off)`.
-  The inner unit's wrap must see the base alone.
+  That is because the inner unit's wrap must see the base alone.
   Otherwise a base-plus-offset sum crossing 2^32 would wrap back into bounds instead of trapping.
 - The emitters render the address and the stored value in `Modular` context.
   The emitters are `mem_call` and the `Stmt::Store` arm.

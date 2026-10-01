@@ -45,11 +45,12 @@ The decision 16 test had to keep Bash rejecting every new construct at conversio
   No wrapper.
   Accepted limitation: a host may pass Ruby `nil` as a "non-null" `externref`.
   That cannot be told apart from `ref.null extern`.
-  Wasm's null is whatever the host's null is, the same equation every JS embedding uses.
+  That is because wasm's null is whatever the host's null is, the equation every JS embedding uses.
 - **`Rt::Table` stores one `@slots` array** instead of parallel `@types`/`@funcs`.
   The class is in `runtime/ruby/units/table/_class.rb`.
   Since a `funcref` is the pair, slots are independent of representation.
-  `get`/`set`/`grow`/`fill`/`copy`/`init` move values without looking inside them; only `call` takes the pair apart.
+  So `get`/`set`/`grow`/`fill`/`copy`/`init` move values without looking inside them.
+  Only `call` takes the pair apart.
   Tables now carry their `max` (new `Table.new(min, max)`).
   That is because `table.grow` must refuse growth past it (`table/grow.rb`, returns `0xffffffff`).
 - **`ValType` gains flat `FuncRef`/`ExternRef` variants**, not a structured `Ref(RefType)`.
@@ -57,7 +58,7 @@ The decision 16 test had to keep Bash rejecting every new construct at conversio
   Until then the flat variants keep every backend match one arm per type.
   `ValType::is_ref()` + `default_value` collect the places that will need migrating.
 - **Element items became a proper `enum`** (`ir::ElemItem::Func | Null | Global`).
-  The testsuite's `elem.wast` fills a table slot from an imported `funcref` global.
+  That is because the testsuite's `elem.wast` fills a table slot from an imported `funcref` global.
   That is a `global.get` item, which `Option<u32>` could not express.
   Ruby renders `Global(i)` as `@g{i}.value`.
 - **Conditioning: `check_module_support` grew a `ReferenceTypes` require.**

@@ -64,7 +64,7 @@ A `codon build` binary needs it for Codon's runtime shared libraries.
 
 **The tick rate is unmeasured.**
 The binary builds and plays, but no rate is quoted here.
-None was taken under a method worth quoting.
+That is because none was taken under a method worth quoting.
 The `--smoke` self-check times 15 ticks.
 How much the game simulates per tick depends on the wall clock it reads.
 So the same binary reports anywhere from 9 to 66 ticks/sec across repeated runs.

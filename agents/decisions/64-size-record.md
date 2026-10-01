@@ -66,7 +66,7 @@ That split also keeps the explanations out of every regeneration's diff.
 **Raw bytes, never compressed.**
 What a release artifact weighs is the number a person distributing it pays.
 Compression is also not neutral between the two sides being compared.
-Source compresses far better than a binary.
+That is because source compresses far better than a binary.
 So a `gzip` column would flatten exactly the differences this record exists to track.
 Every later size improvement would also show up smaller than it is.
 
@@ -106,7 +106,7 @@ The implementation did this first, and the maintainer rejected it.
 It splits record storage by kind.
 So the project would carry two conventions for one thing.
 A speed record would be in `benchmarks/results/`, a size record somewhere else.
-A reader looking for "the measurements" would have to know which kind they wanted to find either.
+So a reader looking for "the measurements" would have to know which kind they wanted to find either.
 The document being next to its record is worth less than one home for all of them.
 
 **Derive sentences in the generated document.**
@@ -134,7 +134,7 @@ A filtered benchmark run would also silently produce a partial size record.
 
 **A test that fails when a size gets worse.**
 Attractive, and too early: the thresholds would be guesses.
-The number moves with the host's wasm binaries as well as with code generation.
+That is also because the number moves with the host's wasm binaries as well as with code generation.
 The record is what a size PR shows its effect in.
 Enforcement can come later if the numbers turn out to be stable enough to bound.
 

@@ -12,7 +12,7 @@
 //!
 //! The snapshot is a P6 PPM ([`frame_to_ppm`]).
 //! The alpha byte of the module's `B,G,R,A` framebuffer is padding and is dropped.
-//! This matches the example frontends' own screen capture writers (`examples/doom/ruby/main.rb`).
+//! This matches the example frontends' own screenshot writers (`examples/doom/ruby/main.rb`).
 
 use std::path::PathBuf;
 

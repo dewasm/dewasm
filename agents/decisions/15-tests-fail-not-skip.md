@@ -24,7 +24,7 @@ The problem is a developer (or CI runner) with a broken or partial environment.
 They see `cargo test` pass and reasonably conclude the code works.
 In fact, nothing ran.
 A missing interpreter does not justify a wasm-to-source converter's tests reporting success.
-The interpreter is exactly the environment those tests exist to exercise.
+That is because the interpreter is exactly the environment those tests exist to exercise.
 
 ## Decision
 
@@ -44,7 +44,7 @@ It panics internally, since `run_suite` has no legitimate "interpreter absent" p
 The `tests/spec` submodule check follows the same rule (`assert!` instead of an `eprintln!` + return).
 `docs/testing.md` is the single place that documents what a full `cargo test` run actually requires.
 So every panic message has one fixed place to point to.
-It need not restate set-up instructions inline.
+So it need not restate set-up instructions inline.
 
 **The `apps` cases stop depending on `wasmtime` altogether.**
 The alternative was adding it to the list of tools now required.

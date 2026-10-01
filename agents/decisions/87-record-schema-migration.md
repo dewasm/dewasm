@@ -26,7 +26,7 @@ A reader checks the version and stops; it never interprets an old shape.
 The migration preserves everything it does not transform.
 Measurements are written back byte-identically.
 `serde_json`'s `float_roundtrip` feature exists for this.
-The default parser changes the last ulp of a stored value.
+That is because the default parser changes the last ulp of a stored value.
 
 ## Rejected alternatives
 

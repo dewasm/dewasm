@@ -19,7 +19,7 @@ That is material a user would never open, and a user looking through `docs/` had
 
 Both lived under `docs/`, so the layout said nothing about who a file was for.
 A rule separates them: nothing outside the agent-facing set references the agent-facing material.
-That rule had to be carried in text against a directory structure that contradicted it.
+So that rule had to be carried in text against a directory structure that contradicted it.
 
 The records were named "Architecture Decision Records".
 "Architecture" described almost none of them (example shapes, test harnesses, benchmark design).
@@ -60,7 +60,7 @@ Split the top level by audience.
 
 **Deciding criterion:** *classify a document by its reader, not by its subject.*
 *Put the classification in the directory tree.*
-*A rule that the layout contradicts has to be re-argued every time someone adds a file.*
+*That is because a rule the layout contradicts has to be re-argued every time someone adds a file.*
 
 ## Rejected alternatives
 
@@ -87,7 +87,7 @@ Split the top level by audience.
 - **Leave the authoring procedure in the skill.**
   **Let `agents/decisions/README.md` hold only the quality bar.**
   The split was the source of the drift.
-  The skill's copy of the numbering and index rules is exactly the part that goes out of date.
+  That is because the skill's copy of the numbering and index rules is the part that goes out of date.
   Only Claude Code can see it.
 
 ## Consequences

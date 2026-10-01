@@ -14,7 +14,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
   It holds the status label, a date, and a one-paragraph "what landed / what remains" summary.
 - The status label is one of two values: `Accepted`, or `Superseded (decision N)`.
   The number in parentheses names what replaced it, and it is required on `Superseded`.
-  A record that does not name the decision that replaced it leaves the reader with nowhere to go.
+  That is because a record that does not name its replacement leaves the reader with nowhere to go.
 - There is no `Proposed`: a decision is recorded once it is made.
   An idea not yet decided lives in an issue until then.
 - Scope and progress qualifiers never go in the label.
@@ -182,7 +182,7 @@ Then verify:
   Decision 5 is a reasonable length for a policy-sized decision.
   Decision 0 is one for a foundation-sized decision.
 - Move research material (surveys, comparison tables) out of the record and cite it.
-  The record is the decision, not the research.
+  That is because the record is the decision, not the research.
 - Base claims on real code (`crates/.../file.rs`, `crates/dewasm-backend-<lang>/units/`) where possible.
 
 ## Relationship to other documents

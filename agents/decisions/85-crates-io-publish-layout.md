@@ -13,7 +13,7 @@ The actual `cargo publish` of the nine crates is a release step, not part of thi
 0.1.0 publishes the workspace to crates.io so `cargo install dewasm` works without a clone.
 `cargo package` only includes files under a crate's own directory.
 But each backend's `build.rs` embedded its units from the repository-level `runtime/<lang>/units/`.
-That layout is decision 6's, and a packaged backend crate could not build with it.
+That layout is decision 6's, and so a packaged backend crate could not build with it.
 Separately, the CLI package was named `dewasm-cli` while its binary is `dewasm`.
 Also, crates.io dependencies must name a version.
 The path-only `[workspace.dependencies]` entries did not.

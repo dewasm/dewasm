@@ -80,11 +80,11 @@ The suite never runs the generated program.
   The next-slowest, `rg` (~1.1-2.1 s), sits in the same cluster as the SQLite cases.
   It stays in the fast test.
   The rule is one shared threshold on the measured times, not a per-backend list chosen by hand.
-  The data showed no backend needs a different set.
+  That is because the data showed no backend needs a different set.
 
 **Deciding criterion:** *conversion is worth asserting on its own.*
 *That holds wherever running is not practical or merely not set up.*
-*It is cheap, deterministic, and needs no oracle.*
+*That is because it is cheap, deterministic, and needs no oracle.*
 *So the whole cache is covered for every backend.*
 *This holds regardless of which pairs an execution suite reaches.*
 What puts a convert trial behind `slow_test` is its measured `dev`-profile time against the fast test.

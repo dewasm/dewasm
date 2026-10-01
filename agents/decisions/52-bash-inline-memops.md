@@ -46,7 +46,8 @@ This is verified, and exercised by the specification linking tests.
 
 `mem_copy`/`fill`/`init`/`grow`/`size` stay unit calls (bulk or rare).
 The `mem_*` load/store units themselves remain.
-WASI units and cross-module paths still call them, and the units lint keeps binding them.
+That is because WASI units and cross-module paths still call them.
+The units lint also keeps binding them.
 
 ## Rejected alternatives
 

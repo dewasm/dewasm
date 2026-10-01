@@ -33,7 +33,7 @@ The same criterion applied one level up merged two copies of the frame analysis 
 Ruby's and Python's copies differed in exactly one capability.
 That capability is whether the language has a break to a block end.
 So that difference became a parameter.
-The walker lives once, in `crates/dewasm-backend/src/flat.rs` next to its consumer.
+The walker therefore lives once, in `crates/dewasm-backend/src/flat.rs` next to its consumer.
 
 ## Rejected alternatives
 

@@ -46,7 +46,7 @@ It covers a feature that an app in the app list needs but not every backend can 
 - Bash stays `Unsupported`: it has no exception mechanism.
   So the lowering would be a status code passed up through every call.
   That changes the calling convention of the whole backend.
-  No app in the app list needs Bash specifically.
+  Another reason is that no app in the app list needs Bash specifically.
 
 Only the final form of the proposal is accepted.
 The legacy `try`/`catch`/`delegate` instructions stay rejected.
@@ -61,7 +61,7 @@ Code this governs:
 - `crates/dewasm-core/src/{ir,func,module}.rs` (IR and parsing);
 - `crates/dewasm-backend/src/lib.rs` (`check_module_support`);
 - `src/flat.rs` in the same crate: functions containing a `try_table` are never flattened.
-  A handler must stay lexically inside its frame.
+  That is because a handler must stay lexically inside its frame.
 - the five backend lowerings with their `runtime/<lang>/units/rt/` exception units;
 - `crates/dewasm-test-helper/src/apps_convert.rs` (the per-entry required feature);
 - `crates/xtask/src/feature_audit.rs` (exception handling never defers an app by itself).
@@ -84,7 +84,7 @@ Code this governs:
   Its lowering would be a whole-backend calling-convention change nobody needs.
 - **A Bash lowering that passes an exception status up through every call.**
   Rejected as its own item.
-  It taxes every call site in every Bash artifact for a feature with no Bash-specific demand.
+  That is because it taxes every Bash call site for a feature with no Bash-specific demand.
   Revisit only if an app in the app list must run under Bash specifically.
 
 ## Consequences

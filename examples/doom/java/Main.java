@@ -52,7 +52,7 @@ public class Main {
     // It uses only BufferedImage/ImageIO, which render in software and need no display.
     // A few Enter presses are injected along the way.
     // They drive DOOM from its title/legal screens through the menu defaults into a loaded level.
-    // So the final frame is a real 3D view of a level, with lighting that varies per wall.
+    // So the final frame is a real 3D view of a level, with varied per-wall diminished lighting.
     // It is not a flat, low-color title card.
     // That's what the distinct-color sanity check below is actually probing for.
     private static void runSmoke() throws IOException {
@@ -87,9 +87,9 @@ public class Main {
             }
         }
         System.out.println("smoke: " + colors.size() + " distinct colors in final frame");
-        // DOOM's renderer shades a 256-entry palette through a few levels of reduced light.
+        // DOOM's renderer shades a 256-entry palette through a few levels of diminished lighting.
         // So even a busy 3D scene tops out at a few hundred distinct colors per frame.
-        // A first-level view with HUD, water, and one patch of blood measured ~150.
+        // A first-level view with HUD, water, and a blood decal measured ~150.
         // 1000 is unreachable by construction.
         // 100 is comfortably above a blank/solid-color buffer.
         // Such a buffer would mean the memory read was set up wrong.

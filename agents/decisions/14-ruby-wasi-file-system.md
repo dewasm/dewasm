@@ -68,7 +68,7 @@ That holds even in a demonstration runtime.
   It extends the existing `args:`/`env:` keyword arguments (decision 7).
   `wasi_bundled`'s generated `initialize` gained `preopens: {}` alongside them.
   So the fallback construction stays `@wasi ||= Rt::WASI.new(args:, env:, preopens:)`.
-  The provider protocol itself does not change.
+  So the provider protocol itself does not change.
   Standalone mode reads the `DEWASM_PREOPEN` environment variable (`guest=host,...`).
   It fills the same keyword argument.
   It is kept separate from `ARGV` because `ARGV` already mirrors the guest's own `argv` one-to-one.

@@ -54,7 +54,7 @@ A `codon build` binary needs it for Codon's runtime shared libraries.
 **Measured ~400-420 frames/sec headless (`--smoke`, `-release`, on an Apple Silicon laptop).**
 The NES frame rate is ~60Hz, so this is about 7x the frame rate the emulator needs.
 So the pacing is a sleep that holds each frame to a fixed time step.
-The interactive status line sits at 59.9-60.1 frames/sec.
+So the interactive status line sits at 59.9-60.1 frames/sec.
 That is roughly 36x the [Python frontend](../python/)'s ~11 frames/sec under PyPy.
 It is the first NES terminal frontend here with speed to spare rather than too little.
 

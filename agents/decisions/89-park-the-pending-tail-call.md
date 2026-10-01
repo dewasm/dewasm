@@ -50,7 +50,7 @@ Anything else is wrapped instead of parked.
 That covers a foreign instance's entry, and a callee with no entry at all.
 That is one allocation, on a path a chain does not take.
 Go needs no wrapper.
-Its tail call has already left every outer `try_table` closure by the time it is emitted.
+The reason: its tail call has already left every outer `try_table` closure by the time it is emitted.
 Java does need one, and getting that wrong is observable rather than merely slow (see below).
 
 The argument expressions are safe to write straight into the slots.
@@ -67,11 +67,11 @@ Code this governs:
   The argument array remains.
   In Go the thunk is a closure whose whole cost *is* the capture.
 - **Defunctionalize the mutually tail-calling set into one dispatch loop.**
-  A step is then a state assignment.
+  So a step is a state assignment.
   It was measured 2.85x faster than parking at ten arms, even at two hundred.
   At five hundred it was nine times *slower*, past the code size the JIT handles well.
   It could be had as a pass limited to a small group, and it is not being taken.
-  The app the proposal was accepted for has a group of 519, squarely past that size.
+  That is because the app the proposal was accepted for has a group of 519, squarely past that size.
   So the pass would refuse exactly the case that motivated the work.
   It would also buy a whole-module analysis with a closed-world requirement.
   The return would be guests nobody has added to the app list.

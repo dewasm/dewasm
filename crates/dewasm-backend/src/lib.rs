@@ -456,7 +456,7 @@ pub fn store_method(op: ir::StoreOp) -> &'static str {
 /// That reaches a unit's two-argument twins.
 /// Memory call sites dominate a converted artifact's source (443k sites on `merman`).
 /// So these names spend one character per distinction.
-/// The units whose names describe the operation stay for the other backends ([`load_method`]).
+/// The units named after the operation stay for the other backends ([`load_method`]).
 pub fn load_code(op: ir::LoadOp) -> &'static str {
     use ir::LoadOp::*;
     match op {

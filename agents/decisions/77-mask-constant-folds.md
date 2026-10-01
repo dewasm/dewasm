@@ -36,10 +36,10 @@ Four rules follow, all in the shared analysis:
    So `v & c` reduces `v` at least as strongly as `v`'s own mask would.
    By congruence the results agree, even at an observation point.
    The bound guard of decision 71 is not needed for profitability.
-   The raw value feeds nothing but that one reduction.
+   That is because the raw value feeds nothing but that one reduction.
    The kept mask would have performed that reduction anyway (and once more).
    Through the other bitwise operators that need no mask, a `Reducing` consumer weakens to `Modular`.
-   Those operators preserve congruence.
+   That is because those operators preserve congruence.
    But the raw operands feed the operator itself, so the guard binds again.
    This rule folds a kept representation mask into a constant AND.
    For example, `(x * y & 0xffffffff) & 255` becomes `x * y & 255`.
@@ -76,7 +76,7 @@ That analysis costs too much for a comparison real code rarely writes.
 - **Rewrite the unsigned range-check pattern `wrap(x - c1) < c2` to `Range#===`.**
   It saves roughly 70KB of source on `merman`.
   It measured 3.6x slower interpreted and 3.7 to 3.9x slower under YJIT.
-  `Range#===` is a method call where the mask is one instruction.
+  That is because `Range#===` is a method call where the mask is one instruction.
 - **Rewrite the same pattern to two comparisons (`x >= c1 && x < c1 + c2`).**
   More ISeq than the mask it removes.
 - **Constant-fold the zero-candidate equality to its Boolean.**

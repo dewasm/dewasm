@@ -47,7 +47,7 @@ It also names where Codon forced a different one.
   So the `div`/`rem` trap helpers carry the adjustment from rounding down to rounding toward zero.
   Those helpers are needed anyway for the zero and `INT_MIN/-1` cases.
   Type spellings are written out in full.
-  Two `Embedded` artifacts can share one namespace.
+  That is because two `Embedded` artifacts can share one namespace.
   A module-level alias (`u32 = UInt[32]`) would be one more name both of them define.
 - **A float operation with a constant operand is wrapped in `Rt.f32_q`/`Rt.f64_q` (quiet if NaN).**
   Measured on Codon 0.20.1: LLVM under `-release` folds `x * 1.0`, `x / 1.0` and `x + -0.0` to `x`.
@@ -156,12 +156,12 @@ It also names where Codon forced a different one.
 
   The test suites build debug throughout.
   No release-mode verification pass exists in any category; only the benchmarks build `-release`.
-  The emission-level NaN quieting keeps the generated code's semantics optimizer-independent.
+  That is because the emission-level NaN quieting keeps the code's semantics optimizer-independent.
   So a difference that only appears at `-release` would be a Codon miscompilation.
   That is the compiler's bug to fix, rather than this backend's to test for.
 
   WASI p1 rests on `libc` through calls into C, with `__apple__`-conditional layouts.
   Those layouts are verified on Darwin arm64 and Linux x86_64.
   Any other machine is refused when the bundled WASI is constructed (`rt/host_check`).
-  On Darwin x86_64 the un-suffixed `stat`/`readdir` symbols are the legacy 32-bit-inode variants.
+  That is because on Darwin x86_64 the un-suffixed `stat`/`readdir` symbols are 32-bit-inode variants.
   Linux aarch64 `glibc` lays `struct stat` out differently.

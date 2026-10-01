@@ -55,7 +55,7 @@ That holds where a dictionary also gives it a plain sense: `compile` never means
 | Systems and WASI | `buffer`, `checksum`, `cookie`, `cryptographic`, `dangling`, `deadlock`, `delimiter`, `durability`, `echo`, `endpoint`, `epoch`, `flush`, `hardware`, `headless`, `inode`, `metadata`, `multi-tenant`, `preopen`, `pseudo-terminal`, `pushback`, `sandbox`, `socket`, `spawn`, `stdio`, `subscription`, `sync`, `timeout` |
 | Data and records | `affinity`, `amalgamation`, `amortize`, `categorical`, `collation`, `compress`, `congruential`, `decompress`, `generator`, `geometric`, `invalidate`, `percentile`, `quadratic`, `query`, `rollback`, `schema`, `superlinear`, `verdict` |
 | Tests and tools | `benchmark`, `conformance`, `diff`, `fixture`, `glue`, `harness`, `lint`, `lollipop`, `microbenchmark`, `oracle`, `parse`, `shim`, `snapshot`, `suite`, `testsuite`, `transcript`, `workload` |
-| Graphics and games | `alpha`, `dot`, `emulator`, `flicker`, `foreground`, `framebuffer`, `pixel`, `shareware`, `tick`, `upscale` |
+| Graphics and games | `alpha`, `dot`, `emulator`, `flicker`, `foreground`, `framebuffer`, `pixel`, `screenshot`, `shareware`, `tick`, `upscale` |
 | Text and markup | `filename`, `glob`, `kebab-case`, `markup`, `newline`, `slug`, `whitespace` |
 
 Used in another sense, a term is a metaphor: `saturate` names a clamping arithmetic, not a full thing.
@@ -78,7 +78,7 @@ Elsewhere the same word would be a term nobody defined for that text.
 
 | Terms | Allowed in |
 | --- | --- |
-| `automap`, `demo`, `strafe`, `tic` | `examples/doom/`, `crates/dewasm-test-helper/src/doom.rs`, `agents/decisions/50-doom-example-shape.md`, `agents/decisions/53-doom-frame-snapshot.md` |
+| `automap`, `decal`, `demo`, `diminished`, `strafe`, `tic` | `examples/doom/`, `crates/dewasm-test-helper/src/doom.rs`, `agents/decisions/50-doom-example-shape.md`, `agents/decisions/53-doom-frame-snapshot.md` |
 | `alternate` (the terminal's alternate screen) | `examples/` |
 | `balloon` (the speech balloon of the cowsay program) | `agents/decisions/95-cowsay-own-implementation.md` |
 

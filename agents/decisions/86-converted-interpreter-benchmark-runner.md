@@ -12,10 +12,10 @@ The converted builds interpret each workload on Ruby, Ruby with YJIT, CPython, a
 The suite compares dewasm's converted output against wasm interpreters.
 Those interpreters, `pywasm` and `wardite`, are hand-written in the target languages.
 That comparison mixes categories.
-dewasm's output is converted ahead of time.
+That is because dewasm's output is converted ahead of time.
 Those interpreters load an arbitrary module at run time.
 A wasm interpreter that is itself dewasm output closes the category gap.
-It also loads an arbitrary module at run time.
+That is because it also loads an arbitrary module at run time.
 Everything below that module is dewasm's own code.
 So the pairing measures dewasm against a hand-written interpreter on equal terms.
 
@@ -26,7 +26,7 @@ The comparative measurements below were taken on the v0.5.0 build.
 The v0.9.0 build measured the same speed on the same day.
 
 The criterion is the interpreter's own native speed.
-Conversion multiplies the interpreter's cost by a roughly constant factor.
+That is because conversion multiplies the interpreter's cost by a roughly constant factor.
 That factor is about 270x on Ruby with YJIT for interpreter-shaped code, measured 2026-08-29.
 So the interpreter must be fast natively.
 Only then does the converted stack stay ahead of the hand-written interpreters.

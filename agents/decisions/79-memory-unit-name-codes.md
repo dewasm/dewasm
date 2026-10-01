@@ -89,7 +89,7 @@ The saving is source bytes, 5.6% of `sqlite3-shell` and 5.0% of `merman`.
   4.07 MB of method-name bytes on `merman`, repeated in every future artifact.
 - **Readable short names** (`ld32`, `st8u`, …).
   Every character above the minimum repeats 433k times on `merman`, and buys nothing back.
-  Once the name is not the wasm spelling, the reader consults the scheme either way.
+  That is because once the name is not the wasm spelling, the reader consults the scheme either way.
 - **Codes for `copy`/`fill`/`init`/`grow`/`size`/`read_string` too.**
   The site counts above are three orders of magnitude below the load/store family's.
   `read_string` is user-facing.

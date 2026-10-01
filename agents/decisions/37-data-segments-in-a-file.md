@@ -73,7 +73,7 @@ Bash embeds data in its runtime rather than as a standalone literal.
 So a data file would be a larger change for Bash.
 It alone *rejects* `--data-file` at the CLI with an attributed error rather than silently ignoring it.
 `--data-file` with `-o -` (`stdout`) is likewise rejected.
-The data file needs a real path next to the program.
+That is because the data file needs a real path next to the program.
 
 Go mechanics (decision 29): `//go:embed` is a directive, not a package selector.
 So the import scanner cannot see it.
@@ -119,7 +119,7 @@ This confirms the win is a source-size one, not a parse-time one.
 Ruby `compile_file` parse of `ruby.wasm`: 6.15 s → 5.97 s.
 Go `build` of `qjs.wasm`: 10.8 s → 11.1 s (within noise).
 `ruby.wasm`/Go build is not practical at either setting.
-CRuby exceeds the practicality bar, see agents/apps-audit.md.
+That is because CRuby exceeds the practicality bar, see agents/apps-audit.md.
 
 Honest finding: these interpreters are **code-dominated**.
 So the source gets smaller by roughly `2 × data_bytes − blob` (the eliminated hexadecimal text).

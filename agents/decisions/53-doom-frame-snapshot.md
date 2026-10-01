@@ -31,7 +31,7 @@ Two facts make a snapshot possible where the module first looks untestable:
 - **The framebuffer is a deterministic function of the tick schedule.**
   DOOM's software renderer is fixed-point integer (no floats).
   So the pixels are pure integer computation.
-  They are identical across Wasmtime and every backend.
+  So they are identical across Wasmtime and every backend.
   This holds regardless of the softfloat/NaN conventions (decision 2/13).
   The only source of variation is the game clock.
   `runtimeControl.timeInMilliseconds` paces the tic loop.
@@ -48,7 +48,7 @@ Two facts make a snapshot possible where the module first looks untestable:
   One writer is at `examples/doom/ruby/main.rb:339-354`.
 
 The existing snapshot machinery does not stretch to cover this.
-The Wasmtime ground truth runs through the **`wasmtime` CLI**.
+That is because the Wasmtime ground truth runs through the **`wasmtime` CLI**.
 That call is at `crates/dewasm-test-helper/src/wasmtime_backend.rs:61`.
 `wasmtime run` cannot supply DOOM's custom imports.
 Producing the oracle frame needs a real embedder, not the CLI.
@@ -82,7 +82,7 @@ Three specifics:
   Call `initGame`, then N× `tickGame` with no input.
   Write the last `drawFrame` buffer as a 640×400 P6 PPM (`A` byte dropped).
   N is fixed, and the snapshot is valid only for that N.
-  It is the fewest tics that clear the opening demo to a stable frame with real content.
+  It is the fewest tics that clear the demo introduction to a stable frame with real content.
 - **Oracle = the `wasmtime` crate, in a snapshot writer, not the test path.**
   A small Rust host embeds `wasmtime` and runs the *original* `doom.wasm` under the driving contract above.
   It writes `examples/doom/snapshot/frame.ppm`.
@@ -101,7 +101,7 @@ Three specifics:
 *It can when its output is a deterministic function of an injectable clock.*
 *Then hold the clock and the inputs constant, and diff the rendered artifact.*
 The oracle is an independent embedder (Wasmtime), not backend consensus.
-The value of the test is catching a bug the backends could share.
+That is because the value of the test is catching a bug the backends could share.
 
 **Speed assignment.**
 The frame-snapshot test runs on every backend.
@@ -113,7 +113,7 @@ Its run takes minutes: `initGame` ~2 minutes + ticks + writing out a 1 MB frameb
 The framebuffer is read out of the associative-array memory.
 So the Bash run stays out of CI and runs only in local pre-release.
 There is no separate conversion smoke.
-The frame test already exercises the full convert-and-run path.
+That is because the frame test already exercises the full convert-and-run path.
 A convert-only assertion would be a pattern no other suite uses.
 *(Changed by [decision 54](54-apps-convert-suite.md): the convert-only assertion is now the pattern of a convert suite.*
 *That suite is whole-cache and per-backend, and includes a fast `doom` convert trial on every backend.*
@@ -123,7 +123,7 @@ A convert-only assertion would be a pattern no other suite uses.
 
 - **Backend-consensus snapshot (no external oracle).**
   Cheaper (no `wasmtime` crate), but it only proves the backends *agree*.
-  A bug in the shared converter or the shared numeric conventions (decision 2) then passes.
+  So a bug in the shared converter or the shared numeric conventions (decision 2) passes.
   An independent embedder is the whole point of a snapshot; rejected.
 - **Sanity-only check (reuse the frontends' `--smoke`).**
   The frontends already assert "enough distinct colors / has glyphs".

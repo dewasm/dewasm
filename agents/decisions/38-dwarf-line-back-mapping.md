@@ -12,7 +12,7 @@ A converted module is a wall of generated code with no tie back to the original 
 When it traps or misbehaves, nothing points at the source line that produced a given statement.
 wasm2go's `-dwarfline` is the prior art.
 It reads the `.debug_*` custom sections and emits source-position markers.
-The generated code then maps back to the origin.
+So the generated code maps back to the origin.
 
 The wasm carries this already: Clang/`zig cc -g` emit standard DWARF as custom sections.
 The open questions were these:

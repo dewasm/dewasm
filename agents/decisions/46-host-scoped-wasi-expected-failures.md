@@ -18,13 +18,13 @@ The first Linux CI run (issue #7) broke that assumption in both directions:
   An example is CoreFoundation injecting `__CF_USER_TEXT_ENCODING` into the `environ` of JVM and `ruby`.
   They trip the unexpectedly-passing check.
 - A trial can fail on Linux only.
-  The Linux JDK sets NOFOLLOW symbolic link times through `lutimes`, which has microsecond precision.
+  That is because the Linux JDK sets NOFOLLOW symbolic link times through microsecond `lutimes`.
   That drops the nanosecond part of the `mtim` the suite round-trips (`rust/symlink_filestat`).
   macOS preserves nanoseconds.
 
 So a single flat list cannot pass on both hosts at once.
 Yet the both-ways check is worth keeping.
-It is what caught the Go `path_link` bug (#5) hiding behind host `link(2)` differences.
+That is because it is what caught the Go `path_link` bug (#5) hiding behind host `link(2)` differences.
 
 ## Decision
 

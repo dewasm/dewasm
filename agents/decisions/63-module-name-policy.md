@@ -25,7 +25,7 @@ The caller got a name they never wrote, predictable only by reading five backend
 Any future namespacing feature (a Ruby constant path, a Java package) had to pass through it.
 That transformation had already dropped `:` and `.`.
 The two modes are not even the same problem.
-A standalone artifact's internal name appears in no interface.
+That is because a standalone artifact's internal name appears in no interface.
 So asking the caller to supply one is a question with no right answer.
 
 ## Decision
@@ -40,7 +40,7 @@ So converting any `.wasm` standalone needs no name at all.
 
 **2. A library-mode name is required, used unchanged or refused, never transformed or defaulted.**
 The flag is required in library mode.
-The input file's name on disk says nothing about what the caller wants the embedded API called.
+That is because the input file's name says nothing of what the caller wants the embedded API called.
 So there is no default to derive.
 The deciding criterion is also the reusable rule.
 *A specification whose correct behaviour cannot be predicted from the input must not exist.*
@@ -119,7 +119,7 @@ A helper that only test tables need must not become a CLI behaviour nobody can r
   Documenting a mapping that loses information does not make a mapping back exist.
   The caller still cannot ask for `hello_world` and get it.
   It also blocks the namespacing the grammars now allow.
-  A sanitizer that removes `:` and `.` can never grow a Ruby constant path or a Java package.
+  That is because a sanitizer removing `:` and `.` can never grow a Ruby constant path or a Java package.
 - **Clean names, but warn on `stderr`.**
   A warning is not an error: CI jobs ignore it.
   The artifact still has a name the caller did not ask for.

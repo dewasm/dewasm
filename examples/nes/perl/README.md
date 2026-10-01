@@ -75,7 +75,7 @@ Key repeat keeps extending the deadline.
 A single tap always survives to the very next tick, regardless of the window.
 The reason is that the bit mask is read right after the key press is registered.
 The window matters less here than in DOOM.
-At this tick rate, a terminal's key repeat resends the held key many times between ticks.
+That is because at this tick rate, a terminal's key repeat resends the key many times between ticks.
 
 There are no save games, since `nes.wasm` exposes no such surface.
 There is also no menu/HUD text, since `onInfoMessage` doesn't exist here either.

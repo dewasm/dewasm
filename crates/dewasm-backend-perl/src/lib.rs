@@ -1047,7 +1047,7 @@ impl<'a> Gen<'a> {
         // The explicit call-depth limit.
         // `local` restores the counter on every exit path, including a trap's die-unwind.
         // Each call adds a frame-size weight, not 1.
-        // A pure count lets unbounded fat-frame recursion use several GB of heap before the limit.
+        // A pure count lets fat-frame recursion heap-allocate more than 1 GB before the limit.
         // The specification's `skip-stack-guard-page` has such a frame, with 1056 locals.
         // Byte-bounded native stacks exhaust in a few hundred frames instead.
         self.use_unit("rt/exhausted");

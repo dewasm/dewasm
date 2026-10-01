@@ -26,7 +26,7 @@ That is `& 0xffffffff` inline for i32, and `Rt.m64` for i64 per [decision 43](43
 [Decision 32](32-expression-folding.md) folded single-use values into their consumers.
 Since then, many masked results feed directly into an operation that immediately re-masks.
 In `(a + b & 0xffffffff) + c & 0xffffffff` the inner mask buys nothing.
-The outer one reduces the whole sum anyway.
+That is because the outer one reduces the whole sum anyway.
 The converted `sqlite3-shell` carries 36.6k `& 0xffffffff` sites and 2.4k `m64` calls.
 Each is parse work, ISeq instructions, and a runtime operation.
 
@@ -59,7 +59,7 @@ Some consumers read only a value's congruence class modulo 2^w:
 - the operand under a site's own kept mask.
 
 Inside one expression tree, a value whose consumer is one of these may stay unmasked.
-The consumer's own mask restores the invariant before the value is observed.
+That is because the consumer's own mask restores the invariant before the value is observed.
 
 **Soundness.**
 The targets this convention covers have arbitrary-precision two's-complement integers.
@@ -112,7 +112,7 @@ Loosening that one site is left for a later stage, with measurement.
 
 **Operand context is independent of the elision outcome.**
 Operands of a site that keeps its own mask are still rendered in modular context.
-The kept mask restores the invariant.
+That is because the kept mask restores the invariant.
 So the guard failing at a node never forces masks back into the tree below it.
 
 ## Rejected alternatives

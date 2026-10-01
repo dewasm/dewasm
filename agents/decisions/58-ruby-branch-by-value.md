@@ -26,7 +26,7 @@ Ruby's equivalent primitive is `opt_case_dispatch`.
 A `case` over integer literals compiles to a single hash probe with no compares.
 
 The obvious alternative (put each state in its own method) is closed off here.
-Neither YJIT nor ZJIT implements on-stack replacement.
+That is because neither YJIT nor ZJIT implements on-stack replacement.
 So a hot loop inside a once-called method is never compiled.
 Measured with no JIT, YJIT and ZJIT it runs 1.611 / 1.614 / 1.608 s, identical.
 Any scheme that moves work across a method boundary pays a call and gains no compilation.
@@ -46,7 +46,7 @@ Any scheme that moves work across a method boundary pays a call and gains no com
 - **The deciding criterion is: flatten branches, not loops.**
   A frame no branch escapes keeps its structured form.
   This is not economy.
-  A tight back-edge turned into a state transition measured *slower* than the chain it replaces.
+  That is because a tight back-edge as a state transition measured *slower* than the chain it replaces.
   That holds once the loop runs ~100 trips per entry.
 - **One shape of outward branch is left as it is: Ruby's `break`.**
   Consider a `br` crossing a single loop that is the **only** statement of the block it targets.
@@ -69,11 +69,11 @@ Any scheme that moves work across a method boundary pays a call and gains no com
   It produced 33,219 `__br` references and ~half of CPU on the workload that motivated this.
 - **Flatten loops too, for uniformity.**
   Loses to the chain past ~100 trips per entry.
-  The back-edge is the one place the structured form is cheaper.
+  That is because the back-edge is the one place the structured form is cheaper.
   This is the criterion above, stated as its own rejection.
 - **State the `break` exception as "the loop is the last statement".**
   Wrong, and not merely conservative.
-  It fires on 374 sites in `sqlite3-shell` where the block holds something else.
+  That is because it fires on 374 sites in `sqlite3-shell` where the block holds something else.
   The generated program's output then differs.
   Caught by the byte-comparison test, not by the microbenchmarks.
   All of those have the only-statement shape.
@@ -107,7 +107,7 @@ This is the trade the design makes.
 The deep case gets much cheaper, and the shallow case somewhat dearer.
 On real modules the deep case dominates.
 It is also why the criterion above matters.
-Every frame kept structured keeps its depth-1 branches cheap.
+That is because every frame kept structured keeps its depth-1 branches cheap.
 
 **Carry-over.**
 Consider a state whose only entry is one earlier state's trailing transition.

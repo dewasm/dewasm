@@ -103,7 +103,7 @@ That mechanism is per-backend conditioning.
   It checks `@exports`, then `GLOBAL_EXPORTS`, `TABLE_EXPORTS`, `MEMORY_EXPORTS`.
   So one instance is directly usable as another's import source (`imports["M"] = other_instance`).
   This applies decision 7 to generated classes too; it is not a new mechanism.
-  The specification harness could then implement `wast`'s `(register "Name" $id)` directive for real.
+  So the specification harness could implement `wast`'s `(register "Name" $id)` directive for real.
   The changes are in `crates/dewasm-test-helper/src/spec.rs`:
 
   - `ScriptGen` tracks registered-name → live instance;
@@ -133,7 +133,7 @@ That mechanism is per-backend conditioning.
   Rejected at the time, following the earlier `Memory`/`Table` choice.
   It was also rejected for keeping `GlobalGet`/`GlobalSet` lowering a single rule.
   **Adopted later**: the two-path cost was smaller than stated.
-  The decision is knowable statically.
+  That is because the decision is knowable statically.
   `boxed_globals = imported ∪ ExportKind::Global` is computed once per module.
   That works since wasm 1.0's export/import sets are fixed at conversion time, not runtime.
   A `global_ref` helper keeps `GlobalGet`/`GlobalSet`/`ElemItem::Global` at one call site each.
@@ -160,7 +160,7 @@ That mechanism is per-backend conditioning.
   Every one of the 17 new failures is re-attributed to the two narrow, documented gaps above.
   This was verified file by file; none are regressions.
   Bash's run is identical to the baseline before this milestone (pass=24,338, fail=23).
-  `check_module_support` contained the scope of impact entirely.
+  That is because `check_module_support` contained the scope of impact entirely.
 - Positive: the `import(name)` provider method is not just for the specification harness.
   It is a real capability for any Ruby embedder linking two dewasm-generated classes by hand.
 - Negative / carry-over: `import-limits` stays open debt.

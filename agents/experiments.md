@@ -152,7 +152,7 @@ Generated methods exceed per-method JIT limits.
 A flat dispatch wrapped in a `lambda` loses in every JIT configuration.
 
 - **Tried**: emitting a flat-dispatch function's `case state` inside `__step = lambda do ... end`.
-  The states then run in a closure called repeatedly.
+  So the states run in a closure called repeatedly.
   The first variant called it once per transition, and the second batched 1024 transitions per call.
   YJIT compiles that closure even though the outer function is entered once.
   The measurement used sqlite3-shell's interpreter function, which has 453 states.
@@ -308,7 +308,7 @@ Forcing YJIT to compile SQLite's interpreter function loses at every measured sc
 - **Tried**: answering whether the 453-state interpreter function can be JIT-compiled at all.
   The experiment also asked whether that helps.
   It put 60 `SELECT 0;` statements at the start of the `query` workload.
-  The function then passes YJIT's 30-call threshold (about 120 calls) before the heavy statements run.
+  So the function passes YJIT's 30-call threshold (about 120 calls) before the heavy statements run.
   The interpreter-mode control confirmed the extra statements themselves cost 0.1 s.
 - **Verdict**: it compiles completely and still loses.
   Compilation added 47 k blocks and 14.5 MB of machine code.
@@ -408,7 +408,7 @@ JRuby's `cowsay` time tracks whether its script compiles at all.
   That literal is over the JVM's 64 kB constant limit.
   `IndyValueCompiler.pushString` throws, and JRuby falls back to the interpreter.
   The new artifact's largest literal is 47.3 kB, so the compile succeeds.
-  It costs 1.9 s for a program whose own work is 0.29 s.
+  So it costs 1.9 s for a program whose own work is 0.29 s.
   The program phase is unchanged (0.28 s old, 0.29 s new).
   With `-X-C` both interpret, and the new artifact is the faster one (1.41 s against 1.68 s).
   Splitting the old artifact's literals under the limit makes it compile, and it takes **131 s**.

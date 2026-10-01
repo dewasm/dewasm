@@ -5,7 +5,7 @@ Landed in [`runtime/ruby/units/rt/f32.rb`](../../runtime/ruby/units/rt/f32.rb) a
 A magnitude in [2^-126, 2^127) is rounded by three float operations.
 Everything else keeps the `pack`/`unpack` path unchanged.
 [`runtime/perl/units/rt/f32.pl`](../../runtime/perl/units/rt/f32.pl) keeps the pack path alone.
-Perl needs two extra multiplications to reach the same result, and measures slower with them.
+The reason: Perl needs two extra multiplications for the same result, and measures slower with them.
 
 ## Context
 
@@ -27,7 +27,7 @@ In `records/2026-08-22T06-26-23Z-speed.json`, in nanoseconds per operation:
 
 Replacing the byte round trip with a reusable `IO::Buffer` was tried and rejected.
 The record is #261 and PR #263 (closed unmerged), and `agents/experiments.md`, `float-bits-scratch`.
-The reused `IO::Buffer` is state.
+It was rejected because the reused `IO::Buffer` is state.
 It became one per receiver after the module-level placement produced wrong floats across threads.
 The instance-variable read plus the `IO::Buffer` call pair then cost more than the `pack` pair.
 That was measured on a real app.
@@ -87,7 +87,7 @@ The specification harness passes for all three backends as well.
   So the thread-sharing constraint that forced the per-receiver placement does not arise.
   The bit-conversion units stay on `pack` untouched.
   They are `f32_bits`, `f32_from_bits`, `f64_bits`, and `f64_from_bits`.
-  Reinterpretation is not rounding, and has no arithmetic equivalent.
+  They stay there because reinterpretation is not rounding, and has no arithmetic equivalent.
 - **Perl.**
   Perl's arithmetic operators take an integer fast path for integral operands.
   That is the same behavior `rt/fadd` already works around.
@@ -103,7 +103,7 @@ The specification harness passes for all three backends as well.
   The mapping of the boundary region back to the largest finite f32 differs per language.
   MRI's `pack("e")` returns infinity, and Python's `struct.pack` raises.
   Reproducing that in the fast path buys nothing.
-  Those magnitudes are rare, and the fallback already decides them correctly.
+  The reason: those magnitudes are rare, and the fallback already decides them correctly.
 - **A per-backend bit-level rounding in integer arithmetic.**
   Rounding by shifting the f64 bit pattern needs the bits in the first place.
   Getting them is the `pack` this decision is removing.

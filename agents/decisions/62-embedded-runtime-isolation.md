@@ -75,7 +75,7 @@ So the specification harness's generated text is byte-identical.
   It is paid on every masked-integer operation, every load and every store.
   That is in the slowest backend's hottest path.
   The rename costs nothing at run time.
-  The generated code still resolves one module-level global by one name.
+  That is because the generated code still resolves one module-level global by one name.
 - **Accept flat runtimes as a permanent limitation** and keep the REASON comments.
   The failure is silent and is not only about trap identity.
   The smaller of the two bundles removes helpers the other artifact calls.
@@ -107,12 +107,12 @@ So the specification harness's generated text is byte-identical.
 - The Go mechanism planned here was never built, and should not be.
   It was package-level identifier prefixing plus a header-less compose entry point.
   It also honored `GenOptions.runtime`.
-  While it waited, decision 63/#155 made library output declare `package <module name>`.
+  That is because meanwhile decision 63/#155 made library output declare `package <module name>`.
   It did so for unrelated reasons.
   A package is a real namespace.
   Two artifacts now isolate with no renaming, no new entry point and no new linkage code.
   What was going to be the largest of the three took none of the work estimated for it.
   The observable in `embedded_coexist_e2e!` shifts accordingly.
-  An importer cannot name the unexported `rtTrap`.
+  That is because an importer cannot name the unexported `rtTrap`.
   So the driver recovers each panic and compares the values' dynamic types.
   `%T` prints them `*alpha.rtTrap` / `*beta.rtTrap`.

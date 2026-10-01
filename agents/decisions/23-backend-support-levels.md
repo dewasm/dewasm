@@ -10,16 +10,16 @@ Decision 25 removes the level machinery entirely.
 
 `Feature` (decision 8) is a flat matrix: 20 rows, each `Supported`/`Partial`/`Unsupported` per backend.
 It has no vocabulary for "how far along is this backend overall".
-Ruby and Bash's actual standing had to be reconstructed by reading the table.
+So Ruby and Bash's actual standing had to be reconstructed by reading the table.
 More backends are being added (Java+C# per decision 10, then Go/Python/PHP).
-Each needs a stated goal a reviewer can check against.
+So each needs a stated goal a reviewer can check against.
 Zig's [platform support levels](https://ziglang.org/learn/platform-support/) work that way.
 There, a target's status is read off a scale instead of a feature-by-feature diff.
 
 The natural single-number scale holds only if every wasm binary can be measured against its scope.
 Wasm 2.0+ proposals (reference types, tail calls, GC, SIMD, threads, ...) do not qualify.
 Neither do the component model / WASI Preview 2.
-Their adoption is concentrated in the Bytecode Alliance projects.
+That is because their adoption is concentrated in the Bytecode Alliance projects.
 It still changes often (WASI 0.3 is next).
 The common case is wasm 1.0 plus WASI Preview 1, a frozen ABI.
 That is what Zig, Go, and most existing wasm binaries actually emit.
@@ -100,7 +100,7 @@ It is the model for label-conditional cases once one exists.
 - Positive: The achieved and target levels give a one-line answer to "how far along is this backend".
   Currently Ruby = Level 2 targeting Level 1.
   Bash = Level 3, its settled target.
-  The core intended use case, running self-contained C/Rust CLI tools, is met there.
+  That is because the core intended use case, running self-contained C/Rust CLI tools, is met there.
   New backends have a concrete Level 2 checklist.
   They need not copy Ruby's full feature set.
 - Positive: e2e cases self-describe their requirement instead of being hand-conditional per language.

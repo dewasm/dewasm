@@ -34,7 +34,7 @@ It also makes `app/sqlite3_query` 1.52x slower (cold methods get compiled for no
   Branch-closed means every branch inside the span lands on a frame opened inside it.
   A `return`, a branch to the loop head, or a branch past the loop sets the span's boundary.
   The span need not start at the body's first statement.
-  A head-tested loop opens with its own exit branch, which stays behind.
+  That is because a head-tested loop opens with its own exit branch, which stays behind.
 - **The span may leave at most one value live for the rest of the function, returned from the call.**
   Live-outs are found by a backward may-liveness over the structured body (loops to a fixed point).
   Parameters are the variables possibly read before the span assigns them.
@@ -44,7 +44,7 @@ It also makes `app/sqlite3_query` 1.52x slower (cold methods get compiled for no
   It is copied into its temp at the extracted function's entry.
   So the span body needs no rewriting beyond local renumbering.
 - **Inside a `try_table`, a throw-capable span is not extracted.**
-  An exception would skip the write-back of values the catch handler could observe.
+  That is because an exception would skip the write-back of values the catch handler could observe.
 - **Thresholds are per backend.**
   [`extract::Params`] holds these thresholds:
   - minimum span weight in IR nodes;

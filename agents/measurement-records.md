@@ -34,7 +34,7 @@ This file holds what a user of the numbers never needs and whoever takes them al
 
 - Ruby's YJIT has no on-stack replacement.
   A single long-running loop is never JIT-compiled.
-  Results then swing on whether work is split across method calls.
+  So results swing on whether work is split across method calls.
 - The test of a suspect cell is whether it reproduces, not what it looks like.
   Re-measure the pair with a filtered run and compare.
   The figure that repeats is the figure.
@@ -42,7 +42,7 @@ This file holds what a user of the numbers never needs and whoever takes them al
   The first figure was therefore dropped.
 - `runs_per_sample` of 1 on a fast cell is a hint to check, not a verdict.
   The harness batches runs until a sample reaches the target compute time.
-  A calibration against a cold artifact can then settle on 1.
+  So a calibration against a cold artifact can settle on 1.
   That leaves a whole process start in the figure.
   `dewasm-go` read 10.6 ms that way on 2026-09-17, and 3.0 ms at 64 runs per sample once warm.
   A compiled backend also reports 1 with figures that reproduce exactly, so compare before concluding.
@@ -53,5 +53,5 @@ This file holds what a user of the numbers never needs and whoever takes them al
 
 - Zero mismatches, zero panics, no run over its time limit, and every skip is a declared exclusion.
 - Each runner's version string identifies its own build.
-  The record's `runtimes` block then states where each figure came from.
+  So the record's `runtimes` block states where each figure came from.
   Nothing goes into the commit message by hand (decision 93 records why).
