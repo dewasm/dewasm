@@ -1,4 +1,4 @@
-//! The vocabulary rules of `agents/vocabulary.md`, checked over Markdown.
+//! The vocabulary rules of `agents/vocabulary.md`, checked over Markdown and source comments.
 //! A word in a sentence comes from an allowed source, and no excluded word is used.
 //! The tables of `agents/vocabulary.md` and the fetched base lists are read as they are.
 //! The one list of words here is the number words, which the "Number" source allows.
@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::Path;
 
-use crate::markdown_lines;
+use crate::{comment_lines, comment_markers, markdown_lines};
 
 /// The file that holds the vocabulary tables, relative to the repository root.
 pub const VOCABULARY: &str = "agents/vocabulary.md";
@@ -100,8 +100,10 @@ pub struct Vocabulary {
     listed: Vec<(String, &'static str)>,
     /// The listed words some checked text has used.
     used: RefCell<HashSet<String>>,
-    /// A listed word the check treats as absent, to see whether another source allows it.
+    /// A listed word the check treats as missing, to see whether another source allows it.
     skipped: RefCell<Option<String>>,
+    /// Listed terms of several words, such as "doc comment", which pass only as a whole.
+    phrases: Vec<String>,
 }
 
 /// The tables whose words must each be used, and the ones whose words must need their entry.
@@ -173,7 +175,7 @@ impl Vocabulary {
                 _ => None,
             })
             .collect();
-        // An abbreviation's period ends a token, so the word the check sees has none.
+        // A short form's period ends a token, so the word the check sees has none.
         terms.extend(
             spans_of("Abbreviations")
                 .iter()
@@ -255,6 +257,11 @@ impl Vocabulary {
         for (terms, _) in &context_terms {
             listed.extend(terms.iter().map(|w| (w.clone(), "Terms of one context")));
         }
+        let phrases = listed
+            .iter()
+            .map(|(word, _)| word.clone())
+            .filter(|word| word.contains(' '))
+            .collect();
         Ok(Vocabulary {
             base,
             writing_documents,
@@ -268,7 +275,33 @@ impl Vocabulary {
             listed,
             used: RefCell::new(HashSet::new()),
             skipped: RefCell::new(None),
+            phrases,
         })
+    }
+
+    /// `sentence` with each listed phrase, and its plural, replaced by a digit that no check reads.
+    fn without_phrases(&self, sentence: &str) -> String {
+        let mut out = sentence.to_owned();
+        for phrase in &self.phrases {
+            loop {
+                let lower = out.to_lowercase();
+                let found = lower.match_indices(phrase.as_str()).find_map(|(start, _)| {
+                    let mut end = start + phrase.len();
+                    if lower[end..].starts_with('s') {
+                        end += 1;
+                    }
+                    let before = lower[..start].chars().next_back();
+                    let after = lower[end..].chars().next();
+                    let bounded = !before.is_some_and(char::is_alphanumeric)
+                        && !after.is_some_and(char::is_alphanumeric);
+                    bounded.then_some((start, end))
+                });
+                let Some((start, end)) = found else { break };
+                self.used.borrow_mut().insert(phrase.clone());
+                out.replace_range(start..end, "0");
+            }
+        }
+        out
     }
 
     /// Each listed word that no checked text used, and each one another source already allows.
@@ -300,11 +333,16 @@ impl Vocabulary {
 
     /// Each vocabulary defect of the Markdown file `path` under `root`, as `path:line: what`.
     pub fn file_defects(&self, root: &Path, path: &str) -> Vec<String> {
-        if !path.ends_with(".md") || path == VOCABULARY {
+        if path == VOCABULARY {
             return Vec::new();
         }
         let text = std::fs::read_to_string(root.join(path))
             .unwrap_or_else(|e| panic!("{path} is tracked text and must read as UTF-8: {e}"));
+        let lines = match comment_markers(path) {
+            Some(markers) => comment_lines(markers, &text),
+            None if path.ends_with(".md") => markdown_lines(&text, true),
+            None => return Vec::new(),
+        };
         let writing = self.writing_documents.contains(path);
         let context: HashSet<&str> = self
             .context_terms
@@ -313,8 +351,8 @@ impl Vocabulary {
             .flat_map(|(terms, _)| terms.iter().map(String::as_str))
             .collect();
         let mut report = Vec::new();
-        for line in markdown_lines(&text, true) {
-            let sentence = unquoted(&line.text);
+        for line in lines {
+            let sentence = self.without_phrases(&unquoted(&line.text));
             let excluded = self.excluded_uses(&sentence);
             for form in &excluded {
                 report.push(format!("{path}:{}: excluded \"{form}\"", line.number));
@@ -357,7 +395,7 @@ impl Vocabulary {
         all_capitals || (word.capitalized && known)
     }
 
-    /// `word` without the parts of a hyphenated word that are names, as "ABI" in "Canonical-ABI".
+    /// `word` without the parts of a `-`-joined word that are names, as "ABI" in "Canonical-ABI".
     fn without_name_parts(&self, word: &str) -> String {
         if !word.contains('-') {
             return word.to_owned();
@@ -409,7 +447,7 @@ impl Vocabulary {
         self.base.contains(word) || listed || NUMBER_WORDS.contains(&word)
     }
 
-    /// Whether a term of the file's context allows `word` or one of its inflections.
+    /// Whether a term of the file's context allows `word` or one of its forms.
     fn context_allows(&self, context: &HashSet<&str>, word: &str) -> bool {
         let found = inflections(word).find(|w| context.contains(w.as_str()));
         if let Some(term) = &found {
@@ -419,7 +457,7 @@ impl Vocabulary {
     }
 
     /// Whether `word`, lower case, is allowed.
-    /// A hyphenated word is allowed whole, or when each of its parts is.
+    /// A word joined by `-` is allowed whole, or when each of its parts is.
     /// A part may be a prefix of the "Derived form" row, as in "non-trivial".
     fn allowed(&self, word: &str, writing: bool) -> bool {
         if self.allowed_word(word, writing) {
@@ -431,7 +469,7 @@ impl Vocabulary {
             })
     }
 
-    /// Whether `word` is a known word, one of its inflections, or a derived form.
+    /// Whether `word` is a known word, one of its forms, or a derived form.
     fn allowed_word(&self, word: &str, writing: bool) -> bool {
         inflections(word).any(|w| {
             self.known(&w, writing)
@@ -555,7 +593,7 @@ struct Word {
 /// The words of `sentence` that the vocabulary governs, as written.
 /// A token with a digit, a one-letter token, or a token with an inner period is not a word.
 /// Those are a list marker such as "(b)", a file name, or "e.g.".
-/// A hyphenated word stays whole, so a hyphenated name can be listed.
+/// A word joined by `-` stays whole, so a name joined by `-` can be listed.
 /// A word with `_` stays whole too: it is an identifier outside a code span.
 fn words(sentence: &str) -> Vec<Word> {
     let mut out: Vec<Word> = Vec::new();
@@ -614,7 +652,7 @@ fn without_contraction(token: &str) -> String {
     normalized.split('\'').next().unwrap_or("").to_owned()
 }
 
-/// `word` and the stems its inflectional endings could have come from.
+/// `word` and the stems its grammatical endings could have come from.
 fn inflections(word: &str) -> impl Iterator<Item = String> + '_ {
     const ENDINGS: &[(&str, &[&str])] = &[
         ("ies", &["y"]),
@@ -717,6 +755,7 @@ mod tests {
             listed: vec![],
             used: RefCell::new(HashSet::new()),
             skipped: RefCell::new(None),
+            phrases: vec!["doc comment".to_owned()],
             units: set(&["ms"]),
             context_terms: vec![],
             exclusions: vec![
@@ -823,6 +862,13 @@ mod tests {
                 "agents/vocabulary.md: \"usable\" in Terms of the field is already allowed without its entry",
             ]
         );
+    }
+
+    #[test]
+    fn a_phrase_passes_only_as_a_whole() {
+        let v = vocabulary();
+        let sentence = v.without_phrases("A doc comment and doc comments, but a doc.");
+        assert_eq!(outside(&v, &sentence), ["and", "but", "doc"]);
     }
 
     #[test]
