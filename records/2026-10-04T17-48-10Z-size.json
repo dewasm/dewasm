@@ -1,0 +1,238 @@
+{
+  "schema": 1,
+  "generated_at": "2026-10-04T17:48:10Z",
+  "host": {
+    "os": "macOS 27.0.1",
+    "arch": "aarch64",
+    "kernel": "Darwin 27.0.0",
+    "cpu": "Apple M1 Pro"
+  },
+  "runtimes": [
+    {
+      "runtime": "wasmtime",
+      "version": "wasmtime 49.0.2 (3c8a3e79a 2026-10-02)",
+      "components": [
+        {
+          "path": "/Users/makenowjust/.local/share/mise/installs/wasmtime/49.0.2/wasmtime-v49.0.2-aarch64-macos/wasmtime",
+          "bytes": 59999056
+        }
+      ],
+      "status": "ok",
+      "bytes": 59999056
+    },
+    {
+      "runtime": "wasmer",
+      "version": "wasmer 7.5.0",
+      "components": [
+        {
+          "path": "/opt/homebrew/Cellar/wasmer/7.5.0/bin/wasmer",
+          "bytes": 61994304
+        }
+      ],
+      "status": "ok",
+      "bytes": 61994304
+    },
+    {
+      "runtime": "wasmedge",
+      "version": "wasmedge version 0.17.2",
+      "components": [
+        {
+          "path": "/opt/homebrew/Cellar/wasmedge/0.17.2/bin/wasmedge",
+          "bytes": 33600
+        },
+        {
+          "path": "/opt/homebrew/Cellar/wasmedge/0.17.2/lib/libwasmedge.0.1.1.dylib",
+          "bytes": 2413408
+        }
+      ],
+      "status": "ok",
+      "bytes": 2447008
+    },
+    {
+      "runtime": "wazero",
+      "version": "1.12.0",
+      "components": [
+        {
+          "path": "/opt/homebrew/Cellar/wazero/1.12.0/bin/wazero",
+          "bytes": 5502034
+        }
+      ],
+      "status": "ok",
+      "bytes": 5502034
+    },
+    {
+      "runtime": "wasm3",
+      "version": "Wasm3 v0.9.1-beta.1 on arm64-v8a",
+      "components": [
+        {
+          "path": "/opt/homebrew/Cellar/wasm3/0.9.1/bin/wasm3",
+          "bytes": 247552
+        }
+      ],
+      "status": "ok",
+      "bytes": 247552
+    }
+  ],
+  "apps": [
+    {
+      "app": "cowsay",
+      "file": "cowsay.wasm",
+      "wasm": {
+        "status": "ok",
+        "bytes": 38403
+      },
+      "targets": [
+        {
+          "target": "ruby",
+          "status": "ok",
+          "bytes": 230468
+        },
+        {
+          "target": "python",
+          "status": "ok",
+          "bytes": 206449
+        },
+        {
+          "target": "perl",
+          "status": "ok",
+          "bytes": 349996
+        },
+        {
+          "target": "bash",
+          "status": "ok",
+          "bytes": 538104
+        },
+        {
+          "target": "go",
+          "status": "ok",
+          "bytes": 261806
+        },
+        {
+          "target": "java",
+          "status": "ok",
+          "bytes": 313716
+        }
+      ]
+    },
+    {
+      "app": "sqlite3-shell",
+      "file": "sqlite3-shell.wasm",
+      "wasm": {
+        "status": "ok",
+        "bytes": 1287224
+      },
+      "targets": [
+        {
+          "target": "ruby",
+          "status": "ok",
+          "bytes": 7255787
+        },
+        {
+          "target": "python",
+          "status": "ok",
+          "bytes": 7681267
+        },
+        {
+          "target": "perl",
+          "status": "ok",
+          "bytes": 20845624
+        },
+        {
+          "target": "bash",
+          "status": "ok",
+          "bytes": 37760643
+        },
+        {
+          "target": "go",
+          "status": "ok",
+          "bytes": 12597531
+        },
+        {
+          "target": "java",
+          "status": "ok",
+          "bytes": 13441667
+        }
+      ]
+    },
+    {
+      "app": "qjs",
+      "file": "qjs.wasm",
+      "wasm": {
+        "status": "ok",
+        "bytes": 1537571
+      },
+      "targets": [
+        {
+          "target": "ruby",
+          "status": "ok",
+          "bytes": 6540253
+        },
+        {
+          "target": "python",
+          "status": "ok",
+          "bytes": 6564659
+        },
+        {
+          "target": "perl",
+          "status": "ok",
+          "bytes": 15745698
+        },
+        {
+          "target": "bash",
+          "status": "ok",
+          "bytes": 26972272
+        },
+        {
+          "target": "go",
+          "status": "ok",
+          "bytes": 10352419
+        },
+        {
+          "target": "java",
+          "status": "ok",
+          "bytes": 10657165
+        }
+      ]
+    },
+    {
+      "app": "ruby",
+      "file": "ruby.wasm",
+      "wasm": {
+        "status": "ok",
+        "bytes": 35028911
+      },
+      "targets": [
+        {
+          "target": "ruby",
+          "status": "ok",
+          "bytes": 66871896
+        },
+        {
+          "target": "python",
+          "status": "ok",
+          "bytes": 77094010
+        },
+        {
+          "target": "perl",
+          "status": "ok",
+          "bytes": 197875812
+        },
+        {
+          "target": "bash",
+          "status": "ok",
+          "bytes": 310765038
+        },
+        {
+          "target": "go",
+          "status": "ok",
+          "bytes": 130567910
+        },
+        {
+          "target": "java",
+          "status": "ok",
+          "bytes": 143360340
+        }
+      ]
+    }
+  ]
+}
