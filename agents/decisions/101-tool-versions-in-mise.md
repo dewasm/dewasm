@@ -48,12 +48,15 @@ Concretely:
   A tool on PATH and a `WASI_SDK_PATH` set by hand work as before.
 - The interpreters are in the file too, so CI tests the version a developer runs.
   Ruby's floor was the version CI tested, so it moves with the file: it is now 4.0.
+- Ruby is built from source, through the `ruby.compile` setting.
+  The prebuilt Ruby sets `PKG_CONFIG_PATH` in every process, which a guest then sees in `environ`.
+  It also has no ZJIT.
 - A CI job names the tools it uses, and installs only those.
 - `mise.bench.toml` states the tools only the speed suite needs, and `MISE_ENV=bench` adds it.
   Decision 93 stands: an engine is host-provided, taken from a variable and then from PATH.
   The file is one way to put an engine on PATH.
 - A tool with no prebuilt release to fetch stays outside both files.
-  Those are `monoruby`, Spinel, a Ruby with ZJIT, `bison`, and `flex`.
+  Those are `monoruby`, Spinel, `bison`, and `flex`.
   Bash and Perl come from the host, and Rust stays with `rustup` and `rust-toolchain.toml`.
 
 ## Rejected alternatives
@@ -71,6 +74,9 @@ Concretely:
 - **Test Ruby 3.4 in CI and 4.0 locally.**
   It keeps the floor, and it keeps a second Ruby version in `ci.yml`.
   The project chose to raise the floor instead.
+- **Take the prebuilt Ruby, and list the three `environ` trials it breaks as Linux failures.**
+  macOS already lists them, because CoreFoundation adds a variable of its own there.
+  So the count-exact `environ` trials of the Ruby backend would then run on no host.
 - **State the engines of the speed suite in `mise.toml`.**
   Every `mise install` would then fetch JRuby and GraalPy, about 180 MB the tests never run.
 - **Fall back to `mise where wasi-sdk` in the build scripts.**
@@ -90,9 +96,8 @@ Concretely:
 - Negative: `[env]` applies only where `mise` is active.
   A shell without it needs `mise exec --` in front of each command.
   Ruby 3.4 is no longer tested.
-  CI fetches each tool on every job.
+  CI fetches each tool on every job, and builds Ruby in the two jobs that run it.
 - Carry-over: a developer without `mise` can still run another version, and nothing checks that.
-  A Ruby with ZJIT is still a build from source, since the prebuilt Ruby has none.
 
 See also:
 - [decision 9](9-example-apps-from-registry.md) (the policy on fixed versions);

@@ -22,10 +22,6 @@ This file holds what a user of the numbers never needs and whoever takes them al
   `monoruby` and Spinel are built from their repositories.
   A `mise.local.toml`, which Git ignores, can name them in its `[env]` table.
   The variables are `$DEWASM_MONORUBY` and `$DEWASM_SPINEL`.
-- The prebuilt Ruby that `mise` installs has no ZJIT, so `dewasm-ruby-zjit` reports unavailable.
-  ZJIT needs a Ruby built from source with `rustc` on PATH.
-  `MISE_LOCKFILE=false MISE_RUBY_COMPILE=true mise install --force ruby` builds it in about 3 minutes.
-  Without `MISE_LOCKFILE=false`, that install rewrites the Ruby entries of `mise.lock`.
 - The caches match their fixed versions: `examples/apps/setup.sh --check` reports every app matching.
   `benchmarks/setup.sh` provisions the rest.
 - Measure on mains power.

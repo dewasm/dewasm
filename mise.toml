@@ -1,5 +1,9 @@
 [settings]
 lockfile = true
+# Ruby is built from source, since the prebuilt one does not fit the tests.
+# Its `rbconfig.rb` sets `PKG_CONFIG_PATH` in every process, and a guest sees that in `environ`.
+# It also has no ZJIT, which the speed suite measures.
+ruby.compile = true
 
 [tool_alias]
 binaryen = "aqua:WebAssembly/binaryen"

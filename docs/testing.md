@@ -20,6 +20,8 @@ The following tools and set-up steps are required to run all tests correctly:
     The host provides Bash and Perl.
   * Run the commands in a shell where `mise` is active, or put `mise exec --` in front of each.
     Each tool is then on `PATH`, and `WASI_SDK_PATH` is set.
+  * Ruby is built from source, so the first install takes about 3 minutes.
+    It needs a C compiler, and `rustc` on `PATH` for the two JIT compilers.
   * `mise` is not required.
     Without it, install each tool yourself at the version `mise.toml` states.
 - **Each backend's interpreter or toolchain**, at the version its page under [`docs/backends/`](backends/) states.
