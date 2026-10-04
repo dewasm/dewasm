@@ -57,12 +57,14 @@ mod workload;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context, Result};
 
-use crate::bench::measure::{calibrate, describe_diff, repeat, repeat_app, run_once, stats};
-use crate::bench::report::{Cell, Measurement, Outcome, Samples, SkipKind, Verification};
+use crate::bench::measure::{
+    calibrate, describe_diff, remaining, repeat, repeat_app, run_once, stats, TimeLimit,
+};
+use crate::bench::report::{Cell, Measurement, Outcome, Phase, Samples, SkipKind, Verification};
 use crate::bench::runner::{Kind, Launch, Runner, Workshop};
 use crate::bench::workload::Workload;
 
@@ -73,10 +75,11 @@ use crate::bench::workload::Workload;
 const DEFAULT_REPS: usize = 3;
 /// Default compute time the iteration calibration aims each sample at.
 const DEFAULT_TARGET_MS: u64 = 300;
-/// Default per-process wall-clock limit.
-/// Generous (a Bash sample legitimately takes minutes) but finite.
-/// So a runner that turns out slower than expected costs one timeout instead of hanging the suite.
-const DEFAULT_TIMEOUT_S: u64 = 900;
+/// Default wall-clock limit of one cell's whole run measurement.
+/// Every process the cell starts shares it, so the worst cost of a cell is known before it runs.
+/// That worst cost is this limit plus the build limit.
+/// The longest cell of the suite takes about 250 s on the recording host.
+const DEFAULT_TIMEOUT_S: u64 = 600;
 
 struct Options {
     filter: Option<String>,
@@ -345,6 +348,17 @@ fn run(opts: &Options, runners: &[Runner], workloads: &[Workload]) -> Result<()>
     note_record(&json_path)?;
     println!("nothing was rendered: run `cargo xtask render-speed` to regenerate docs/benchmarks/results.md from this record");
 
+    for cell in &report.results {
+        if let Outcome::TimedOut { phase, limit_s } = &cell.outcome {
+            println!(
+                "TIMED OUT {} on {}: the {} went past {limit_s} s",
+                cell.workload,
+                cell.runner,
+                phase.label()
+            );
+        }
+    }
+
     let failures: Vec<&Cell> = report
         .results
         .iter()
@@ -459,10 +473,11 @@ fn measure_workload(
         println!("  {:<24} {}", workload.label, runner.label);
         let outcome = match measure_cell(opts, workload, runner, workshop, &mut references) {
             Ok(outcome) => outcome,
-            Err(err) => Outcome::Failed {
-                reason: format!("{err:#}"),
-            },
+            Err(err) => outcome_of_error(&err, opts.timeout),
         };
+        if let Outcome::TimedOut { phase, limit_s } = &outcome {
+            println!("    timed out: the {} went past {limit_s} s", phase.label());
+        }
         if let Outcome::Ok(m) = &outcome {
             let ms = |seconds: f64| (seconds * 1000.0).round();
             let iters = m
@@ -501,6 +516,23 @@ fn skip_kind(kind: workload::ExclusionKind) -> SkipKind {
     }
 }
 
+/// A cell that stopped at a time limit is recorded as timed out; any other error is a failure.
+fn outcome_of_error(err: &anyhow::Error, run_limit: Duration) -> Outcome {
+    match err.downcast_ref::<TimeLimit>() {
+        Some(TimeLimit::Build { limit }) => Outcome::TimedOut {
+            phase: Phase::Build,
+            limit_s: limit.as_secs(),
+        },
+        Some(TimeLimit::Run) => Outcome::TimedOut {
+            phase: Phase::Run,
+            limit_s: run_limit.as_secs(),
+        },
+        None => Outcome::Failed {
+            reason: format!("{err:#}"),
+        },
+    }
+}
+
 /// The whole measurement of one (workload, runner) pair.
 /// The resulting `stdout` is diffed against `wasmtime` at the same iteration count.
 fn measure_cell(
@@ -511,6 +543,7 @@ fn measure_cell(
     references: &mut HashMap<u64, Vec<u8>>,
 ) -> Result<Outcome> {
     let launch = workshop.launch(runner, &workload.wasm)?;
+    let deadline = Instant::now() + opts.timeout;
     let mut runs_per_sample = None;
     let (iterations, zero, total, last) = match &workload.kind {
         workload::Kind::Micro { iter_cap } => {
@@ -519,12 +552,12 @@ fn measure_cell(
                 &["0".to_string()],
                 b"",
                 opts.reps,
-                opts.timeout,
+                deadline,
                 "the zero run",
             )?;
             let (zero_min, zero_median) = stats(&zero_samples);
             let iterations = calibrate(
-                |n| run_once(&launch, &[n.to_string()], b"", opts.timeout),
+                |n| run_once(&launch, &[n.to_string()], b"", remaining(deadline)),
                 zero_min,
                 opts.target,
                 *iter_cap,
@@ -534,7 +567,7 @@ fn measure_cell(
                 &[iterations.to_string()],
                 b"",
                 opts.reps,
-                opts.timeout,
+                deadline,
                 "the timed run",
             )?;
             (
@@ -552,7 +585,7 @@ fn measure_cell(
                 stdin.as_bytes(),
                 opts.reps,
                 opts.target,
-                opts.timeout,
+                deadline,
                 "the timed run",
             )?;
             runs_per_sample = Some(k);
@@ -566,7 +599,7 @@ fn measure_cell(
         references.insert(iterations.unwrap_or(0), last.stdout.clone());
         Verification::Reference
     } else {
-        let expected = reference_stdout(workload, iterations, opts, references)?;
+        let expected = reference_stdout(workload, iterations, deadline, references)?;
         if expected != last.stdout {
             return Ok(Outcome::Failed {
                 reason: describe_diff(&expected, &last.stdout),
@@ -609,7 +642,7 @@ fn measure_cell(
 fn reference_stdout(
     workload: &Workload,
     iterations: Option<u64>,
-    opts: &Options,
+    deadline: Instant,
     references: &mut HashMap<u64, Vec<u8>>,
 ) -> Result<Vec<u8>> {
     let key = iterations.unwrap_or(0);
@@ -629,7 +662,7 @@ fn reference_stdout(
         (workload::Kind::App { args, stdin }, _) => (args.clone(), stdin.as_bytes()),
         _ => bail!("internal: a microbenchmark must carry an iteration count"),
     };
-    let outcome = run_once(&launch, &args, stdin, opts.timeout)?;
+    let outcome = run_once(&launch, &args, stdin, remaining(deadline))?;
     outcome.require_success("the wasmtime reference run")?;
     references.insert(key, outcome.stdout.clone());
     Ok(outcome.stdout)
@@ -973,6 +1006,34 @@ mod tests {
         assert!(with_placeholder_line(&speed, "d-speed.json")
             .expect("a speed record names a kind")
             .is_none());
+    }
+
+    #[test]
+    fn a_time_limit_is_recorded_as_timed_out_and_any_other_error_as_failed() {
+        let run_limit = Duration::from_secs(600);
+        let build = anyhow::Error::new(TimeLimit::Build {
+            limit: Duration::from_secs(900),
+        })
+        .context("spinel build timed out");
+        assert!(matches!(
+            outcome_of_error(&build, run_limit),
+            Outcome::TimedOut {
+                phase: Phase::Build,
+                limit_s: 900
+            }
+        ));
+        let run = anyhow::Error::new(TimeLimit::Run).context("the timed run: timed out");
+        assert!(matches!(
+            outcome_of_error(&run, run_limit),
+            Outcome::TimedOut {
+                phase: Phase::Run,
+                limit_s: 600
+            }
+        ));
+        assert!(matches!(
+            outcome_of_error(&anyhow::anyhow!("exit 1"), run_limit),
+            Outcome::Failed { .. }
+        ));
     }
 
     #[test]

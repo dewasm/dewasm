@@ -1,6 +1,7 @@
 //! Process execution and the timing primitives the measurement design rests on.
 //!
 //! * [`run_once`] times one whole process, spawn to exit, under a hard timeout.
+//! * [`run_build`] runs one compiler to its exit, under a hard timeout of its own.
 //!   The timer starts *before* `spawn`: process start is deliberately inside.
 //!   That is because the `<iterations> = 0` run subtracts it back out.
 //! * [`calibrate`] raises the iteration count per runner until the compute time reaches the target.
@@ -13,9 +14,33 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 use crate::bench::runner::Launch;
+
+/// A cell that went past a time limit.
+/// The record reports it as such, never as a failure: the limit only bounds what a run can cost.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimeLimit {
+    Build { limit: Duration },
+    Run,
+}
+
+impl std::fmt::Display for TimeLimit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TimeLimit::Build { .. } => f.write_str("the build went past its time limit"),
+            TimeLimit::Run => f.write_str("the run went past its time limit"),
+        }
+    }
+}
+
+impl std::error::Error for TimeLimit {}
+
+/// The time left until `deadline`, zero once it has passed.
+pub fn remaining(deadline: Instant) -> Duration {
+    deadline.saturating_duration_since(Instant::now())
+}
 
 pub struct RunOutcome {
     /// Wall time from just before `spawn` to the child's exit.
@@ -29,11 +54,12 @@ pub struct RunOutcome {
 
 impl RunOutcome {
     /// `Ok(())` when the child exited 0 in time.
+    /// A child killed at the time limit gives a [`TimeLimit::Run`].
     /// Otherwise a one-line reason carrying the tail of `stderr`.
     /// Every runner in this suite puts its diagnostics there.
     pub fn require_success(&self, what: &str) -> Result<()> {
         if self.timed_out {
-            return Err(anyhow::anyhow!("{what}: timed out"));
+            return Err(anyhow::Error::new(TimeLimit::Run).context(format!("{what}: timed out")));
         }
         if self.code == Some(0) {
             return Ok(());
@@ -88,26 +114,7 @@ pub fn run_once(
     let mut child_stdout = child.stdout.take().expect("stdout was piped");
     let mut child_stderr = child.stderr.take().expect("stderr was piped");
 
-    let done = Arc::new(AtomicBool::new(false));
-    let killed = Arc::new(AtomicBool::new(false));
-    let watchdog = {
-        let (done, killed) = (Arc::clone(&done), Arc::clone(&killed));
-        std::thread::spawn(move || {
-            let deadline = Instant::now() + timeout;
-            loop {
-                if done.load(Ordering::Relaxed) {
-                    return;
-                }
-                let now = Instant::now();
-                if now >= deadline {
-                    killed.store(true, Ordering::Relaxed);
-                    let _ = Command::new("kill").args(["-9", &pid.to_string()]).output();
-                    return;
-                }
-                std::thread::park_timeout(deadline - now);
-            }
-        })
-    };
+    let watchdog = Watchdog::arm(i64::from(pid), timeout);
 
     let input = stdin.to_vec();
     // Dropping the handle at the end of the closure closes the pipe.
@@ -128,21 +135,103 @@ pub fn run_once(
 
     let status = child.wait().context("failed to wait for the child")?;
     let wall = start.elapsed();
-    done.store(true, Ordering::Relaxed);
-    watchdog.thread().unpark();
+    let timed_out = watchdog.disarm();
 
     let _ = writer.join();
     let stdout = out_reader.join().unwrap_or_default();
     let stderr = err_reader.join().unwrap_or_default();
-    let _ = watchdog.join();
 
     Ok(RunOutcome {
         wall,
         stdout,
         stderr,
         code: status.code(),
-        timed_out: killed.load(Ordering::Relaxed),
+        timed_out,
     })
+}
+
+/// Run a compiler to its exit under `limit`, failing with its output when it does not succeed.
+///
+/// The compiler gets a process group of its own, and the whole group is killed at the limit.
+/// So a child the compiler started, such as a linker, ends with it.
+pub fn run_build(what: &str, command: &mut Command, limit: Duration) -> Result<()> {
+    use std::os::unix::process::CommandExt;
+
+    let child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .process_group(0)
+        .spawn()
+        .with_context(|| format!("spawn {what}"))?;
+    let watchdog = Watchdog::arm(-i64::from(child.id()), limit);
+    let out = child
+        .wait_with_output()
+        .with_context(|| format!("wait for {what}"))?;
+    if watchdog.disarm() {
+        return Err(
+            anyhow::Error::new(TimeLimit::Build { limit }).context(format!(
+                "{what} timed out after {} s; $DEWASM_BUILD_TIMEOUT sets the limit",
+                limit.as_secs()
+            )),
+        );
+    }
+    if !out.status.success() {
+        bail!(
+            "{what} failed:\n{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    Ok(())
+}
+
+/// A thread that `kill -9`s `target` when `limit` passes before [`Watchdog::disarm`].
+/// A negative `target` names a process group, as `kill` reads it.
+struct Watchdog {
+    done: Arc<AtomicBool>,
+    killed: Arc<AtomicBool>,
+    thread: std::thread::JoinHandle<()>,
+}
+
+impl Watchdog {
+    fn arm(target: i64, limit: Duration) -> Self {
+        let done = Arc::new(AtomicBool::new(false));
+        let killed = Arc::new(AtomicBool::new(false));
+        let thread = {
+            let (done, killed) = (Arc::clone(&done), Arc::clone(&killed));
+            std::thread::spawn(move || {
+                let deadline = Instant::now() + limit;
+                loop {
+                    if done.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    let now = Instant::now();
+                    if now >= deadline {
+                        killed.store(true, Ordering::Relaxed);
+                        let _ = Command::new("kill")
+                            .args(["-9", "--", &target.to_string()])
+                            .output();
+                        return;
+                    }
+                    std::thread::park_timeout(deadline - now);
+                }
+            })
+        };
+        Watchdog {
+            done,
+            killed,
+            thread,
+        }
+    }
+
+    /// Stop the watch; `true` when the target was killed at the limit.
+    fn disarm(self) -> bool {
+        self.done.store(true, Ordering::Relaxed);
+        self.thread.thread().unpark();
+        let _ = self.thread.join();
+        self.killed.load(Ordering::Relaxed)
+    }
 }
 
 /// App sampling: one sample is the mean of `k` back-to-back executions.
@@ -158,10 +247,10 @@ pub fn repeat_app(
     stdin: &[u8],
     reps: usize,
     target: Duration,
-    timeout: Duration,
+    deadline: Instant,
     what: &str,
 ) -> Result<(u64, Vec<f64>, RunOutcome)> {
-    let warmup = run_once(launch, args, stdin, timeout)?;
+    let warmup = run_once(launch, args, stdin, remaining(deadline))?;
     warmup.require_success(what)?;
     let wall = warmup.wall.as_secs_f64().max(1e-6);
     let k = ((target.as_secs_f64() / wall).ceil() as u64).clamp(1, 64);
@@ -170,7 +259,7 @@ pub fn repeat_app(
     for _ in 0..reps {
         let mut sum = 0.0;
         for _ in 0..k {
-            let outcome = run_once(launch, args, stdin, timeout)?;
+            let outcome = run_once(launch, args, stdin, remaining(deadline))?;
             outcome.require_success(what)?;
             sum += outcome.wall.as_secs_f64();
             last = outcome;
@@ -188,15 +277,15 @@ pub fn repeat(
     args: &[String],
     stdin: &[u8],
     reps: usize,
-    timeout: Duration,
+    deadline: Instant,
     what: &str,
 ) -> Result<(Vec<f64>, RunOutcome)> {
-    let warmup = run_once(launch, args, stdin, timeout)?;
+    let warmup = run_once(launch, args, stdin, remaining(deadline))?;
     warmup.require_success(what)?;
     let mut samples = Vec::with_capacity(reps);
     let mut last = warmup;
     for _ in 0..reps {
-        let outcome = run_once(launch, args, stdin, timeout)?;
+        let outcome = run_once(launch, args, stdin, remaining(deadline))?;
         outcome.require_success(what)?;
         samples.push(outcome.wall.as_secs_f64());
         last = outcome;
@@ -282,4 +371,81 @@ pub fn describe_diff(expected: &[u8], actual: &[u8]) -> String {
         expected.len(),
         actual.len()
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn shell(script: &str) -> Command {
+        let mut command = Command::new("sh");
+        command.args(["-c", script]);
+        command
+    }
+
+    #[test]
+    fn a_build_that_exits_zero_in_time_succeeds() {
+        run_build("true", &mut shell("true"), Duration::from_secs(30)).unwrap();
+    }
+
+    #[test]
+    fn a_build_that_fails_reports_its_output() {
+        let err = run_build(
+            "probe",
+            &mut shell("echo to-stdout; echo to-stderr >&2; exit 3"),
+            Duration::from_secs(30),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("probe failed"), "{err}");
+        assert!(
+            err.contains("to-stdout") && err.contains("to-stderr"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn a_build_past_its_limit_is_killed_with_the_children_it_started() {
+        let start = Instant::now();
+        // The inner `sleep` holds the output pipes open, as a linker under a compiler would.
+        // The call returns only once the whole process group is gone.
+        let err = run_build(
+            "probe",
+            &mut shell("sleep 600 & wait"),
+            Duration::from_secs(1),
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<TimeLimit>(),
+            Some(&TimeLimit::Build {
+                limit: Duration::from_secs(1)
+            })
+        );
+        assert!(
+            err.to_string().contains("probe timed out after 1 s"),
+            "{err}"
+        );
+        assert!(
+            start.elapsed() < Duration::from_secs(60),
+            "{:?}",
+            start.elapsed()
+        );
+    }
+
+    #[test]
+    fn a_run_killed_at_its_limit_is_a_time_limit() {
+        let launch = Launch {
+            program: "sh".into(),
+            args: vec!["-c".to_string(), "sleep 600".to_string()],
+            env: Vec::new(),
+        };
+        let outcome = run_once(&launch, &[], b"", Duration::from_secs(1)).unwrap();
+        let err = outcome.require_success("the timed run").unwrap_err();
+        assert_eq!(err.downcast_ref::<TimeLimit>(), Some(&TimeLimit::Run));
+    }
+
+    #[test]
+    fn a_passed_deadline_leaves_no_time() {
+        assert_eq!(remaining(Instant::now()), Duration::ZERO);
+    }
 }

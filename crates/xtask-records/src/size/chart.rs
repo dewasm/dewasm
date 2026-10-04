@@ -63,8 +63,8 @@ fn runtimes(report: &Report) -> Option<Chart> {
     Some(Chart {
         key: "runtimes".to_string(),
         stem: "runtimes".to_string(),
-        light: lollipop(title, &rows, &LIGHT, &alt, &BYTES, &legend),
-        dark: lollipop(title, &rows, &DARK, &alt, &BYTES, &legend),
+        light: lollipop(title, &rows, &[], &LIGHT, &alt, &BYTES, &legend),
+        dark: lollipop(title, &rows, &[], &DARK, &alt, &BYTES, &legend),
         alt,
     })
 }
@@ -104,8 +104,8 @@ fn app_chart(app: &App) -> Option<Chart> {
     Some(Chart {
         key: app.app.clone(),
         stem: format!("app-{}", app.app.replace('_', "-")),
-        light: lollipop(&title, &rows, &LIGHT, &alt, &BYTES, &legend),
-        dark: lollipop(&title, &rows, &DARK, &alt, &BYTES, &legend),
+        light: lollipop(&title, &rows, &[], &LIGHT, &alt, &BYTES, &legend),
+        dark: lollipop(&title, &rows, &[], &DARK, &alt, &BYTES, &legend),
         alt,
     })
 }

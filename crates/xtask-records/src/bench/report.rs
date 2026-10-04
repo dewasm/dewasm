@@ -89,6 +89,31 @@ pub enum Outcome {
     Failed {
         reason: String,
     },
+    /// Attempted and stopped at a time limit, with nothing measured.
+    /// It is not a failure: the limits exist so that the worst cost of a cell is known.
+    TimedOut {
+        phase: Phase,
+        limit_s: u64,
+    },
+}
+
+/// The part of a cell a time limit applies to.
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[serde(rename_all = "snake_case")]
+pub enum Phase {
+    /// The compiler that turns generated source into something runnable.
+    Build,
+    /// Every process the measurement starts, from the first to the last.
+    Run,
+}
+
+impl Phase {
+    pub fn label(self) -> &'static str {
+        match self {
+            Phase::Build => "build",
+            Phase::Run => "run",
+        }
+    }
 }
 
 /// Why a skipped cell is not measured, as a class.
@@ -321,7 +346,7 @@ fn render_results(out: &mut String, report: &Report, charts: &[Chart]) {
                         md_cell(reason)
                     );
                 }
-                Outcome::Skipped { .. } => {}
+                Outcome::Skipped { .. } | Outcome::TimedOut { .. } => {}
             }
         }
         out.push_str("\n</details>\n\n");
@@ -397,25 +422,35 @@ fn render_gaps(out: &mut String, report: &Report) {
     let skipped: Vec<&Cell> = report
         .results
         .iter()
-        .filter(|cell| matches!(cell.outcome, Outcome::Skipped { .. }))
+        .filter(|cell| {
+            matches!(
+                cell.outcome,
+                Outcome::Skipped { .. } | Outcome::TimedOut { .. }
+            )
+        })
         .collect();
     if skipped.is_empty() {
         out.push_str("Nothing: every (workload, runner) pair in the matrix was measured.\n\n");
         return;
     }
-    out.push_str("Every pair the suite did not measure, and why.\nA missing runner or an unbuilt module is stated here rather than left as a gap in the tables above.\nKind classifies the gap:\n\n- `cost`: runs correctly, but too slowly to keep in the suite;\n- `capability`: the runner cannot execute the workload;\n- `setup`: this host lacks the runner or the built module.\n\n");
+    out.push_str("Every pair the suite did not measure, and why.\nA missing runner or an unbuilt module is stated here rather than left as a gap in the tables above.\nKind classifies the gap:\n\n- `cost`: runs correctly, but too slowly to keep in the suite;\n- `capability`: the runner cannot execute the workload;\n- `setup`: this host lacks the runner or the built module;\n- `time limit`: the build or the run went past its time limit.\n\n");
     out.push_str("| Workload | Runner | Kind | Reason |\n| --- | --- | --- | --- |\n");
     for cell in skipped {
-        if let Outcome::Skipped { kind, reason } = &cell.outcome {
-            let _ = writeln!(
-                out,
-                "| `{}` | `{}` | `{}` | {} |",
-                cell.workload,
-                cell.runner,
-                kind.label(),
-                md_cell(reason)
-            );
-        }
+        let (kind, reason) = match &cell.outcome {
+            Outcome::Skipped { kind, reason } => (kind.label(), reason.clone()),
+            Outcome::TimedOut { phase, limit_s } => (
+                "time limit",
+                format!("the {} went past its limit of {limit_s} s", phase.label()),
+            ),
+            Outcome::Ok(_) | Outcome::Failed { .. } => continue,
+        };
+        let _ = writeln!(
+            out,
+            "| `{}` | `{}` | `{kind}` | {} |",
+            cell.workload,
+            cell.runner,
+            md_cell(&reason)
+        );
     }
     out.push('\n');
 }

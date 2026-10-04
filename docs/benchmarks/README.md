@@ -29,12 +29,16 @@ Useful options:
 | --- | --- |
 | `cargo xtask record-speed --list` | Show the matrix and each runner's availability without running anything. |
 | `cargo xtask record-speed <filter>` | Only pairs whose workload or runner label contains the substring, for example `dewasm-ruby` or `app/`. A record from a filtered run covers only those pairs, so publish from a full run. |
-| `--reps N`, `--target-ms MS`, `--timeout SECS` | Timed runs per measurement (default 3), calibration target per sample (default 300), per-process time limit (default 900). |
+| `--reps N`, `--target-ms MS`, `--timeout SECS` | Timed runs per measurement (default 3), calibration target per sample (default 300), time limit of one pair's whole run measurement (default 600). |
+| `DEWASM_BUILD_TIMEOUT=SECS` | Time limit of one artifact build, for the runners that compile first (default 900). |
 | `cargo xtask render-speed <record>` | Render an older record instead of the newest one; a `-size.json` path is refused. |
 | `cargo xtask migrate-records` | Upgrade every stored record to its kind's current schema, in place; the render commands read only the current schema. |
 
 `wasmtime` is required.
 Any other missing runner is reported as skipped with the reason, and the run continues.
+A pair that goes past a time limit is recorded as timed out, with nothing measured.
+That is not a failure: the two limits exist so that the worst cost of one pair is known.
+Its chart shows `(build timeout)` or `(timeout)` where the value would be.
 Every runner's binary is host-provided: the harness takes whatever `PATH` holds.
 `mise.bench.toml` is one way to install some of them, and it is not required.
 
