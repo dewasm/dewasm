@@ -2,9 +2,9 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# `cowsay`: the classic example of arguments and `stdout`, our C reimplementation of `cowsay` 3.8.4.
-# It prints what the Perl script of that version prints.
-# The binary is 38 kB, against the 700 kB of the Rust clone the Wasmer registry serves.
+# `cowsay`: the classic example of arguments and `stdout`, our C reimplementation of `cowsay`.
+# It prints what the original Perl script prints.
+# The binary is smaller than the Rust clone the Wasmer registry serves.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
