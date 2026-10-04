@@ -2,12 +2,12 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# `cowsay`: the classic example of arguments and `stdout`, our C reimplementation of `cowsay` 3.03.
-# Its output is byte-identical to the original Perl script.
-# The binary is a tenth of the Rust clone the Wasmer registry serves.
+# `cowsay`: the classic example of arguments and `stdout`, our C reimplementation of `cowsay`.
+# It prints what the original Perl script prints.
+# The binary is smaller than the Rust clone the Wasmer registry serves.
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 fetch_app cowsay \
-  "https://github.com/dewasm/cowsay.wasm/releases/download/v0.2.0/cowsay.wasm" \
-  97ff518a9e005edc3a008754f282c77b459e30e3c2c59609db95af380fdfad50
+  "https://github.com/dewasm/cowsay.wasm/releases/download/v0.3.0/cowsay.wasm" \
+  984e2db339d94079e07344917d6e68fdd1826d5ebde343fe91be07d10c8f5401
