@@ -12,6 +12,20 @@ This file holds what a user of the numbers never needs and whoever takes them al
 - Some runners resolve their binary through an environment variable.
   Those are `$DEWASM_MONORUBY`, `$DEWASM_JRUBY`, and the other `$DEWASM_*` names the list output shows.
   Set them when the binary is not on PATH.
+- `MISE_ENV=bench mise install` installs the tools of `mise.bench.toml` beside those of `mise.toml`.
+  Those are JRuby, GraalPy, TinyGo, `wasmtime`, and `wabt`.
+  Take the record under `MISE_ENV=bench` too, so that they are on PATH.
+  A shell where `mise` is not active needs `mise exec --` in front of each command.
+- The JIT-enabled CPython is the `python3` of `mise.toml`.
+  That prebuilt CPython turns its JIT on under `PYTHON_JIT=1`, except on an x86-64 macOS host.
+- `mise` installs no engine that is a build from source.
+  `monoruby` and Spinel are built from their repositories.
+  A `mise.local.toml`, which Git ignores, can name them in its `[env]` table.
+  The variables are `$DEWASM_MONORUBY` and `$DEWASM_SPINEL`.
+- The prebuilt Ruby that `mise` installs has no ZJIT, so `dewasm-ruby-zjit` reports unavailable.
+  ZJIT needs a Ruby built from source with `rustc` on PATH.
+  `MISE_LOCKFILE=false MISE_RUBY_COMPILE=true mise install --force ruby` builds it in about 3 minutes.
+  Without `MISE_LOCKFILE=false`, that install rewrites the Ruby entries of `mise.lock`.
 - The caches match their fixed versions: `examples/apps/setup.sh --check` reports every app matching.
   `benchmarks/setup.sh` provisions the rest.
 - Measure on mains power.

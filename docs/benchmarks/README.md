@@ -6,6 +6,8 @@ The results are in [results.md](results.md) with its figures under `figs/`; the 
 ## Running
 
 ```console
+$ export MISE_ENV=bench              # adds the tools of mise.bench.toml to those of mise.toml
+$ mise install                       # installs wasmtime, wabt, and the engines with a release to fetch
 $ examples/apps/setup.sh             # fetches and builds the pinned apps (sqlite3-shell, cowsay, ...)
 $ benchmarks/setup.sh                # builds the microbenchmarks, pins pywasm and wardite
 $ cargo xtask record-speed           # measures every workload on every runner
@@ -33,6 +35,8 @@ Useful options:
 
 `wasmtime` is required.
 Any other missing runner is reported as skipped with the reason, and the run continues.
+Every runner's binary is host-provided: the harness takes whatever `PATH` holds.
+`mise.bench.toml` is one way to install some of them, and it is not required.
 
 ## How measurement works
 
