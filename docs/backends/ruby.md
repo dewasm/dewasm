@@ -23,7 +23,8 @@ In **standalone** mode the class is always `Program` and `--module-name` is reje
 
 ## Requirements
 
-`ruby` **3.4 or newer** on `PATH`: the runtime's linear memory is an `IO::Buffer`.
+`ruby` **4.0 or newer** on `PATH`, the version the tests run.
+The runtime's linear memory is an `IO::Buffer`.
 No gems are needed, so the output is self-contained.
 
 ## Running it

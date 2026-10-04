@@ -133,8 +133,8 @@ pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
     Ok(format!("module Rt\n{}end\n", bundler().bundle(seeds, 1)?))
 }
 
-/// Locate a Ruby interpreter able to run generated scripts: at least 3.4.
-/// The version is required because the generated runtime's memory is `IO::Buffer`-backed.
+/// Locate a Ruby interpreter able to run generated scripts: at least 4.0.
+/// The generated runtime's memory is `IO::Buffer`-backed, and 4.0 is the version the tests run.
 /// Honors `$DEWASM_RUBY`, then `ruby` on `PATH`.
 /// A missing or too-old interpreter fails loud with a set-up instruction.
 /// It never skips silently.
@@ -171,7 +171,7 @@ fn find_ruby_uncached() -> Option<std::path::PathBuf> {
         ) else {
             continue;
         };
-        if (major, minor) >= (3, 4) {
+        if (major, minor) >= (4, 0) {
             return Some(candidate);
         }
     }

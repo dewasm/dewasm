@@ -10,7 +10,7 @@ The worked example is an ahead-of-time Ruby compiler, the case that produced dec
 ## The hook
 
 [`dewasm_backend_ruby::find_ruby`](../crates/dewasm-backend-ruby/src/lib.rs) honors `$DEWASM_RUBY`.
-It probes the candidate with `-e "print RUBY_VERSION"`, requiring 3.4 or newer.
+It probes the candidate with `-e "print RUBY_VERSION"`, requiring 4.0 or newer.
 Every suite that runs Ruby goes through it.
 So a wrapper standing in for `ruby` is the whole mechanism, and the product needs no change.
 

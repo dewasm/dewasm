@@ -92,7 +92,7 @@ fn write(path: &Path, contents: &str) {
 /// The directory makes `__dir__`-relative data file loads resolve.
 fn run_ruby(prog: &Path, args: &[&str]) -> (Vec<u8>, i32) {
     let ruby =
-        find_ruby().expect("ruby >= 3.4 not found on PATH (or $DEWASM_RUBY): see docs/testing.md");
+        find_ruby().expect("ruby >= 4.0 not found on PATH (or $DEWASM_RUBY): see docs/testing.md");
     let out = Command::new(ruby)
         .arg(prog)
         .args(args)
