@@ -13,6 +13,3 @@ runs:
       with:
         version: 2026.10.1
         install_args: ${{ inputs.tools }}
-        # A cache of the tools would compete with the build cache for the 10 GB cache budget.
-        # So each job fetches its tools again, and `mise.lock` verifies them by checksum.
-        cache: false

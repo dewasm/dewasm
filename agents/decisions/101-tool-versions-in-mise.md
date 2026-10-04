@@ -52,6 +52,7 @@ Concretely:
   The prebuilt Ruby sets `PKG_CONFIG_PATH` in every process, which a guest then sees in `environ`.
   It also has no ZJIT.
 - A CI job names the tools it uses, and installs only those.
+  The action caches what it installed, under a key that holds the `mise` files and the tool names.
 - `mise.bench.toml` states the tools only the speed suite needs, and `MISE_ENV=bench` adds it.
   Decision 93 stands: an engine is host-provided, taken from a variable and then from PATH.
   The file is one way to put an engine on PATH.
@@ -83,9 +84,6 @@ Concretely:
   It would work in a shell where `mise` is not active.
   But the scripts would then know two ways to find the SDK, and one of them names a tool manager.
   `mise exec --` in front of the command reaches the same result.
-- **Let CI cache the installed tools.**
-  The cache would compete with the build cache for the 10 GB budget.
-  `mise.lock` verifies each fetched tool, so CI fetches it again on every job.
 
 ## Consequences
 
@@ -96,7 +94,7 @@ Concretely:
 - Negative: `[env]` applies only where `mise` is active.
   A shell without it needs `mise exec --` in front of each command.
   Ruby 3.4 is no longer tested.
-  CI fetches each tool on every job, and builds Ruby in the two jobs that run it.
+  A change to a `mise` file costs CI one Ruby build of about 4 minutes in each job that runs Ruby.
 - Carry-over: a developer without `mise` can still run another version, and nothing checks that.
 
 See also:
