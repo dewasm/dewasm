@@ -5,6 +5,7 @@ Implemented in `crates/dewasm-test-helper/src/wasi_testsuite.rs`.
 The trait methods are `expected_failures_macos`/`expected_failures_linux`.
 The first scoped entries (Java, Ruby) landed with them.
 The Java `path_link` entry was fixed instead of scoped.
+The Java Linux entry went away when CI moved to JDK 25, which passes `rust/symlink_filestat`.
 
 ## Context
 
