@@ -52,7 +52,8 @@ Concretely:
   The prebuilt Ruby sets `PKG_CONFIG_PATH` in every process, which a guest then sees in `environ`.
   It also has no ZJIT.
 - A CI job names the tools it uses, and installs only those.
-  The action caches what it installed, under a key that holds the `mise` files and the tool names.
+  A job installs each group of tools it shares with other jobs in a call of its own.
+  A call caches only the tools it names, so the jobs share that cache and no tool is stored twice.
 - `mise.bench.toml` states the tools only the speed suite needs, and `MISE_ENV=bench` adds it.
   Decision 93 stands: an engine is host-provided, taken from a variable and then from PATH.
   The file is one way to put an engine on PATH.

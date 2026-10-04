@@ -53,7 +53,10 @@ jobs:
       # Ubuntu's packaged Binaryen is older than that flag.
       - uses: ./.github/actions/mise
         with:
-          tools: wasi-sdk binaryen wasi-vfs
+          tools: binaryen wasi-vfs
+      - uses: ./.github/actions/mise
+        with:
+          tools: wasi-sdk
       - name: Install setup.sh build tools (bison, flex)
         run: |
           sudo apt-get update
@@ -82,16 +85,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # `tools` names what the backend's tests run, as `mise.toml` names it.
+        # `tool` names what the backend's tests run, as `mise.toml` names it.
         # Bash and Perl come with the runner.
         include:
-          - { backend: ruby, tools: ruby }
-          - { backend: bash, tools: '' }
-          - { backend: python, tools: python }
-          - { backend: go, tools: go }
-          - { backend: java, tools: java }
-          - { backend: perl, tools: '' }
-          - { backend: codon, tools: codon }
+          - { backend: ruby, tool: ruby }
+          - { backend: bash, tool: '' }
+          - { backend: python, tool: python }
+          - { backend: go, tool: go }
+          - { backend: java, tool: java }
+          - { backend: perl, tool: '' }
+          - { backend: codon, tool: codon }
     runs-on: ubuntu-latest
     # The `slow_test` run (full specification suites + slow apps) has unmeasured wall time.
     # Give it a wide margin and tighten later.
@@ -106,9 +109,13 @@ jobs:
         run: perl -MConfig -e 'print "perl $] ivsize=$Config{ivsize} nvsize=$Config{nvsize}\n"; die "unsuitable system perl\n" unless $] >= 5.026 && $Config{ivsize} == 8 && $Config{nvsize} == 8'
       # The `apps_cache_pins` test reproduces the stamps.
       # Those name the versions of `wasm-opt` and `wasi-vfs`, so every test job installs both.
+      # They are a call of their own, so that every job shares one cache of them.
       - uses: ./.github/actions/mise
         with:
-          tools: binaryen wasi-vfs ${{ matrix.tools }}
+          tools: binaryen wasi-vfs
+      - uses: ./.github/actions/mise
+        with:
+          tools: ${{ matrix.tool }}
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test-${{ matrix.backend }}
@@ -146,9 +153,22 @@ jobs:
       # Bash and Perl come with the runner.
       # The `apps_cache_pins` test reproduces the stamps.
       # Those name the versions of `wasm-opt` and `wasi-vfs`.
+      # Each call names what one test job names, so this job shares that job's cache.
       - uses: ./.github/actions/mise
         with:
-          tools: binaryen wasi-vfs ruby python go java
+          tools: binaryen wasi-vfs
+      - uses: ./.github/actions/mise
+        with:
+          tools: ruby
+      - uses: ./.github/actions/mise
+        with:
+          tools: python
+      - uses: ./.github/actions/mise
+        with:
+          tools: go
+      - uses: ./.github/actions/mise
+        with:
+          tools: java
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: core
