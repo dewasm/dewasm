@@ -285,7 +285,7 @@ impl Target {
         match self {
             Target::Ruby(flag) => {
                 let ruby = dewasm_backend_ruby::find_ruby().ok_or_else(|| {
-                    "ruby >= 3.4 not found on PATH (or $DEWASM_RUBY): see docs/testing.md"
+                    "ruby >= 4.0 not found on PATH (or $DEWASM_RUBY): see docs/testing.md"
                         .to_string()
                 })?;
                 ruby_jit_available(&ruby, flag)
@@ -454,7 +454,7 @@ impl Driver {
             }
             Driver::Wardite(flag) => {
                 let ruby = dewasm_backend_ruby::find_ruby().ok_or_else(|| {
-                    "ruby >= 3.4 not found on PATH (or $DEWASM_RUBY): see docs/testing.md"
+                    "ruby >= 4.0 not found on PATH (or $DEWASM_RUBY): see docs/testing.md"
                         .to_string()
                 })?;
                 ruby_jit_available(&ruby, flag)?;

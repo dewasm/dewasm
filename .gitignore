@@ -1,3 +1,5 @@
 /target
 /examples/apps/cache/
 /crates/xtask-text-check/cache/
+/mise.local.toml
+/mise.*.local.toml

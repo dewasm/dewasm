@@ -21,7 +21,7 @@ require_tool() {
   exit 1
 }
 
-require_tool wat2wasm "install wabt (brew install wabt / apt install wabt)"
+require_tool wat2wasm "install wabt (MISE_ENV=bench mise install / brew install wabt / apt install wabt)"
 
 # WABT turns the post-baseline proposals on by default.
 # 1.0.42 dropped the --enable-exceptions spelling entirely.

@@ -15,7 +15,7 @@ mod common;
 use common::build_java;
 
 /// Known trial failures with their attribution: `(trial, tag)`.
-/// Host-specific ones live in the two constants below.
+/// Host-specific ones live in the constant below.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared ENOSYS / out-of-scope system calls (`docs/support.md`).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
@@ -40,17 +40,6 @@ const WASI_TESTSUITE_EXPECTED_FAILURES_MACOS: &[(&str, &str)] = &[
         "environ: host-interpreter env injection",
     ),
 ];
-
-/// Host-scoped failures on a Linux host.
-/// The unit passes nanosecond-precision FileTime to `BasicFileAttributeView.setTimes`.
-/// It passes `NOFOLLOW_LINKS` too.
-/// But the Linux JDK routes the NOFOLLOW case through µs-precision `lutimes`.
-/// So the suite's nanosecond `mtim` round-trip is truncated and fails; macOS preserves nanoseconds.
-/// The counterpart of the Go backend's listed `lutimes` gap.
-const WASI_TESTSUITE_EXPECTED_FAILURES_LINUX: &[(&str, &str)] = &[(
-    "rust/symlink_filestat",
-    "path_filestat_set_times: Linux JDK sets NOFOLLOW symlink times via microsecond lutimes, truncating ns",
-)];
 
 struct JavaWasi;
 
@@ -95,10 +84,6 @@ impl dewasm_test_helper::WasiTestsuiteBackend for JavaWasi {
 
     fn expected_failures_macos(&self) -> &'static [(&'static str, &'static str)] {
         WASI_TESTSUITE_EXPECTED_FAILURES_MACOS
-    }
-
-    fn expected_failures_linux(&self) -> &'static [(&'static str, &'static str)] {
-        WASI_TESTSUITE_EXPECTED_FAILURES_LINUX
     }
 }
 

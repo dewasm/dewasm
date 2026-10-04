@@ -124,8 +124,8 @@ wasm_opt_inplace() {
 wasm_opt_version() { wasm-opt --version 2>/dev/null || true; }
 
 # --- The C toolchain for the locally-compiled modules: `wasi-sdk`, located through WASI_SDK_PATH.
-# Local development and CI use `wasi-sdk-34`; keep `.github/workflows/ci.yml` in sync.
-WASI_SDK_HINT="download wasi-sdk (local dev and CI use wasi-sdk-34, https://github.com/WebAssembly/wasi-sdk/releases) and set WASI_SDK_PATH to its root"
+# `mise.toml` states the version, and its `[env]` table sets the variable.
+WASI_SDK_HINT="run \`mise install\` in a shell where mise is active, or download the wasi-sdk version mise.toml states (https://github.com/WebAssembly/wasi-sdk/releases) and set WASI_SDK_PATH to its root"
 
 # `require_wasi_sdk <app>`: fail loudly unless WASI_SDK_PATH points at a `wasi-sdk` root.
 require_wasi_sdk() {

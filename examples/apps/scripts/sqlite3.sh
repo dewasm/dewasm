@@ -126,7 +126,7 @@ require_tool sqlite3 wasm-opt "install binaryen (e.g. brew install binaryen) to 
 # Under `pipefail`, the SIGPIPE that gives `wasm-opt` then fails the probe.
 # That happens on hosts where the help text is larger than the pipe buffer.
 if ! wasm-opt --help 2>&1 | grep -c -- --no-inline > /dev/null; then
-  echo "sqlite3: this wasm-opt does not support --no-inline; install a newer binaryen (local dev uses version 132)" >&2
+  echo "sqlite3: this wasm-opt does not support --no-inline; install the binaryen version mise.toml states" >&2
   exit 1
 fi
 

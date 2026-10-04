@@ -18,6 +18,9 @@ Project documents are written in English.
 ## Development environment
 
 The Rust toolchain version is set in `rust-toolchain.toml`; plain `cargo` commands pick it up.
+Every other tool version is set in `mise.toml`, and `mise install` installs them (decision 101).
+A version is stated there once: CI, a script, or a document names the file, never the number.
+In a shell where `mise` is not active, put `mise exec --` in front of a command.
 Everything else the test suite needs is in [`docs/testing.md`](docs/testing.md).
 That covers the interpreters, the submodules, the apps cache, and the fail-loud-not-skip policy.
 

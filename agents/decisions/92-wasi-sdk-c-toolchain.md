@@ -5,12 +5,15 @@ Implemented in these places (issue #306):
 - `examples/apps/scripts/common.sh` (`require_wasi_sdk`, `wasi_sdk_clang`, `wasi_sdk_stamp`);
 - every C build under `examples/apps/scripts/`;
 - `benchmarks/c/build.sh`;
-- the CI apps-cache job (`.github/workflows/ci.yml`);
+- the CI `setup` job (`.github/workflows/ci.yml`);
 - `docs/testing.md`;
 - the compatibility sources `examples/apps/src/pcap_wasi/`;
 - the compatibility source `examples/apps/src/sqlite3_shell_wasi_compat.c`.
 
 Every snapshot passed unchanged against the rebuilt artifacts.
+[Decision 101](101-tool-versions-in-mise.md) replaced the install policy.
+`mise.toml` now states the SDK version and sets `WASI_SDK_PATH`, for local development and for CI.
+The choice of `wasi-sdk`, the variable, `--no-wasm-opt`, and the stamp all stand.
 
 ## Context
 
