@@ -51,9 +51,8 @@ Concretely:
 - Ruby is built from source, through the `ruby.compile` setting.
   The prebuilt Ruby sets `PKG_CONFIG_PATH` in every process, which a guest then sees in `environ`.
   It also has no ZJIT.
-- A CI job names the tools it uses, and installs only those.
-  A job installs each group of tools it shares with other jobs in a call of its own.
-  A call caches only the tools it names, so the jobs share that cache and no tool is stored twice.
+- Every CI job installs every tool of `mise.toml`, so all jobs share one cache of them.
+  The `setup` job runs first and fills that cache; the other jobs wait for it.
 - `mise.bench.toml` states the tools only the speed suite needs, and `MISE_ENV=bench` adds it.
   Decision 93 stands: an engine is host-provided, taken from a variable and then from PATH.
   The file is one way to put an engine on PATH.
@@ -95,7 +94,7 @@ Concretely:
 - Negative: `[env]` applies only where `mise` is active.
   A shell without it needs `mise exec --` in front of each command.
   Ruby 3.4 is no longer tested.
-  A change to a `mise` file costs CI one Ruby build of about 4 minutes in each job that runs Ruby.
+  A change to a `mise` file costs CI one Ruby build of about 4 minutes, in the `setup` job.
 - Carry-over: a developer without `mise` can still run another version, and nothing checks that.
 
 See also:

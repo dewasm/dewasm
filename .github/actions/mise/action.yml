@@ -1,53 +1,10 @@
 name: Install tools through mise
 description: >
-  Installs the named tools at the versions mise.toml and mise.lock state, and caches them.
-  One call caches only the tools it names, under a key that holds those names.
-  So jobs that name the same tools share one cache.
-  A job calls the action once for each group of tools it shares with other jobs.
-inputs:
-  tools:
-    description: >
-      The tools to install, as names from mise.toml separated by spaces.
-      An empty value makes the action do nothing.
-    required: false
-    default: ''
+  Installs every tool at the versions mise.toml and mise.lock state.
+  Every job installs the same tools, so all jobs share one cache of them.
 runs:
   using: composite
   steps:
-    - id: plan
-      if: inputs.tools != ''
-      shell: bash
-      env:
-        TOOLS: ${{ inputs.tools }}
-      run: |
-        data="${MISE_DATA_DIR:-$HOME/.local/share/mise}"
-        {
-          echo "version=2026.10.1"
-          echo "image=${ImageOS:-unknown}"
-          echo "bin=$data/bin"
-          if [ -x "$data/bin/mise" ]; then echo "has-mise=true"; else echo "has-mise=false"; fi
-          echo "names=$(printf '%s\n' $TOOLS | sort | paste -sd- -)"
-          echo "installs<<EOF"
-          for tool in $TOOLS; do echo "$data/installs/$tool"; done
-          echo "EOF"
-        } >> "$GITHUB_OUTPUT"
-    # An earlier call in the same job leaves the `mise` binary in place.
-    - if: inputs.tools != '' && steps.plan.outputs.has-mise == 'false'
-      uses: actions/cache@v6
+    - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
       with:
-        path: ${{ steps.plan.outputs.bin }}
-        key: mise-bin-${{ runner.os }}-${{ runner.arch }}-${{ steps.plan.outputs.image }}-${{ steps.plan.outputs.version }}
-    # The cache of `jdx/mise-action` holds the whole data directory of `mise` under one key.
-    # A second call in one job would then store the tools of the first call again.
-    # So that cache is off, and this step caches the install directory of each named tool.
-    - if: inputs.tools != ''
-      uses: actions/cache@v6
-      with:
-        path: ${{ steps.plan.outputs.installs }}
-        key: mise-${{ steps.plan.outputs.names }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.plan.outputs.image }}-${{ hashFiles('mise.toml', 'mise.lock') }}
-    - if: inputs.tools != ''
-      uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
-      with:
-        version: ${{ steps.plan.outputs.version }}
-        install_args: ${{ inputs.tools }}
-        cache: false
+        version: 2026.10.1

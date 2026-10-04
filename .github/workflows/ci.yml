@@ -17,30 +17,9 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7 # no submodules: fmt, clippy, and the text check don't read them
-      - uses: ./.github/actions/mise
-        with:
-          tools: shellcheck
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: lint
-      - run: cargo fmt --check
-      - run: cargo clippy --all-targets -- -D warnings
-      # The writing style rules that a program can check.
-      # The vocabulary check reads two word lists, which its `setup.sh` fetches by sha256.
-      - uses: actions/cache@v6
-        with:
-          path: crates/xtask-text-check/cache
-          key: word-lists-${{ hashFiles('crates/xtask-text-check/setup.sh') }}
-      - run: crates/xtask-text-check/setup.sh
-      - run: cargo test -p xtask-text-check
-      - run: git ls-files '*.sh' | grep -v '^crates/dewasm-backend-bash/units/' | xargs shellcheck -x
-
-  apps-cache:
+  # Every other job waits for this one.
+  # It fills the two caches they read: the tools of `mise.toml`, and the apps.
+  setup:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -52,11 +31,6 @@ jobs:
       # The sqlite3-mod build needs `wasm-opt`'s `--no-inline`.
       # Ubuntu's packaged Binaryen is older than that flag.
       - uses: ./.github/actions/mise
-        with:
-          tools: binaryen wasi-vfs
-      - uses: ./.github/actions/mise
-        with:
-          tools: wasi-sdk
       - name: Install setup.sh build tools (bison, flex)
         run: |
           sudo apt-get update
@@ -79,22 +53,34 @@ jobs:
       - name: Populate apps cache (no-op on full cache hit)
         run: examples/apps/setup.sh
 
+  lint:
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7 # no submodules: fmt, clippy, and the text check don't read them
+      - uses: ./.github/actions/mise
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: lint
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      # The writing style rules that a program can check.
+      # The vocabulary check reads two word lists, which its `setup.sh` fetches by sha256.
+      - uses: actions/cache@v6
+        with:
+          path: crates/xtask-text-check/cache
+          key: word-lists-${{ hashFiles('crates/xtask-text-check/setup.sh') }}
+      - run: crates/xtask-text-check/setup.sh
+      - run: cargo test -p xtask-text-check
+      - run: git ls-files '*.sh' | grep -v '^crates/dewasm-backend-bash/units/' | xargs shellcheck -x
+
   test:
-    needs: apps-cache
-    name: test (${{ matrix.backend }})
+    needs: setup
     strategy:
       fail-fast: false
       matrix:
-        # `tool` names what the backend's tests run, as `mise.toml` names it.
-        # Bash and Perl come with the runner.
-        include:
-          - { backend: ruby, tool: ruby }
-          - { backend: bash, tool: '' }
-          - { backend: python, tool: python }
-          - { backend: go, tool: go }
-          - { backend: java, tool: java }
-          - { backend: perl, tool: '' }
-          - { backend: codon, tool: codon }
+        backend: [ruby, bash, python, go, java, perl, codon]
     runs-on: ubuntu-latest
     # The `slow_test` run (full specification suites + slow apps) has unmeasured wall time.
     # Give it a wide margin and tighten later.
@@ -103,19 +89,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: true
-      # The runner's system Perl satisfies the backend's floor (>= 5.26 with `ivsize=8`/`nvsize=8`).
-      # Verify loudly up front instead of skipping.
-      - if: matrix.backend == 'perl'
-        run: perl -MConfig -e 'print "perl $] ivsize=$Config{ivsize} nvsize=$Config{nvsize}\n"; die "unsuitable system perl\n" unless $] >= 5.026 && $Config{ivsize} == 8 && $Config{nvsize} == 8'
-      # The `apps_cache_pins` test reproduces the stamps.
-      # Those name the versions of `wasm-opt` and `wasi-vfs`, so every test job installs both.
-      # They are a call of their own, so that every job shares one cache of them.
+      # Bash and Perl come with the runner; `mise` provides every other backend's tools.
       - uses: ./.github/actions/mise
-        with:
-          tools: binaryen wasi-vfs
-      - uses: ./.github/actions/mise
-        with:
-          tools: ${{ matrix.tool }}
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test-${{ matrix.backend }}
@@ -125,7 +100,7 @@ jobs:
       - uses: actions/cache/restore@v6
         with:
           path: examples/apps/cache
-          key: ${{ needs.apps-cache.outputs.key }}
+          key: ${{ needs.setup.outputs.key }}
           fail-on-cache-miss: true
       - name: Test
         if: github.event_name == 'pull_request'
@@ -140,7 +115,7 @@ jobs:
         run: cargo test -p dewasm-backend-${{ matrix.backend }} --no-fail-fast --features dewasm-backend-${{ matrix.backend }}/slow_test
 
   core:
-    needs: apps-cache
+    needs: setup
     runs-on: ubuntu-latest
     # The `slow_test` run (full specification suites + slow apps) has unmeasured wall time.
     # Give it a wide margin and tighten later.
@@ -151,24 +126,7 @@ jobs:
           submodules: true
       # dewasm holds the cross-backend tests, so this job needs every backend toolchain.
       # Bash and Perl come with the runner.
-      # The `apps_cache_pins` test reproduces the stamps.
-      # Those name the versions of `wasm-opt` and `wasi-vfs`.
-      # Each call names what one test job names, so this job shares that job's cache.
       - uses: ./.github/actions/mise
-        with:
-          tools: binaryen wasi-vfs
-      - uses: ./.github/actions/mise
-        with:
-          tools: ruby
-      - uses: ./.github/actions/mise
-        with:
-          tools: python
-      - uses: ./.github/actions/mise
-        with:
-          tools: go
-      - uses: ./.github/actions/mise
-        with:
-          tools: java
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: core
@@ -178,7 +136,7 @@ jobs:
       - uses: actions/cache/restore@v6
         with:
           path: examples/apps/cache
-          key: ${{ needs.apps-cache.outputs.key }}
+          key: ${{ needs.setup.outputs.key }}
           fail-on-cache-miss: true
       # Speed categories: the `slow_test` feature covers the slow cases.
       # `dewasm-test-helper/wasmtime_test` runs the `apps_wasmtime` snapshot-freshness suite.

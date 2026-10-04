@@ -29,6 +29,6 @@ version_prefix = "wasi-sdk-"
 filter_bins = ["none"]
 
 [env]
-# A CI job installs only the tools it uses, and `tools` has no entry for one not installed.
-# Reading `.path` of a missing entry is an error, so the variable is empty in such a job.
+# Before the first `mise install`, `tools` has no entry for `wasi-sdk`.
+# Reading `.path` of a missing entry is an error, so the variable is empty until then.
 WASI_SDK_PATH = { value = "{% if tools['wasi-sdk'] is defined %}{{ tools['wasi-sdk'].path }}{% endif %}", tools = true }

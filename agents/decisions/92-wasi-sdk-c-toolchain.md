@@ -5,7 +5,7 @@ Implemented in these places (issue #306):
 - `examples/apps/scripts/common.sh` (`require_wasi_sdk`, `wasi_sdk_clang`, `wasi_sdk_stamp`);
 - every C build under `examples/apps/scripts/`;
 - `benchmarks/c/build.sh`;
-- the CI apps-cache job (`.github/workflows/ci.yml`);
+- the CI `setup` job (`.github/workflows/ci.yml`);
 - `docs/testing.md`;
 - the compatibility sources `examples/apps/src/pcap_wasi/`;
 - the compatibility source `examples/apps/src/sqlite3_shell_wasi_compat.c`.
