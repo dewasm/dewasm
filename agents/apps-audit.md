@@ -27,7 +27,7 @@ The entry then records that evidence so the investigation is not repeated.
 
 | App | Source | Wasm features beyond baseline | Verdict |
 | --- | --- | --- | --- |
-| `cowsay.wasm` 0.2.0 (`cowsay` 3.03 in C) | our own release, at a fixed version in `setup.sh` | none | ✅ in scope (shipping) |
+| `cowsay.wasm` 0.3.0 (`cowsay` 3.8.4 in C) | our own release, at a fixed version in `setup.sh` | none | ✅ in scope (shipping) |
 | `quickjs-ng` v0.15.1 | fixed version in `setup.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **deepened**³) |
 | sqlite3 3.53.3 (three shapes) | fixed version in `setup.sh` | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, **deepened**⁴) |
 | CPython 3.14.6 | fixed version in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |
