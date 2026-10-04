@@ -146,11 +146,29 @@ fn find_codon_uncached() -> Option<std::path::PathBuf> {
 /// A built binary needs it on the loader path.
 /// It is resolved relative to the `codon` binary, following symbolic links.
 /// `<prefix>/bin/codon` maps to `<prefix>/lib/codon`.
+/// [`find_codon`] returns a name with no directory part for a `codon` on `PATH`.
+/// Such a name is looked up there first.
 pub fn codon_lib_dir(codon: &std::path::Path) -> Option<std::path::PathBuf> {
-    let resolved = codon.canonicalize().ok()?;
+    let located = locate_command(codon, std::env::var_os("PATH").as_deref())?;
+    let resolved = located.canonicalize().ok()?;
     let prefix = resolved.parent()?.parent()?;
     let lib = prefix.join("lib").join("codon");
     lib.is_dir().then_some(lib)
+}
+
+/// The file a process spawn of `command` runs.
+/// A name with no directory part is searched for in `path`'s directories.
+/// Any other stands as it is.
+fn locate_command(
+    command: &std::path::Path,
+    path: Option<&std::ffi::OsStr>,
+) -> Option<std::path::PathBuf> {
+    if command.components().count() != 1 {
+        return Some(command.to_path_buf());
+    }
+    std::env::split_paths(path?)
+        .map(|dir| dir.join(command))
+        .find(|candidate| candidate.is_file())
 }
 
 pub struct CodonBackend;
@@ -2966,5 +2984,34 @@ mod units {
             String::from_utf8_lossy(&out.stderr)
         );
         let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod toolchain {
+    use super::locate_command;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn a_plain_name_is_found_in_the_first_path_directory_that_holds_it() {
+        let root = std::env::temp_dir().join(format!("dewasm-codon-locate-{}", std::process::id()));
+        let (empty, holds) = (root.join("empty"), root.join("holds"));
+        std::fs::create_dir_all(&empty).unwrap();
+        std::fs::create_dir_all(&holds).unwrap();
+        std::fs::write(holds.join("codon"), "").unwrap();
+        let path = std::env::join_paths([&empty, &holds]).unwrap();
+
+        let found = locate_command(Path::new("codon"), Some(&path));
+        let missing = locate_command(Path::new("no-such-codon"), Some(&path));
+        let _ = std::fs::remove_dir_all(&root);
+
+        assert_eq!(found, Some(holds.join("codon")));
+        assert_eq!(missing, None);
+    }
+
+    #[test]
+    fn a_name_with_a_directory_part_is_not_searched_for() {
+        let command = Path::new("some/dir/codon");
+        assert_eq!(locate_command(command, None), Some(PathBuf::from(command)));
     }
 }
