@@ -11,6 +11,9 @@ Implemented in these places (issue #306):
 - the compatibility source `examples/apps/src/sqlite3_shell_wasi_compat.c`.
 
 Every snapshot passed unchanged against the rebuilt artifacts.
+[Decision 101](101-tool-versions-in-mise.md) replaced the install policy.
+`mise.toml` now states the SDK version and sets `WASI_SDK_PATH`, for local development and for CI.
+The choice of `wasi-sdk`, the variable, `--no-wasm-opt`, and the stamp all stand.
 
 ## Context
 

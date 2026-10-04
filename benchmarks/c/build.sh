@@ -16,7 +16,7 @@ mkdir -p cache/c
 
 # Fail loudly with an actionable message rather than half-building.
 if [ -z "${WASI_SDK_PATH-}" ] || [ ! -x "$WASI_SDK_PATH/bin/clang" ]; then
-  echo "benchmarks/c/build.sh: WASI_SDK_PATH does not point at a wasi-sdk root: download wasi-sdk (local dev and CI use wasi-sdk-34, https://github.com/WebAssembly/wasi-sdk/releases) and set WASI_SDK_PATH to its root, as examples/apps/setup.sh also needs" >&2
+  echo "benchmarks/c/build.sh: WASI_SDK_PATH does not point at a wasi-sdk root: run \`mise install\` in a shell where mise is active, or download the wasi-sdk version mise.toml states (https://github.com/WebAssembly/wasi-sdk/releases) and set WASI_SDK_PATH to its root, as examples/apps/setup.sh also needs" >&2
   exit 1
 fi
 

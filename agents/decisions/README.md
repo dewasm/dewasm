@@ -127,6 +127,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 98 | [A Sentence Is at Most 100 Characters as Read](98-sentence-length-bound.md) | Accepted |
 | 99 | [Text Uses a Learner Word List Plus Project Terms](99-allowed-vocabulary.md) | Accepted |
 | 100 | [Each `xtask` Command Group Is Its Own `xtask-<name>` Crate](100-xtask-crates.md) | Accepted |
+| 101 | [A Tool Version Is Stated Once, in a `mise` File](101-tool-versions-in-mise.md) | Accepted |
 
 ## Adding a new decision
 

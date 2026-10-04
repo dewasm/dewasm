@@ -1,0 +1,18 @@
+name: Install tools through mise
+description: >
+  Installs the named tools at the versions mise.toml and mise.lock state.
+  Each job names only the tools it uses, so a job does not download the rest.
+inputs:
+  tools:
+    description: The tools to install, as names from mise.toml separated by spaces.
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: jdx/mise-action@7a4e45a543138629540c9a1616d08632b893e492 # v5.0.1
+      with:
+        version: 2026.10.1
+        install_args: ${{ inputs.tools }}
+        # A cache of the tools would compete with the build cache for the 10 GB cache budget.
+        # So each job fetches its tools again, and `mise.lock` verifies them by checksum.
+        cache: false

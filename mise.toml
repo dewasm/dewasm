@@ -1,0 +1,30 @@
+[settings]
+lockfile = true
+
+[tool_alias]
+binaryen = "aqua:WebAssembly/binaryen"
+wasi-sdk = "github:WebAssembly/wasi-sdk"
+wasi-vfs = "github:kateinoigakukun/wasi-vfs"
+
+[tools]
+binaryen = "133"
+codon = "0.20.1"
+go = "1.27.1"
+java = "temurin-25"
+python = "3.14.8"
+ruby = "4.0.7"
+shellcheck = "0.11.0"
+wasi-vfs = "0.6.3"
+
+[tools.wasi-sdk]
+version = "34"
+version_prefix = "wasi-sdk-"
+# `wasi-sdk` ships a `clang` and an `ar` that build wasm only.
+# On `PATH` they would hide the host's own, which `cargo` needs for the host build.
+# So no binary of `wasi-sdk` goes on `PATH`; the build scripts reach it through `WASI_SDK_PATH`.
+filter_bins = ["none"]
+
+[env]
+# A CI job installs only the tools it uses, and `tools` has no entry for one not installed.
+# Reading `.path` of a missing entry is an error, so the variable is empty in such a job.
+WASI_SDK_PATH = { value = "{% if tools['wasi-sdk'] is defined %}{{ tools['wasi-sdk'].path }}{% endif %}", tools = true }

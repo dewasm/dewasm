@@ -22,6 +22,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7 # no submodules: fmt, clippy, and the text check don't read them
+      - uses: ./.github/actions/mise
+        with:
+          tools: shellcheck
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: lint
@@ -44,34 +47,19 @@ jobs:
       key: ${{ steps.appskey.outputs.key }}
     steps:
       - uses: actions/checkout@v7
-      - name: Install wasi-sdk (setup.sh builds the C apps with it)
-        # Keep in sync with local development (`docs/testing.md` names the version).
-        run: |
-          curl -fsSL --retry 5 -o /tmp/wasi-sdk.tar.gz \
-            https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz
-          echo "b761e3a0721dbae9c09a0059e5fdb2bf917d1b4a8a7b430fb3b5aafb0984b2c4  /tmp/wasi-sdk.tar.gz" | shasum -a 256 -c -
-          sudo tar -xzf /tmp/wasi-sdk.tar.gz -C /opt
-          echo "WASI_SDK_PATH=/opt/wasi-sdk-34.0-x86_64-linux" >> "$GITHUB_ENV"
-      - name: Install setup.sh build tools (binaryen, bison, flex)
-        # Binaryen comes from the upstream release at a fixed version, not from `apt`.
-        # The sqlite3-mod build needs `wasm-opt`'s `--no-inline`.
-        # Ubuntu's packaged Binaryen is older than that flag.
-        # Keep in sync with local development.
+      # `setup.sh` builds the C apps with `wasi-sdk`, which it finds through `WASI_SDK_PATH`.
+      # The action passes that variable on from the `[env]` table of `mise.toml`.
+      # The sqlite3-mod build needs `wasm-opt`'s `--no-inline`.
+      # Ubuntu's packaged Binaryen is older than that flag.
+      - uses: ./.github/actions/mise
+        with:
+          tools: wasi-sdk binaryen wasi-vfs
+      - name: Install setup.sh build tools (bison, flex)
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends bison flex
-          curl -sSfL -o /tmp/binaryen.tar.gz https://github.com/WebAssembly/binaryen/releases/download/version_132/binaryen-version_132-x86_64-linux.tar.gz
-          tar -xzf /tmp/binaryen.tar.gz -C /tmp
-          sudo cp /tmp/binaryen-version_132/bin/* /usr/local/bin/
       - name: Add wasm32-wasip1 target (setup.sh builds ripgrep with it)
         run: rustup target add wasm32-wasip1
-      - name: Install wasi-vfs CLI (setup.sh packs ruby-packed with it)
-        run: |
-          curl -fsSL --retry 5 -o /tmp/wasi-vfs-cli.zip \
-            https://github.com/kateinoigakukun/wasi-vfs/releases/download/v0.6.3/wasi-vfs-cli-x86_64-unknown-linux-gnu.zip
-          echo "c9ee8179f6f0882abc37024fbe0cd678311aa8a29083fa364915ed4d29a69485  /tmp/wasi-vfs-cli.zip" | shasum -a 256 -c -
-          sudo unzip -o /tmp/wasi-vfs-cli.zip -d /usr/local/bin
-          sudo chmod +x /usr/local/bin/wasi-vfs
       # The `libpcap`/`tree-sitter`/`ripgrep` stamps in `setup.sh` fold in `wasm-opt --version`.
       # So the apps-cache key must too: a new Binaryen version must yield a new key.
       # The rebuilt artifacts then get re-saved.
@@ -90,10 +78,20 @@ jobs:
 
   test:
     needs: apps-cache
+    name: test (${{ matrix.backend }})
     strategy:
       fail-fast: false
       matrix:
-        backend: [ruby, bash, python, go, java, perl, codon]
+        # `tools` names what the backend's tests run, as `mise.toml` names it.
+        # Bash and Perl come with the runner.
+        include:
+          - { backend: ruby, tools: ruby }
+          - { backend: bash, tools: '' }
+          - { backend: python, tools: python }
+          - { backend: go, tools: go }
+          - { backend: java, tools: java }
+          - { backend: perl, tools: '' }
+          - { backend: codon, tools: codon }
     runs-on: ubuntu-latest
     # The `slow_test` run (full specification suites + slow apps) has unmeasured wall time.
     # Give it a wide margin and tighten later.
@@ -102,41 +100,15 @@ jobs:
       - uses: actions/checkout@v7
         with:
           submodules: true
-      - if: matrix.backend == 'ruby'
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.4'
-      - if: matrix.backend == 'go'
-        uses: actions/setup-go@v7
-        with:
-          go-version: stable
-          cache: false
-      - if: matrix.backend == 'java'
-        uses: actions/setup-java@v6.0.0
-        with:
-          distribution: temurin
-          java-version: '21'
       # The runner's system Perl satisfies the backend's floor (>= 5.26 with `ivsize=8`/`nvsize=8`).
       # Verify loudly up front instead of skipping.
       - if: matrix.backend == 'perl'
         run: perl -MConfig -e 'print "perl $] ivsize=$Config{ivsize} nvsize=$Config{nvsize}\n"; die "unsuitable system perl\n" unless $] >= 5.026 && $Config{ivsize} == 8 && $Config{nvsize} == 8'
-      # ubuntu-24.04's system Python 3.12.3 hits the static-block limit.
-      # That limit breaks `qjs-scale` generated code, so require >= 3.12.4 (#21).
-      - if: matrix.backend == 'python'
-        uses: actions/setup-python@v7
+      # The `apps_cache_pins` test reproduces the stamps.
+      # Those name the versions of `wasm-opt` and `wasi-vfs`, so every test job installs both.
+      - uses: ./.github/actions/mise
         with:
-          python-version: '3.13'
-      # Codon comes from the upstream release at a fixed version.
-      # Keep that version in sync with local development.
-      # `docs/backends/codon.md` names the floor.
-      - if: matrix.backend == 'codon'
-        name: Install Codon
-        run: |
-          curl -fsSL --retry 5 -o /tmp/codon.tar.gz \
-            https://github.com/exaloop/codon/releases/download/v0.20.1/codon-linux-x86_64.tar.gz
-          echo "3fa970c476acf1056a2460e309ac41557956a1adf499e3e46e8db98ae78a2659  /tmp/codon.tar.gz" | shasum -a 256 -c -
-          sudo tar -xzf /tmp/codon.tar.gz -C /opt
-          echo "DEWASM_CODON=/opt/codon-deploy-linux-x86_64/bin/codon" >> "$GITHUB_ENV"
+          tools: binaryen wasi-vfs ${{ matrix.tools }}
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test-${{ matrix.backend }}
@@ -148,8 +120,6 @@ jobs:
           path: examples/apps/cache
           key: ${{ needs.apps-cache.outputs.key }}
           fail-on-cache-miss: true
-      # The `apps_cache_pins` test reproduces the stamps, which name these two tools' versions.
-      - uses: ./.github/actions/apps-cache-tools
       - name: Test
         if: github.event_name == 'pull_request'
         run: cargo test -p dewasm-backend-${{ matrix.backend }} --no-fail-fast
@@ -173,23 +143,12 @@ jobs:
         with:
           submodules: true
       # dewasm holds the cross-backend tests, so this job needs every backend toolchain.
-      # Bash ships with the runner.
-      # Python's version is set below because of #21.
-      # ubuntu-24.04's 3.12.3 breaks `qjs-scale` generated code.
-      - uses: ruby/setup-ruby@v1
+      # Bash and Perl come with the runner.
+      # The `apps_cache_pins` test reproduces the stamps.
+      # Those name the versions of `wasm-opt` and `wasi-vfs`.
+      - uses: ./.github/actions/mise
         with:
-          ruby-version: '3.4'
-      - uses: actions/setup-go@v7
-        with:
-          go-version: stable
-          cache: false
-      - uses: actions/setup-java@v6.0.0
-        with:
-          distribution: temurin
-          java-version: '21'
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.13'
+          tools: binaryen wasi-vfs ruby python go java
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: core
@@ -201,8 +160,6 @@ jobs:
           path: examples/apps/cache
           key: ${{ needs.apps-cache.outputs.key }}
           fail-on-cache-miss: true
-      # The `apps_cache_pins` test reproduces the stamps, which name these two tools' versions.
-      - uses: ./.github/actions/apps-cache-tools
       # Speed categories: the `slow_test` feature covers the slow cases.
       # `dewasm-test-helper/wasmtime_test` runs the `apps_wasmtime` snapshot-freshness suite.
       # That suite runs the `xtask` binary, which embeds the `wasmtime` crate at a fixed version.
