@@ -88,7 +88,7 @@ impl RunOutcome {
 ///
 /// `stdout` and `stderr` are drained on their own threads.
 /// Otherwise a runner could deadlock by writing more than a pipe buffer while we write `stdin`.
-/// A `watchdog` thread that `kill -9`s the child applies the timeout.
+/// A [`Watchdog`] applies the timeout: it kills the child and every process below it.
 /// So a runner that turns out 10000x rather than 1000x slower costs one timeout, not a hung suite.
 pub fn run_once(
     launch: &Launch,
@@ -114,7 +114,7 @@ pub fn run_once(
     let mut child_stdout = child.stdout.take().expect("stdout was piped");
     let mut child_stderr = child.stderr.take().expect("stderr was piped");
 
-    let watchdog = Watchdog::arm(i64::from(pid), timeout);
+    let watchdog = Watchdog::arm(pid, timeout);
 
     let input = stdin.to_vec();
     // Dropping the handle at the end of the closure closes the pipe.
@@ -152,19 +152,16 @@ pub fn run_once(
 
 /// Run a compiler to its exit under `limit`, failing with its output when it does not succeed.
 ///
-/// The compiler gets a process group of its own, and the whole group is killed at the limit.
+/// At the limit the compiler is killed with every process below it.
 /// So a child the compiler started, such as a linker, ends with it.
 pub fn run_build(what: &str, command: &mut Command, limit: Duration) -> Result<()> {
-    use std::os::unix::process::CommandExt;
-
     let child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .process_group(0)
         .spawn()
         .with_context(|| format!("spawn {what}"))?;
-    let watchdog = Watchdog::arm(-i64::from(child.id()), limit);
+    let watchdog = Watchdog::arm(child.id(), limit);
     let out = child
         .wait_with_output()
         .with_context(|| format!("wait for {what}"))?;
@@ -186,8 +183,8 @@ pub fn run_build(what: &str, command: &mut Command, limit: Duration) -> Result<(
     Ok(())
 }
 
-/// A thread that `kill -9`s `target` when `limit` passes before [`Watchdog::disarm`].
-/// A negative `target` names a process group, as `kill` reads it.
+/// A thread that kills the process tree under `root` once `limit` has passed.
+/// [`Watchdog::disarm`] stops it before that.
 struct Watchdog {
     done: Arc<AtomicBool>,
     killed: Arc<AtomicBool>,
@@ -195,7 +192,7 @@ struct Watchdog {
 }
 
 impl Watchdog {
-    fn arm(target: i64, limit: Duration) -> Self {
+    fn arm(root: u32, limit: Duration) -> Self {
         let done = Arc::new(AtomicBool::new(false));
         let killed = Arc::new(AtomicBool::new(false));
         let thread = {
@@ -209,9 +206,7 @@ impl Watchdog {
                     let now = Instant::now();
                     if now >= deadline {
                         killed.store(true, Ordering::Relaxed);
-                        let _ = Command::new("kill")
-                            .args(["-9", "--", &target.to_string()])
-                            .output();
+                        kill_tree(root);
                         return;
                     }
                     std::thread::park_timeout(deadline - now);
@@ -225,13 +220,45 @@ impl Watchdog {
         }
     }
 
-    /// Stop the watch; `true` when the target was killed at the limit.
+    /// Stop the watch; `true` when the tree was killed at the limit.
     fn disarm(self) -> bool {
         self.done.store(true, Ordering::Relaxed);
         self.thread.thread().unpark();
         let _ = self.thread.join();
         self.killed.load(Ordering::Relaxed)
     }
+}
+
+/// `kill -9` the process `root` and every process below it.
+///
+/// Killing `root` alone is not enough: a child it started keeps the output pipes open.
+/// The reader then waits for that child, however long it runs.
+/// Each process is stopped before its children are listed, so it cannot start one more unseen.
+/// The processes stay in the caller's process group, so an interrupt at the terminal reaches them.
+fn kill_tree(root: u32) {
+    let signal = |name: &str, pids: &[u32]| {
+        let pids = pids.iter().map(u32::to_string);
+        let _ = Command::new("kill").arg(name).args(pids).output();
+    };
+    let mut tree = vec![root];
+    let mut next = 0;
+    while next < tree.len() {
+        let parent = tree[next];
+        next += 1;
+        signal("-STOP", &[parent]);
+        if let Ok(out) = Command::new("pgrep")
+            .args(["-P", &parent.to_string()])
+            .output()
+        {
+            let children = String::from_utf8_lossy(&out.stdout);
+            tree.extend(
+                children
+                    .lines()
+                    .filter_map(|line| line.trim().parse::<u32>().ok()),
+            );
+        }
+    }
+    signal("-KILL", &tree);
 }
 
 /// App sampling: one sample is the mean of `k` back-to-back executions.
@@ -405,43 +432,52 @@ mod tests {
     }
 
     #[test]
-    fn a_build_past_its_limit_is_killed_with_the_children_it_started() {
-        let start = Instant::now();
-        // The inner `sleep` holds the output pipes open, as a linker under a compiler would.
-        // The call returns only once the whole process group is gone.
-        let err = run_build(
-            "probe",
-            &mut shell("sleep 600 & wait"),
-            Duration::from_secs(1),
-        )
-        .unwrap_err();
+    fn a_build_past_its_limit_is_a_time_limit() {
+        let limit = Duration::ZERO;
+        let err = run_build("probe", &mut shell("sleep 60"), limit).unwrap_err();
         assert_eq!(
             err.downcast_ref::<TimeLimit>(),
-            Some(&TimeLimit::Build {
-                limit: Duration::from_secs(1)
-            })
+            Some(&TimeLimit::Build { limit })
         );
         assert!(
-            err.to_string().contains("probe timed out after 1 s"),
+            err.to_string().contains("probe timed out after 0 s"),
             "{err}"
-        );
-        assert!(
-            start.elapsed() < Duration::from_secs(60),
-            "{:?}",
-            start.elapsed()
         );
     }
 
     #[test]
-    fn a_run_killed_at_its_limit_is_a_time_limit() {
+    fn a_run_past_its_limit_is_a_time_limit() {
         let launch = Launch {
-            program: "sh".into(),
-            args: vec!["-c".to_string(), "sleep 600".to_string()],
+            program: "sleep".into(),
+            args: vec!["60".to_string()],
             env: Vec::new(),
         };
-        let outcome = run_once(&launch, &[], b"", Duration::from_secs(1)).unwrap();
+        let outcome = run_once(&launch, &[], b"", Duration::ZERO).unwrap();
         let err = outcome.require_success("the timed run").unwrap_err();
         assert_eq!(err.downcast_ref::<TimeLimit>(), Some(&TimeLimit::Run));
+    }
+
+    #[test]
+    fn killing_a_tree_ends_the_children_the_root_started() {
+        // The shell prints a line once its child exists, and then waits for that child.
+        let mut child = shell("sleep 60 & echo started; wait")
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut stdout = std::io::BufReader::new(child.stdout.take().unwrap());
+        let mut line = String::new();
+        std::io::BufRead::read_line(&mut stdout, &mut line).unwrap();
+        assert_eq!(line, "started\n");
+
+        let killed_at = Instant::now();
+        kill_tree(child.id());
+
+        // The pipe reaches its end only when every process that held it is gone.
+        // A child left alive would hold it for the rest of its 60 s.
+        let mut rest = String::new();
+        stdout.read_to_string(&mut rest).unwrap();
+        child.wait().unwrap();
+        assert!(killed_at.elapsed() < Duration::from_secs(30));
     }
 
     #[test]
