@@ -120,6 +120,17 @@ Everything measured here is an external process in another language.
 **Letting each runtime run whatever it runs well.**
 Each runtime would look its best, and nothing would be comparable.
 
+**An existing benchmark suite, used as published.**
+No suite is standard for wasm runtimes.
+The common ones are CoreMark, PolyBench/C, the `libsodium` benchmarks, and Sightglass.
+None of them lets the harness set the iteration count at run time.
+Sightglass fixes the work per run, and PolyBench/C and `libsodium` fix it at build time.
+CoreMark reads a count from `argv[4]`, and `0` there means its own calibration, not no work.
+CoreMark also prints its timings to `stdout`, so the comparison with Wasmtime fails.
+The published CoreMark and Sightglass binaries import WASI functions outside `wardite`'s set.
+So they do not load there.
+A workload ported from one of these sources to the `argv[1]` contract is not this alternative.
+
 ## Consequences
 
 - A full benchmark run takes tens of minutes and is deliberately outside `cargo test`.
