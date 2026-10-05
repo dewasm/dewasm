@@ -21,7 +21,7 @@
 
 use std::fmt::Write as _;
 
-use crate::bench::report::{ordered_workloads, Outcome, Report};
+use crate::bench::report::{ordered_workloads, Outcome, Phase, Report};
 
 /// Overall image width.
 /// Height is derived from the row count.
@@ -156,6 +156,12 @@ pub struct Row {
     pub family: Family,
 }
 
+/// A row with nothing to plot: its label, and the note drawn where the rule and dot would be.
+pub struct Gap {
+    pub label: String,
+    pub note: &'static str,
+}
+
 /// How a chart spells a plotted value and a power-of-ten grid line label.
 /// The renderer does not depend on the unit.
 /// These two functions are the whole difference between a seconds chart and a bytes chart.
@@ -195,18 +201,38 @@ fn build(report: &Report, workload: &str) -> Option<Chart> {
         Quantity::PerIteration
     };
     let rows = rows(report, workload, quantity)?;
+    let gaps = gaps(report, workload);
     let title = format!(
         "{workload}: {}, median of the timed runs (log scale)",
         quantity.phrase()
     );
-    let alt = alt_text(workload, quantity, &rows);
+    let alt = alt_text(workload, quantity, &rows, &gaps);
     Some(Chart {
         workload: workload.to_string(),
         stem: stem(workload),
-        light: lollipop(&title, &rows, &LIGHT, &alt, &SECONDS, &BENCH_LEGEND),
-        dark: lollipop(&title, &rows, &DARK, &alt, &SECONDS, &BENCH_LEGEND),
+        light: lollipop(&title, &rows, &gaps, &LIGHT, &alt, &SECONDS, &BENCH_LEGEND),
+        dark: lollipop(&title, &rows, &gaps, &DARK, &alt, &SECONDS, &BENCH_LEGEND),
         alt,
     })
+}
+
+/// The runners of one workload that stopped at a time limit, in the order the suite ran them.
+fn gaps(report: &Report, workload: &str) -> Vec<Gap> {
+    report
+        .results
+        .iter()
+        .filter(|cell| cell.workload == workload)
+        .filter_map(|cell| match &cell.outcome {
+            Outcome::TimedOut { phase, .. } => Some(Gap {
+                label: cell.runner.clone(),
+                note: match phase {
+                    Phase::Build => "(build timeout)",
+                    Phase::Run => "(timeout)",
+                },
+            }),
+            _ => None,
+        })
+        .collect()
 }
 
 /// A workload label as a file stem: `wat/i32_alu` becomes `wat-i32-alu`.
@@ -247,12 +273,17 @@ fn rows(report: &Report, workload: &str, quantity: Quantity) -> Option<Vec<Row>>
 
 /// `alt` text derived from the data rather than written by hand.
 /// It then states the finding and cannot go out of date when the suite is re-run.
-fn alt_text(workload: &str, quantity: Quantity, rows: &[Row]) -> String {
+fn alt_text(workload: &str, quantity: Quantity, rows: &[Row], gaps: &[Gap]) -> String {
     let fastest = &rows[0];
     let slowest = &rows[rows.len() - 1];
     let span = slowest.value / fastest.value;
+    let stopped = match gaps.len() {
+        0 => String::new(),
+        1 => format!(" {} stopped at a time limit.", gaps[0].label),
+        n => format!(" {n} more runners stopped at a time limit."),
+    };
     format!(
-        "{workload}: {} for {} runners on a log scale, fastest first. {} is fastest at {}, then {} at {}; {} is slowest at {}, a span of {}. The table below carries every number.",
+        "{workload}: {} for {} runners on a log scale, fastest first. {} is fastest at {}, then {} at {}; {} is slowest at {}, a span of {}.{stopped} The table below carries every number.",
         quantity.phrase(),
         rows.len(),
         fastest.label,
@@ -270,12 +301,13 @@ fn alt_text(workload: &str, quantity: Quantity, rows: &[Row]) -> String {
 pub fn lollipop(
     title: &str,
     rows: &[Row],
+    gaps: &[Gap],
     theme: &Theme,
     alt: &str,
     units: &Units,
     legend: &[(Family, &str)],
 ) -> String {
-    let plot_bottom = PLOT_TOP + ROW_H * rows.len() as f64;
+    let plot_bottom = PLOT_TOP + ROW_H * (rows.len() + gaps.len()) as f64;
     let height = plot_bottom + 30.0;
 
     // The axis starts at the power of ten at or below the fastest value.
@@ -368,6 +400,25 @@ pub fn lollipop(
             cy + 4.0,
             theme.text_primary,
             escape(&(units.value)(row.value))
+        );
+    }
+
+    for (index, gap) in gaps.iter().enumerate() {
+        let cy = PLOT_TOP + ROW_H * ((rows.len() + index) as f64 + 0.5);
+        let _ = writeln!(
+            out,
+            r#"<text x="{LABEL_RIGHT:.1}" y="{:.1}" text-anchor="end" font-size="{FONT}" fill="{}">{}</text>"#,
+            cy + 4.0,
+            theme.text_primary,
+            escape(&gap.label)
+        );
+        let _ = writeln!(
+            out,
+            r#"<text x="{:.1}" y="{:.1}" font-size="{FONT}" fill="{}">{}</text>"#,
+            PLOT_LEFT + 6.0,
+            cy + 4.0,
+            theme.text_secondary,
+            escape(gap.note)
         );
     }
 
@@ -486,4 +537,36 @@ fn escape(text: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_gap_is_drawn_as_its_note_with_no_dot() {
+        let rows = [
+            Row {
+                label: "fast".to_string(),
+                value: 1e-3,
+                family: Family::Native,
+            },
+            Row {
+                label: "slow".to_string(),
+                value: 1.0,
+                family: Family::Native,
+            },
+        ];
+        let gaps = [Gap {
+            label: "stopped".to_string(),
+            note: "(build timeout)",
+        }];
+        let with_gap = lollipop("t", &rows, &gaps, &LIGHT, "alt", &SECONDS, &BENCH_LEGEND);
+        let without = lollipop("t", &rows, &[], &LIGHT, "alt", &SECONDS, &BENCH_LEGEND);
+
+        assert!(with_gap.contains(">stopped</text>"));
+        assert!(with_gap.contains(">(build timeout)</text>"));
+        let dots = |svg: &str| svg.matches("<circle").count();
+        assert_eq!(dots(&with_gap), dots(&without));
+    }
 }

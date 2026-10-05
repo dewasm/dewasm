@@ -61,7 +61,10 @@ This file holds what a user of the numbers never needs and whoever takes them al
 
 ## Before publishing
 
-- Zero mismatches, zero panics, no run over its time limit, and every skip is a declared exclusion.
+- Zero mismatches and zero panics.
+  Every skip is a declared exclusion.
+- A pair past a time limit is recorded as timed out, not as failed.
+  A record that holds one may be published.
 - Each runner's version string identifies its own build.
   So the record's `runtimes` block states where each figure came from.
   Nothing goes into the commit message by hand (decision 93 records why).

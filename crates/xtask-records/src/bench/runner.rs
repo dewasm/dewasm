@@ -29,10 +29,12 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
 use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
 
+use crate::bench::measure::run_build;
 use crate::bench::{apps_cache_dir, bench_cache_dir, display_path, drivers_dir};
 
 /// A launchable recipe: `program args... <workload args...>`.
@@ -691,11 +693,32 @@ fn host_launch(target: Target, artifact: Artifact) -> Result<Launch> {
     })
 }
 
+/// Default wall-clock limit of one artifact build.
+/// A compiler can stay an hour in one analysis pass over a SQLite-class source.
+/// The limit turns that into one failed cell instead of a hung suite.
+const DEFAULT_BUILD_TIMEOUT_S: u64 = 900;
+
+/// The limit of one artifact build: `$DEWASM_BUILD_TIMEOUT` in seconds, or the default.
+fn build_timeout() -> Result<Duration> {
+    parse_build_timeout(std::env::var("DEWASM_BUILD_TIMEOUT").ok().as_deref())
+}
+
+fn parse_build_timeout(value: Option<&str>) -> Result<Duration> {
+    let Some(value) = value else {
+        return Ok(Duration::from_secs(DEFAULT_BUILD_TIMEOUT_S));
+    };
+    let seconds: u64 = value.trim().parse().with_context(|| {
+        format!("$DEWASM_BUILD_TIMEOUT must be an integer number of seconds, got {value:?}")
+    })?;
+    Ok(Duration::from_secs(seconds))
+}
+
 /// Convert `bytes` with `target`'s backend and get it into runnable shape.
 /// It reuses the content-addressed `/tmp` cache when a previous run already produced it.
 fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
     let backend = target.backend();
     let cache = bench_tmp_dir()?;
+    let limit = build_timeout()?;
     let source = convert(backend, bytes)?;
     let stem = format!("{}-{:016x}", backend.name(), hash_bytes(source.as_bytes()));
 
@@ -708,16 +731,11 @@ fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
                 let go = dewasm_backend_go::find_go()
                     .context("go toolchain not found on PATH (or $DEWASM_GO)")?;
                 let tmp = cache.join(format!("{stem}.bin.tmp"));
-                let out = Command::new(go)
-                    .arg("build")
-                    .arg("-o")
-                    .arg(&tmp)
-                    .arg(&src)
-                    .output()
-                    .context("spawn go build")?;
-                if !out.status.success() {
-                    bail!("go build failed:\n{}", String::from_utf8_lossy(&out.stderr));
-                }
+                run_build(
+                    "go build",
+                    Command::new(go).arg("build").arg("-o").arg(&tmp).arg(&src),
+                    limit,
+                )?;
                 std::fs::rename(&tmp, &bin).context("install the built go binary")?;
             }
             Ok(Artifact::Binary(bin))
@@ -731,20 +749,16 @@ fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
                     tinygo_bin().context("tinygo not found on PATH (or $DEWASM_TINYGO)")?;
                 let tmp = cache.join(format!("{stem}.tinygo.bin.tmp"));
                 // `-opt=2` is TinyGo's speed setting; its default `-opt=z` optimizes for size.
-                let out = Command::new(tinygo)
-                    .arg("build")
-                    .arg("-opt=2")
-                    .arg("-o")
-                    .arg(&tmp)
-                    .arg(&src)
-                    .output()
-                    .context("spawn tinygo build")?;
-                if !out.status.success() {
-                    bail!(
-                        "tinygo build failed:\n{}",
-                        String::from_utf8_lossy(&out.stderr)
-                    );
-                }
+                run_build(
+                    "tinygo build",
+                    Command::new(tinygo)
+                        .arg("build")
+                        .arg("-opt=2")
+                        .arg("-o")
+                        .arg(&tmp)
+                        .arg(&src),
+                    limit,
+                )?;
                 std::fs::rename(&tmp, &bin).context("install the built tinygo binary")?;
             }
             Ok(Artifact::Binary(bin))
@@ -760,20 +774,16 @@ fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
                 // -release: the benchmarks are the one place the release optimizer runs.
                 // The test suites build debug.
                 // The cost is paid once per artifact into this cache.
-                let out = Command::new(codon)
-                    .arg("build")
-                    .arg("-release")
-                    .arg("-o")
-                    .arg(&tmp)
-                    .arg(&src)
-                    .output()
-                    .context("spawn codon build")?;
-                if !out.status.success() {
-                    bail!(
-                        "codon build failed:\n{}",
-                        String::from_utf8_lossy(&out.stderr)
-                    );
-                }
+                run_build(
+                    "codon build",
+                    Command::new(codon)
+                        .arg("build")
+                        .arg("-release")
+                        .arg("-o")
+                        .arg(&tmp)
+                        .arg(&src),
+                    limit,
+                )?;
                 std::fs::rename(&tmp, &bin).context("install the built codon binary")?;
             }
             Ok(Artifact::Binary(bin))
@@ -789,20 +799,15 @@ fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
                 // -O 2 is two arguments: a joined -O2 is silently ignored.
                 // Wrapping i64 overflow is refused for a masked-unsigned Integer up to 2**64-1.
                 // So the promoting mode is the only one that runs.
-                let out = Command::new(spinel)
-                    .args(["-O", "2", "--int-overflow=promote"])
-                    .arg(&src)
-                    .arg("-o")
-                    .arg(&tmp)
-                    .output()
-                    .context("spawn spinel")?;
-                if !out.status.success() {
-                    bail!(
-                        "spinel build failed:\n{}{}",
-                        String::from_utf8_lossy(&out.stdout),
-                        String::from_utf8_lossy(&out.stderr)
-                    );
-                }
+                run_build(
+                    "spinel build",
+                    Command::new(spinel)
+                        .args(["-O", "2", "--int-overflow=promote"])
+                        .arg(&src)
+                        .arg("-o")
+                        .arg(&tmp),
+                    limit,
+                )?;
                 std::fs::rename(&tmp, &bin).context("install the built spinel binary")?;
             }
             Ok(Artifact::Binary(bin))
@@ -817,15 +822,14 @@ fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
                 std::fs::create_dir_all(&tmp)?;
                 let src = tmp.join("Main.java");
                 std::fs::write(&src, &source)?;
-                let out = dewasm_backend_java::javac_command()
-                    .arg("-d")
-                    .arg(&tmp)
-                    .arg(&src)
-                    .output()
-                    .context("spawn javac")?;
-                if !out.status.success() {
-                    bail!("javac failed:\n{}", String::from_utf8_lossy(&out.stderr));
-                }
+                run_build(
+                    "javac",
+                    dewasm_backend_java::javac_command()
+                        .arg("-d")
+                        .arg(&tmp)
+                        .arg(&src),
+                    limit,
+                )?;
                 let _ = std::fs::remove_dir_all(&dir);
                 std::fs::rename(&tmp, &dir).context("install the compiled class dir")?;
             }
@@ -1194,4 +1198,20 @@ fn hash_bytes(bytes: &[u8]) -> u64 {
 /// So `to_string_lossy` cannot lose anything real here.
 fn path_arg(path: &Path) -> String {
     path.to_string_lossy().into_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_build_limit_is_the_default_unless_the_variable_gives_seconds() {
+        let default = Duration::from_secs(DEFAULT_BUILD_TIMEOUT_S);
+        assert_eq!(parse_build_timeout(None).unwrap(), default);
+        assert_eq!(
+            parse_build_timeout(Some("1200")).unwrap(),
+            Duration::from_secs(1200)
+        );
+        assert!(parse_build_timeout(Some("20m")).is_err());
+    }
 }

@@ -9,12 +9,12 @@ How to run and read these measurements is [README.md](README.md).
 
 ## Environment
 
-Measured 2026-09-19T02:25:54Z.
+Measured 2026-10-04T17:48:10Z.
 
 | | |
 | --- | --- |
-| OS | macOS 26.6.2 |
-| Kernel | Darwin 25.6.0 |
+| OS | macOS 27.0.1 |
+| Kernel | Darwin 27.0.0 |
 | CPU | Apple M1 Pro |
 | Architecture | aarch64 |
 
@@ -23,9 +23,9 @@ A runtime missing from this table was not installed on this host; it appears und
 
 | Runtime | Version |
 | --- | --- |
-| `wasmtime` | `wasmtime 48.0.2 (e9f1ea232 2026-09-10)` |
-| `wasmer` | `wasmer 7.4.2` |
-| `wasmedge` | `wasmedge version 0.17.1` |
+| `wasmtime` | `wasmtime 49.0.2 (3c8a3e79a 2026-10-02)` |
+| `wasmer` | `wasmer 7.5.0` |
+| `wasmedge` | `wasmedge version 0.17.2` |
 | `wazero` | `1.12.0` |
 | `wasm3` | `Wasm3 v0.9.1-beta.1 on arm64-v8a` |
 
@@ -38,14 +38,14 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/runtimes-dark.svg">
-  <img alt="Installed size of the native wasm runtimes on this host, 5 rows on a log scale, smallest first. wasm3 is smallest at 248 kB, then wasmedge at 2.41 MB; wasmer is largest at 63.7 MB, a span of 257x. The table below carries every number." src="figs/runtimes.svg">
+  <img alt="Installed size of the native wasm runtimes on this host, 5 rows on a log scale, smallest first. wasm3 is smallest at 248 kB, then wasmedge at 2.45 MB; wasmer is largest at 62.0 MB, a span of 250x. The table below carries every number." src="figs/runtimes.svg">
 </picture>
 
 | Runtime | Size |
 | --- | --- |
-| `wasmtime` | 48.5 MB |
-| `wasmer` | 63.7 MB |
-| `wasmedge` | 2.41 MB |
+| `wasmtime` | 60.0 MB |
+| `wasmer` | 62.0 MB |
+| `wasmedge` | 2.45 MB |
 | `wazero` | 5.50 MB |
 | `wasm3` | 248 kB |
 
@@ -53,30 +53,30 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-cowsay-dark.svg">
-  <img alt="cowsay.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 87.0 kB, then python at 404 kB; bash is largest at 1.22 MB, a span of 14x. The table below carries every number." src="figs/app-cowsay.svg">
+  <img alt="cowsay.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 38.4 kB, then python at 206 kB; bash is largest at 538 kB, a span of 14x. The table below carries every number." src="figs/app-cowsay.svg">
 </picture>
 
 | Target | Size |
 | --- | --- |
-| wasm binary | 87.0 kB |
-| `ruby` | 412 kB |
-| `python` | 404 kB |
-| `perl` | 744 kB |
-| `bash` | 1.22 MB |
-| `go` | 511 kB |
-| `java` | 605 kB |
+| wasm binary | 38.4 kB |
+| `ruby` | 230 kB |
+| `python` | 206 kB |
+| `perl` | 350 kB |
+| `bash` | 538 kB |
+| `go` | 262 kB |
+| `java` | 314 kB |
 
 ### `sqlite3-shell.wasm`
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-sqlite3-shell-dark.svg">
-  <img alt="sqlite3-shell.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 1.29 MB, then ruby at 7.25 MB; bash is largest at 37.8 MB, a span of 29x. The table below carries every number." src="figs/app-sqlite3-shell.svg">
+  <img alt="sqlite3-shell.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 1.29 MB, then ruby at 7.26 MB; bash is largest at 37.8 MB, a span of 29x. The table below carries every number." src="figs/app-sqlite3-shell.svg">
 </picture>
 
 | Target | Size |
 | --- | --- |
 | wasm binary | 1.29 MB |
-| `ruby` | 7.25 MB |
+| `ruby` | 7.26 MB |
 | `python` | 7.68 MB |
 | `perl` | 20.8 MB |
 | `bash` | 37.8 MB |
@@ -97,7 +97,7 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 | `python` | 6.56 MB |
 | `perl` | 15.7 MB |
 | `bash` | 27.0 MB |
-| `go` | 10.3 MB |
+| `go` | 10.4 MB |
 | `java` | 10.7 MB |
 
 ### `ruby.wasm`
@@ -114,7 +114,7 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 | `python` | 77.1 MB |
 | `perl` | 198 MB |
 | `bash` | 311 MB |
-| `go` | 130 MB |
+| `go` | 131 MB |
 | `java` | 143 MB |
 
 ## Not measured

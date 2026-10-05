@@ -1,6 +1,7 @@
 //! Process execution and the timing primitives the measurement design rests on.
 //!
 //! * [`run_once`] times one whole process, spawn to exit, under a hard timeout.
+//! * [`run_build`] runs one compiler to its exit, under a hard timeout of its own.
 //!   The timer starts *before* `spawn`: process start is deliberately inside.
 //!   That is because the `<iterations> = 0` run subtracts it back out.
 //! * [`calibrate`] raises the iteration count per runner until the compute time reaches the target.
@@ -13,9 +14,33 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 
 use crate::bench::runner::Launch;
+
+/// A cell that went past a time limit.
+/// The record reports it as such, never as a failure: the limit only bounds what a run can cost.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimeLimit {
+    Build { limit: Duration },
+    Run,
+}
+
+impl std::fmt::Display for TimeLimit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TimeLimit::Build { .. } => f.write_str("the build went past its time limit"),
+            TimeLimit::Run => f.write_str("the run went past its time limit"),
+        }
+    }
+}
+
+impl std::error::Error for TimeLimit {}
+
+/// The time left until `deadline`, zero once it has passed.
+pub fn remaining(deadline: Instant) -> Duration {
+    deadline.saturating_duration_since(Instant::now())
+}
 
 pub struct RunOutcome {
     /// Wall time from just before `spawn` to the child's exit.
@@ -29,11 +54,12 @@ pub struct RunOutcome {
 
 impl RunOutcome {
     /// `Ok(())` when the child exited 0 in time.
+    /// A child killed at the time limit gives a [`TimeLimit::Run`].
     /// Otherwise a one-line reason carrying the tail of `stderr`.
     /// Every runner in this suite puts its diagnostics there.
     pub fn require_success(&self, what: &str) -> Result<()> {
         if self.timed_out {
-            return Err(anyhow::anyhow!("{what}: timed out"));
+            return Err(anyhow::Error::new(TimeLimit::Run).context(format!("{what}: timed out")));
         }
         if self.code == Some(0) {
             return Ok(());
@@ -62,7 +88,7 @@ impl RunOutcome {
 ///
 /// `stdout` and `stderr` are drained on their own threads.
 /// Otherwise a runner could deadlock by writing more than a pipe buffer while we write `stdin`.
-/// A `watchdog` thread that `kill -9`s the child applies the timeout.
+/// A [`Watchdog`] applies the timeout: it kills the child and every process below it.
 /// So a runner that turns out 10000x rather than 1000x slower costs one timeout, not a hung suite.
 pub fn run_once(
     launch: &Launch,
@@ -88,26 +114,7 @@ pub fn run_once(
     let mut child_stdout = child.stdout.take().expect("stdout was piped");
     let mut child_stderr = child.stderr.take().expect("stderr was piped");
 
-    let done = Arc::new(AtomicBool::new(false));
-    let killed = Arc::new(AtomicBool::new(false));
-    let watchdog = {
-        let (done, killed) = (Arc::clone(&done), Arc::clone(&killed));
-        std::thread::spawn(move || {
-            let deadline = Instant::now() + timeout;
-            loop {
-                if done.load(Ordering::Relaxed) {
-                    return;
-                }
-                let now = Instant::now();
-                if now >= deadline {
-                    killed.store(true, Ordering::Relaxed);
-                    let _ = Command::new("kill").args(["-9", &pid.to_string()]).output();
-                    return;
-                }
-                std::thread::park_timeout(deadline - now);
-            }
-        })
-    };
+    let watchdog = Watchdog::arm(pid, timeout);
 
     let input = stdin.to_vec();
     // Dropping the handle at the end of the closure closes the pipe.
@@ -128,21 +135,130 @@ pub fn run_once(
 
     let status = child.wait().context("failed to wait for the child")?;
     let wall = start.elapsed();
-    done.store(true, Ordering::Relaxed);
-    watchdog.thread().unpark();
+    let timed_out = watchdog.disarm();
 
     let _ = writer.join();
     let stdout = out_reader.join().unwrap_or_default();
     let stderr = err_reader.join().unwrap_or_default();
-    let _ = watchdog.join();
 
     Ok(RunOutcome {
         wall,
         stdout,
         stderr,
         code: status.code(),
-        timed_out: killed.load(Ordering::Relaxed),
+        timed_out,
     })
+}
+
+/// Run a compiler to its exit under `limit`, failing with its output when it does not succeed.
+///
+/// At the limit the compiler is killed with every process below it.
+/// So a child the compiler started, such as a linker, ends with it.
+pub fn run_build(what: &str, command: &mut Command, limit: Duration) -> Result<()> {
+    let child = command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .with_context(|| format!("spawn {what}"))?;
+    let watchdog = Watchdog::arm(child.id(), limit);
+    let out = child
+        .wait_with_output()
+        .with_context(|| format!("wait for {what}"))?;
+    if watchdog.disarm() {
+        return Err(
+            anyhow::Error::new(TimeLimit::Build { limit }).context(format!(
+                "{what} timed out after {} s; $DEWASM_BUILD_TIMEOUT sets the limit",
+                limit.as_secs()
+            )),
+        );
+    }
+    if !out.status.success() {
+        bail!(
+            "{what} failed:\n{}{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+    Ok(())
+}
+
+/// A thread that kills the process tree under `root` once `limit` has passed.
+/// [`Watchdog::disarm`] stops it before that.
+struct Watchdog {
+    done: Arc<AtomicBool>,
+    killed: Arc<AtomicBool>,
+    thread: std::thread::JoinHandle<()>,
+}
+
+impl Watchdog {
+    fn arm(root: u32, limit: Duration) -> Self {
+        let done = Arc::new(AtomicBool::new(false));
+        let killed = Arc::new(AtomicBool::new(false));
+        let thread = {
+            let (done, killed) = (Arc::clone(&done), Arc::clone(&killed));
+            std::thread::spawn(move || {
+                let deadline = Instant::now() + limit;
+                loop {
+                    if done.load(Ordering::Relaxed) {
+                        return;
+                    }
+                    let now = Instant::now();
+                    if now >= deadline {
+                        killed.store(true, Ordering::Relaxed);
+                        kill_tree(root);
+                        return;
+                    }
+                    std::thread::park_timeout(deadline - now);
+                }
+            })
+        };
+        Watchdog {
+            done,
+            killed,
+            thread,
+        }
+    }
+
+    /// Stop the watch; `true` when the tree was killed at the limit.
+    fn disarm(self) -> bool {
+        self.done.store(true, Ordering::Relaxed);
+        self.thread.thread().unpark();
+        let _ = self.thread.join();
+        self.killed.load(Ordering::Relaxed)
+    }
+}
+
+/// `kill -9` the process `root` and every process below it.
+///
+/// Killing `root` alone is not enough: a child it started keeps the output pipes open.
+/// The reader then waits for that child, however long it runs.
+/// Each process is stopped before its children are listed, so it cannot start one more unseen.
+/// The processes stay in the caller's process group, so an interrupt at the terminal reaches them.
+fn kill_tree(root: u32) {
+    let signal = |name: &str, pids: &[u32]| {
+        let pids = pids.iter().map(u32::to_string);
+        let _ = Command::new("kill").arg(name).args(pids).output();
+    };
+    let mut tree = vec![root];
+    let mut next = 0;
+    while next < tree.len() {
+        let parent = tree[next];
+        next += 1;
+        signal("-STOP", &[parent]);
+        if let Ok(out) = Command::new("pgrep")
+            .args(["-P", &parent.to_string()])
+            .output()
+        {
+            let children = String::from_utf8_lossy(&out.stdout);
+            tree.extend(
+                children
+                    .lines()
+                    .filter_map(|line| line.trim().parse::<u32>().ok()),
+            );
+        }
+    }
+    signal("-KILL", &tree);
 }
 
 /// App sampling: one sample is the mean of `k` back-to-back executions.
@@ -158,10 +274,10 @@ pub fn repeat_app(
     stdin: &[u8],
     reps: usize,
     target: Duration,
-    timeout: Duration,
+    deadline: Instant,
     what: &str,
 ) -> Result<(u64, Vec<f64>, RunOutcome)> {
-    let warmup = run_once(launch, args, stdin, timeout)?;
+    let warmup = run_once(launch, args, stdin, remaining(deadline))?;
     warmup.require_success(what)?;
     let wall = warmup.wall.as_secs_f64().max(1e-6);
     let k = ((target.as_secs_f64() / wall).ceil() as u64).clamp(1, 64);
@@ -170,7 +286,7 @@ pub fn repeat_app(
     for _ in 0..reps {
         let mut sum = 0.0;
         for _ in 0..k {
-            let outcome = run_once(launch, args, stdin, timeout)?;
+            let outcome = run_once(launch, args, stdin, remaining(deadline))?;
             outcome.require_success(what)?;
             sum += outcome.wall.as_secs_f64();
             last = outcome;
@@ -188,15 +304,15 @@ pub fn repeat(
     args: &[String],
     stdin: &[u8],
     reps: usize,
-    timeout: Duration,
+    deadline: Instant,
     what: &str,
 ) -> Result<(Vec<f64>, RunOutcome)> {
-    let warmup = run_once(launch, args, stdin, timeout)?;
+    let warmup = run_once(launch, args, stdin, remaining(deadline))?;
     warmup.require_success(what)?;
     let mut samples = Vec::with_capacity(reps);
     let mut last = warmup;
     for _ in 0..reps {
-        let outcome = run_once(launch, args, stdin, timeout)?;
+        let outcome = run_once(launch, args, stdin, remaining(deadline))?;
         outcome.require_success(what)?;
         samples.push(outcome.wall.as_secs_f64());
         last = outcome;
@@ -282,4 +398,90 @@ pub fn describe_diff(expected: &[u8], actual: &[u8]) -> String {
         expected.len(),
         actual.len()
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn shell(script: &str) -> Command {
+        let mut command = Command::new("sh");
+        command.args(["-c", script]);
+        command
+    }
+
+    #[test]
+    fn a_build_that_exits_zero_in_time_succeeds() {
+        run_build("true", &mut shell("true"), Duration::from_secs(30)).unwrap();
+    }
+
+    #[test]
+    fn a_build_that_fails_reports_its_output() {
+        let err = run_build(
+            "probe",
+            &mut shell("echo to-stdout; echo to-stderr >&2; exit 3"),
+            Duration::from_secs(30),
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("probe failed"), "{err}");
+        assert!(
+            err.contains("to-stdout") && err.contains("to-stderr"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn a_build_past_its_limit_is_a_time_limit() {
+        let limit = Duration::ZERO;
+        let err = run_build("probe", &mut shell("sleep 60"), limit).unwrap_err();
+        assert_eq!(
+            err.downcast_ref::<TimeLimit>(),
+            Some(&TimeLimit::Build { limit })
+        );
+        assert!(
+            err.to_string().contains("probe timed out after 0 s"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn a_run_past_its_limit_is_a_time_limit() {
+        let launch = Launch {
+            program: "sleep".into(),
+            args: vec!["60".to_string()],
+            env: Vec::new(),
+        };
+        let outcome = run_once(&launch, &[], b"", Duration::ZERO).unwrap();
+        let err = outcome.require_success("the timed run").unwrap_err();
+        assert_eq!(err.downcast_ref::<TimeLimit>(), Some(&TimeLimit::Run));
+    }
+
+    #[test]
+    fn killing_a_tree_ends_the_children_the_root_started() {
+        // The shell prints a line once its child exists, and then waits for that child.
+        let mut child = shell("sleep 60 & echo started; wait")
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let mut stdout = std::io::BufReader::new(child.stdout.take().unwrap());
+        let mut line = String::new();
+        std::io::BufRead::read_line(&mut stdout, &mut line).unwrap();
+        assert_eq!(line, "started\n");
+
+        let killed_at = Instant::now();
+        kill_tree(child.id());
+
+        // The pipe reaches its end only when every process that held it is gone.
+        // A child left alive would hold it for the rest of its 60 s.
+        let mut rest = String::new();
+        stdout.read_to_string(&mut rest).unwrap();
+        child.wait().unwrap();
+        assert!(killed_at.elapsed() < Duration::from_secs(30));
+    }
+
+    #[test]
+    fn a_passed_deadline_leaves_no_time() {
+        assert_eq!(remaining(Instant::now()), Duration::ZERO);
+    }
 }
