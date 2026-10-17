@@ -124,6 +124,19 @@ pub const WASI_CASES: &[WasiCase] = &[
             code: 0,
         },
     },
+    // `poll_oneoff`: a zero-timeout clock plus an `fd_read` subscription on `stdin`.
+    // The poll must neither consume nor invent `stdin` bytes, so the echo equals the input.
+    WasiCase {
+        name: "poll_oneoff_stdin_zero_timeout",
+        wat: "wasi_poll_oneoff_stdin_zero_timeout.wat",
+        kind: WasiKind::Poll,
+        args: &[],
+        stdin: "ping\r\n",
+        check: WasiCheck::Standalone {
+            stdout: "ping\r\n",
+            code: 0,
+        },
+    },
     // File system.
     // `path_open` (create+write, then reopen+read) round-trips real file content.
     // The content goes through a preopened host directory.

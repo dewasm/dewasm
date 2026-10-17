@@ -99,7 +99,15 @@ wasi_poll_oneoff() {
       done
       printf -v __to '%d.%06d' $(( __min / 1000000000 )) $(( __min % 1000000000 / 1000 ))
     fi
-    if (( ${#__wait[@]} > 0 )); then
+    if (( ${#__wait[@]} > 0 && __have_clock )) && [[ $__to == 0.000000 ]]; then
+      # Bash's `read -t 0` reads no data: it only reports whether a read would not block.
+      # So a zero deadline polls readiness, and no byte goes into the pushback buffer.
+      if IFS= read -r -t 0; then
+        for __ud in "${__wait[@]}"; do __ev+=("$__ud 0 1 1 0"); done
+      else
+        __fire_clocks=1
+      fi
+    elif (( ${#__wait[@]} > 0 )); then
       local __ch __ord __rc __line __kk
       if [[ -t 0 ]]; then
         if (( __have_clock )); then
