@@ -222,18 +222,7 @@ pre.highlight {
   overflow-wrap: anywhere;
 }
 pre.highlight code { background: none; padding: 0; font-size: inherit; }
-.highlight .nt { color: #22863a; }
-.highlight .na { color: #6f42c1; }
-.highlight .s, .highlight .s1, .highlight .s2, .highlight .sd { color: #032f62; }
-.highlight .c, .highlight .c1, .highlight .cm { color: #6a737d; font-style: italic; }
-.highlight .p { color: #24292e; }
-.highlight .k, .highlight .kd, .highlight .kn, .highlight .kr { color: #d73a49; }
-.highlight .n, .highlight .nx { color: #24292e; }
-.highlight .nf, .highlight .nb { color: #005cc5; }
-.highlight .o { color: #d73a49; }
-.highlight .mi, .highlight .mf { color: #005cc5; }
-.highlight .cp { color: #6a737d; }
-.highlight .err { color: #b31d28; }
+/* The token colors come from `Pygments.css`, inlined by the page that shows HTML. */
 
 /* Flame graph */
 .flamegraph {

@@ -10,6 +10,7 @@ of the `.so` files:
 | `nokogiri` 1.19.4 | the gem's extension, `libxml2` 2.13.9, `libxslt` 1.1.43, `gumbo` | 9.1 MB |
 | `herb` 0.11.1 | the HTML+ERB parser Rails 8.2 compiles templates with, and Prism | 3.9 MB |
 | `bcrypt` 3.1.22 | the hash behind `has_secure_password` | 0.2 MB |
+| `pygments.rb` 5.0.0 | no C: the Python process it runs the Pygments it ships in, so CPython 3.14.6 itself, with Pygments 2.20.0 imported | 52 MB |
 
 The gems' own Ruby and C code run unmodified.
 What makes that possible is dewasm cext, under `cext/`: a `ruby.h` of this example's own, in
@@ -64,10 +65,10 @@ own: none.
 HTML in its body, a comment, a profiled request with its flame graph, and the `/stats` report.
 
 Requirements: Ruby 4.0, `wasi-sdk` with `WASI_SDK_PATH` set, `make` and `patch` for libxml2,
-Wizer and `unzip` for the Pygments gem, and network access for the gems.
+Wizer for `pygments.rb`, and network access for the gems.
 `mise install` at the repository root provides Ruby, `wasi-sdk`, and Wizer.
-`examples/apps/setup.sh` must have run first: the Pygments gem links against the CPython library
-it builds (`cpython-sdk`), and `bundle install` says so when it is missing.
+`examples/apps/setup.sh` must have run first: the `pygments.rb` build links against the CPython
+library it builds (`cpython-sdk`), and `bundle install` says so when it is missing.
 
 Pieces, individually:
 
@@ -143,21 +144,24 @@ for one request.
 A post page has a `View HTML` link (`?code=1`): the body is then shown as the HTML it is served
 as, highlighted, in place of the rendering.
 The seeded post's HTML has no `<script>` tag, since `sanitize` removed the one its author wrote.
-The highlighting is Pygments, a Python library, running on CPython 3.14.6: the interpreter is
-compiled to wasm, converted to Ruby by dewasm, and loaded as the gem in `pygments/`
-(`Dewasm::Pygments.highlight(source, "html")`).
+The highlighting is `pygments.rb`, used as any Rails application would (`Pygments.highlight`,
+`Pygments.css`).
+That gem runs the Pygments it ships in a `python3` child process and talks to it over a pipe.
+Converted, the process is CPython 3.14.6 compiled to wasm and converted to Ruby, in the Rails
+process; the gem's Ruby and Python are unmodified.
 It runs at page load; nothing is stored.
 
-The interpreter is a reactor (`pygments/ext/pyg.c`, linked against `libpython3.14.a`) with two
-exports: `pyg_init` starts CPython, imports Pygments and runs the common lexers once, and
-`pyg_highlight` turns source into HTML.
+The recipe (`cext/lib/dewasm_cext/recipes/pygments_rb.rb`) builds a reactor around CPython,
+`mentos_host.c`, with two exports: `pyg_init` starts CPython, imports the gem's `mentos.py` and
+runs the common lexers once, and `pyg_mentos` answers one request of the gem's protocol.
 A converted CPython takes about 40 seconds to boot and import Pygments.
 So Wizer runs `pyg_init` ahead of time and writes the memory it leaves into the module, and the
 Ruby code starts from that memory: the first highlight takes about a second (YJIT warms up), the
 next ones 0.1 to 0.4 seconds.
+The gem is replaced the way the C extension gems are, by a file found first: the recipe writes
+`lib_dewasm/pygments/popen.rb`, ahead of the gem's `lib` on its require paths, which loads the
+gem's `popen.rb` and points `Pygments::Popen#mentos` at the reactor.
 The `cpython-sdk` app of `examples/apps/setup.sh` is the library build the reactor links against.
-`dewasm_pygments` in the Gemfile builds the gem under `bundle install`, as `dewasm_gem` does:
-the Pygments wheel at a fixed version, the link, Wizer, and the conversion.
 
 ## The same application on the native extensions
 

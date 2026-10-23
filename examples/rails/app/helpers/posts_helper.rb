@@ -1,8 +1,20 @@
 module PostsHelper
   # `source` marked up by Pygments, token by token, as a `<pre>` block.
-  # Pygments runs on a CPython that dewasm converted to Ruby; each call is one request to it.
+  # `pygments.rb` runs Pygments in a Python process; converted, that process is a CPython
+  # running as Ruby in this one.
   def highlighted(source, language)
-    html = Dewasm::Pygments.highlight(source, language)
-    tag.pre(class: "highlight") { tag.code(html ? html.html_safe : source) }
+    html = Pygments.highlight(source, lexer: language, options: { nowrap: true })
+    tag.pre(class: "highlight") { tag.code(html.html_safe) }
+  end
+
+  # The style rules of Pygments' token classes, for `pre.highlight`.
+  def highlight_css = Pygments.css(".highlight")
+
+  # Where Pygments runs, for the page: on the converted CPython, or in a Python process.
+  # The converted gem's loader is what defines `Popen.dewasm_call`.
+  def pygments_description
+    converted = Pygments::Popen.respond_to?(:dewasm_call)
+    runtime = converted ? "a CPython converted to Ruby" : "a Python process"
+    "Pygments #{Pygments.pygments_version} through pygments.rb, on #{runtime}"
   end
 end

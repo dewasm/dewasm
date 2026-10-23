@@ -44,15 +44,27 @@ module DewasmCExt
     end
 
     # Compile `sources` into `<out_dir>/<name>.wasm`, then convert it into `<out_dir>/<name>.rb`.
-    # `--function-names` makes a profile read `sqlite3VdbeExec` rather than `_f1286`.
     def build(name:, module_name:, init:, out_dir:, sources:, cflags: [], log: nil)
+      wasm = compile(name: name, out_dir: out_dir, sources: sources, cflags: cflags, exports: [init], log: log)
+      convert(wasm, File.join(out_dir, "#{name}.rb"), module_name, log: log)
+    end
+
+    # Compile and link a reactor: `support.c` (the guest side of the Ruby C API) and `sources`.
+    # With `support: false` the module is a program of its own, such as an interpreter, and
+    # `link_flags` name what it links against.
+    def compile(name:, out_dir:, sources:, cflags: [], exports: [], support: true, link_flags: [], log: nil)
       FileUtils.mkdir_p(out_dir)
       wasm = File.join(out_dir, "#{name}.wasm")
-      rb = File.join(out_dir, "#{name}.rb")
-      exports = ([init] + EXPORTS).map { |e| "-Wl,--export=#{e}" }
-      run(clang + %w[-O2 -mexec-model=reactor -I] + [INCLUDE] + cflags + exports +
+      export_flags = (exports + EXPORTS).map { |e| "-Wl,--export=#{e}" }
+      run(clang + %w[-O2 -mexec-model=reactor -I] + [INCLUDE] + cflags + export_flags +
           %w[-Wl,--export-table -Wl,--export=__stack_pointer -Wl,--strip-debug -o] +
-          [wasm, SUPPORT] + sources, log: log)
+          [wasm] + (support ? [SUPPORT] : []) + sources + link_flags, log: log)
+      wasm
+    end
+
+    # Convert `wasm` into the Ruby class `module_name` at `rb`.
+    # `--function-names` makes a profile read `sqlite3VdbeExec` rather than `_f1286`.
+    def convert(wasm, rb, module_name, log: nil)
       run(dewasm + [wasm, "--target", "ruby", "--mode", "library", "--module-name", module_name,
                     "--function-names", "-o", rb], log: log)
       rb

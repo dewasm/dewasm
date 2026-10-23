@@ -1,4 +1,5 @@
 <% content_for :title, @post.title %>
+<% content_for :head, tag.style(highlight_css.html_safe) if @code %>
 
 <%= render @post, code: @code %>
 
@@ -6,8 +7,7 @@
   <% if @code %>
     <%= link_to "View rendered", post_path(@post), class: "button" %>
     <span class="meta">
-      The HTML this post is served as, highlighted on this page load by Pygments
-      (<%= Dewasm::Pygments.version %>, converted to Ruby).
+      The HTML this post is served as, highlighted on this page load by <%= pygments_description %>.
     </span>
   <% else %>
     <%= link_to "View HTML", post_path(@post, code: 1), class: "button" %>

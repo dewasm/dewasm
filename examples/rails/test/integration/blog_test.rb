@@ -5,7 +5,7 @@ require "test_helper"
 # On the converted gems, `/stats` must show no native extension beyond Ruby's own.
 # With the `dewasm` group excluded, the four gems' own extensions must be the ones loaded.
 class BlogTest < ActionDispatch::IntegrationTest
-  GEMS = %w[sqlite3 bcrypt herb nokogiri].freeze
+  GEMS = %w[sqlite3 bcrypt herb nokogiri].freeze # the gems with a native extension to find
 
   setup { Rails.application.load_seed }
 
@@ -86,7 +86,8 @@ class BlogTest < ActionDispatch::IntegrationTest
     source = css_select("article .body pre.highlight").first.to_html
     assert_includes source, %(<span class="nt">b</span>), "the source is not highlighted"
     assert_not_includes source, "script", "sanitize left the script tag in"
-    assert_includes response.body, "Pygments 2.21.0 on CPython 3.14.6"
+    assert_includes response.body, "Pygments #{Pygments.pygments_version} through pygments.rb"
+    assert_select "style", /\.highlight \.nt/
   end
 
   test "a profiled request records a flame graph" do
@@ -118,7 +119,11 @@ class BlogTest < ActionDispatch::IntegrationTest
     get post_path(Post.first, code: 1, profile: 1)
     post_record = RequestProfile.last
     get profile_path(post_record)
-    assert_includes response.body, "PygmentsExt#", "no converted CPython frame in the HTML view's profile"
+    if converted?
+      assert_includes response.body, "PygmentsRbExt#", "no converted CPython frame in the HTML view's profile"
+    else
+      assert_not_includes response.body, "PygmentsRbExt#"
+    end
   ensure
     FileUtils.rm_f(RequestProfiler.path_for(record)) if record
     FileUtils.rm_f(RequestProfiler.path_for(post_record)) if post_record

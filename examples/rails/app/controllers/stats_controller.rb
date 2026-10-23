@@ -13,7 +13,7 @@ class StatsController < ApplicationController
       herb: Herb::VERSION,
       nokogiri: Nokogiri::VERSION,
       bcrypt: BCrypt::Engine.cost,
-      pygments: Dewasm::Pygments.version,
+      pygments: "#{Pygments.pygments_version} (pygments.rb #{Gem.loaded_specs["pygments.rb"].version})",
       posts: Post.count,
       comments: Comment.count,
       native_extensions: NativeExtensions.report
