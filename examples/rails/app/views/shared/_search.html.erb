@@ -1,0 +1,6 @@
+<%# A one-field search form: `url`, the current `query`, and the field's `placeholder`. %>
+<%= form_with url: url, method: :get, class: "search" do |form| %>
+  <%= form.search_field :q, value: query, placeholder: placeholder, "aria-label": "Search" %>
+  <%= form.submit "Search", name: nil %>
+  <% if query.present? %><%= link_to "Clear", url, class: "button" %><% end %>
+<% end %>

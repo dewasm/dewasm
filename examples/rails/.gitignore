@@ -1,4 +1,20 @@
-sqlite3/lib/sqlite3/sqlite3_wasm.rb
-app/
-tmp/
-Gemfile.lock
+# The converted gems, their downloads, and the libraries built for them (`dewasm_gem`).
+/vendor/dewasm/
+/cext/test/cache/
+
+# A standard Rails application's ignores.
+/.bundle
+/log/*
+/tmp/*
+/storage/*
+!/log/.keep
+!/tmp/.keep
+!/storage/.keep
+/tmp/pids/*
+!/tmp/pids/
+!/tmp/pids/.keep
+/public/assets
+/config/master.key
+/config/credentials/*.key
+/app/assets/builds/*
+!/app/assets/builds/.keep

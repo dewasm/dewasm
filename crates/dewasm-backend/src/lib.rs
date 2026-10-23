@@ -65,6 +65,11 @@ pub struct GenOptions {
     /// Only backends that declare support honor it; the CLI rejects it for the rest.
     /// A backend that ignores it keeps embedding.
     pub data_file: Option<DataFileConfig>,
+    /// Name each generated function after the module's `name` section as well as its index.
+    /// A function then reads as `_f12_sqlite3VdbeExec` in a stack trace or a profile.
+    /// Off by default: the index alone keeps the output independent of a build's debug names.
+    /// Backends other than Ruby ignore it.
+    pub function_names: bool,
 }
 
 #[derive(Clone, Debug)]

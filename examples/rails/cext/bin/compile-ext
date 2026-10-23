@@ -1,0 +1,15 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# `compile-ext <name> <ModuleName> <Init_symbol> <out dir> <c sources...>`: compile C sources
+# against the dewasm `ruby.h` and convert them, for an extension that is not a gem.
+# Extra compiler flags come from `$CFLAGS`.
+require "shellwords"
+require_relative "../lib/dewasm_cext/compiler"
+
+name, module_name, init, out_dir, *sources = ARGV
+abort "usage: compile-ext <name> <ModuleName> <Init_symbol> <out dir> <c sources...>" if sources.empty?
+puts DewasmCExt::Compiler.build(
+  name: name, module_name: module_name, init: init, out_dir: File.expand_path(out_dir),
+  sources: sources.map { |s| File.expand_path(s) }, cflags: Shellwords.split(ENV.fetch("CFLAGS", ""))
+)

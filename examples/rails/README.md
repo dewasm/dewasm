@@ -1,88 +1,224 @@
-# Rails on dewasm SQLite
+# Rails on Ruby alone
 
-A full Rails 8 application.
-Its database is **SQLite compiled to wasm32-wasi and converted to pure Ruby by dewasm**.
-No native sqlite3 library is anywhere in the process.
+A Rails 8.1 blog application whose process holds no native extension beyond Ruby's own.
+The C extensions it needs are compiled to wasm, converted to Ruby by dewasm, and loaded in place
+of the `.so` files:
+
+| Gem | What its C extension carries | Converted Ruby |
+| --- | --- | --- |
+| `sqlite3` 2.10.1 | the gem's extension and SQLite 3.54.1 | 7.3 MB |
+| `nokogiri` 1.19.4 | the gem's extension, `libxml2` 2.13.9, `libxslt` 1.1.43, `gumbo` | 9.1 MB |
+| `herb` 0.11.1 | the HTML+ERB parser Rails 8.2 compiles templates with, and Prism | 3.9 MB |
+| `bcrypt` 3.1.22 | the hash behind `has_secure_password` | 0.2 MB |
+
+The gems' own Ruby and C code run unmodified.
+What makes that possible is dewasm cext, under `cext/`: a `ruby.h` of this example's own, in
+which every Ruby C API function is a wasm import, and `cext/lib/dewasm_cext.rb`, which
+implements the API on the host over a handle table.
+The application is a `rails new` application; its Gemfile asks for the converted gems in one
+line each:
+
+```ruby
+require_relative "cext/lib/dewasm_cext/gemfile"
+
+gem "sqlite3", ">= 2.1"
+
+group :dewasm do
+  dewasm_gem "sqlite3", "2.10.1"
+end
+```
+
+`dewasm_gem` fetches the gem at that version, compiles its extension against the `ruby.h`,
+converts it with dewasm, and hands Bundler the result as a `path:` gem under `vendor/dewasm/`.
+The line replaces the `gem` line that names the same gem, and adds a gem no line names, such as
+`nokogiri`, a dependency of `rails`.
+It builds under `bundle install` only.
+An out-of-date build at boot is an error that names the command.
+The gems with a Ruby fallback of their own (`nio4r`, `websocket-driver`, `racc`) use it.
+`puma` is replaced by WEBrick, and Bootsnap is left out.
 
 ```
-Rails 8 (unmodified)
-  └─ ActiveRecord SQLite3Adapter (unmodified)
-       └─ sqlite3/: shim gem, the sqlite3-ruby API the adapter uses
-            └─ sqlite3_wasm.rb: libsqlite3.wasm converted by dewasm (~17 MB, generated)
-                 └─ Rt::WASI: dewasm's WASI, preopening "/" so the .sqlite3
-                              file lands on the real filesystem
+Rails 8.1 (unmodified), templates compiled by Herb
+  └─ sqlite3, nokogiri, herb, bcrypt: the gems' Ruby (unmodified)
+       └─ <gem>_wasm.rb: the gem's C extension converted by dewasm (generated)
+            └─ dewasm cext (cext/lib/dewasm_cext.rb): the Ruby C API as imports (rb_str_new, ...)
 ```
 
 ## Run it
 
 ```console
-$ ./run.sh
+$ bundle install
+$ bin/rails db:setup
+$ bin/rails server
 ```
 
-That builds `libsqlite3.wasm` (needs `wasi-sdk`, `WASI_SDK_PATH`) and converts it with dewasm.
-It runs the shim + ActiveRecord smokes.
-On first use, it generates the Rails app (needs the `rails` gem, >= 8.1).
-It then migrates, boots the server, and drives it over HTTP.
-It ends with `RAILS-ON-DEWASM-OK` after a POST/GET round-trip and a `/stats` request.
-The wasm-converted SQLite answers that request's `sqlite_version`: `3.53.3-wasm`.
-The wasm build (`../apps/scripts/sqlite3.sh`) adds that suffix.
-So the output identifies the converted engine rather than looking like a native SQLite.
+`bundle install` fetches the four gems at fixed versions, compiles their extensions with
+`wasi-sdk`, and converts them; the first time takes a few minutes, most of it `libxml2`.
+`bin/rails db:setup` creates the database and seeds one account and two posts.
+`bin/rails server` serves on WEBrick at `http://127.0.0.1:3000`.
+Reading needs no account; to write a post, sign in as `author@example.com` with `secret`.
+`/stats` reports what the process runs on, and which native extensions it loaded beyond Ruby's
+own: none.
+
+`bin/rails test` drives the application through its stack: the index, a sign-in, a post with
+HTML in its body, a comment, a profiled request with its flame graph, and the `/stats` report.
+
+Requirements: Ruby 4.0, `wasi-sdk` with `WASI_SDK_PATH` set, `make` and `patch` for libxml2,
+Wizer and `unzip` for the Pygments gem, and network access for the gems.
+`mise install` at the repository root provides Ruby, `wasi-sdk`, and Wizer.
+`examples/apps/setup.sh` must have run first: the Pygments gem links against the CPython library
+it builds (`cpython-sdk`), and `bundle install` says so when it is missing.
 
 Pieces, individually:
 
-- `build.sh`: wasm build + conversion only.
-- `sqlite3/test_shim.rb`: the shim's own smoke.
-  It covers the gem API surface: binds, column typing, error mapping, transactions, `PRAGMA` statements.
-- `ar_smoke/`: ActiveRecord without Rails.
-  It covers migration, CRUD, and type round-trips (UTF-8, BLOB, i64 boundaries, `DATETIME`).
-  It also covers constraint→exception mapping, joins, and `insert_all`.
-- `setup-app.sh`: regenerates `app/` (`rails new --minimal` plus the files in `app-template/`).
+- `cext/bin/build-gem <gem> <version>`: the command-line form of `dewasm_gem`, into
+  `vendor/dewasm/` under the working directory.
+- `cext/test/run.sh`: dewasm cext's own checks against a small extension (`test/demo_ext.c`).
+  They cover strings, exceptions through guest frames, `rb_protect`, blocks, typed data, and
+  handle collection.
+- `cext/test/smoke/<gem>.rb <gem directory>`: each gem's own API on its converted extension,
+  including the callbacks the earlier shim could not offer: SQLite functions and collations, SAX
+  handlers.
+- `script/profile.rb` and `script/flamegraph.rb`: a Vernier profile of request handling, and a
+  flame graph from it (below).
 
-## The shim gem (`sqlite3/`)
+## dewasm cext (`cext/`)
 
-A drop-in `sqlite3` gem (Bundler `path:` dependency) implementing the surface Rails 8.1 actually uses.
-It is verified against the real gem 2.9.5 and the adapter source:
+`include/ruby.h` declares each `rb_*` function as an import from module `ruby`.
+A `VALUE` is a 32-bit tagged word: a fixnum, one of the four constants, or a handle index.
+`include/support.c` holds what needs no host: `rb_scan_args`, `rb_sprintf`, `st_table`.
 
-- `Database`: `prepare`/`execute`/`execute_batch2`, `changes`/`total_changes`, and `closed?`/`close`.
-  It also has `encoding`, `busy_handler_timeout=`, and transactions.
-- `Statement`: `bind_params`, `step`, `columns`, `types`, `reset!`, `column_count`.
-  `step` returns array rows typed INTEGER→Integer, FLOAT→Float, and TEXT→UTF-8 String.
-  It types BLOB→binary String and NULL→`nil`.
-  `types` returns the declared types, which feed AR's type map.
-- `Pragmas` as a real module with real setter methods, since Rails calls `method_defined?`.
-- The full exception hierarchy, keyed by result code.
-  SQLite's own error strings pass through.
-  Rails' regular expressions for failed constraints match them.
-- `Constants::Open`, `ForkSafety`.
+`lib/dewasm_cext/recipes/<gem>.rb` says how a gem's extension is built: its sources, its flags,
+the `Init_*` symbol, and the path the gem requires its extension from.
+The `nokogiri` recipe also builds `libxml2` and `libxslt` for wasm from the archives the gem
+ships.
+A gem without a recipe gets the generic one, every `.c` under `ext/<name>/`.
+`lib/dewasm_cext/builder.rb` runs a recipe: fetch with a checksum, unpack, compile, convert,
+write the loader, and stamp the result so that a changed input rebuilds it.
+`lib/dewasm_cext/gemfile.rb` is `dewasm_gem`.
 
-Each `Database` gets its own wasm instance, with its own linear memory and guest heap.
-So a Rails connection-pool entry is an isolated SQLite.
-A mutex lets one call at a time into each instance.
-Values cross the host/guest boundary through the generated module's `invoke` + `Rt::Memory`.
-Buffers on the guest side come from `sqlite3_malloc`, and i64 uses the masked-unsigned convention.
+`lib/dewasm_cext.rb` is the host.
+It keeps the handle table, defines the Ruby methods a `rb_define_method` call asks for, and calls
+the C function through the module's exported function table.
+A pointer into a Ruby String is a copy in linear memory, written back when the C code returns or
+calls into Ruby.
+A Ruby exception raised inside an import unwinds through the generated frames on its own.
+The host saves `__stack_pointer` at each entry and restores it, since no epilogue runs.
+Handles made during a call are collected once the outermost call returns.
+One that a registered address or a wrapped struct's `dmark` marks stays strong; any other turns
+weak, and stays valid while its object lives anywhere in Ruby, as a `VALUE` does in CRuby.
 
-`libsqlite3.wasm` exports the C surface this needs.
-The list is `SQLITE_EXPORTS` in `../apps/scripts/sqlite3.sh`.
+It covers what these four gems use, about 200 functions.
+An extension that calls another one fails at load with the missing import's name.
 
-## Intended gaps
+## Profiles in the application
 
-- **No guest→host callbacks**: `busy_handler_timeout=` maps to SQLite's built-in `sqlite3_busy_timeout`.
-  That gives the same observable behavior for Rails.
-  `execute_batch2` is a prepare/step loop instead of `sqlite3_exec`.
-  `create_function`, collations, and tracing are out.
-- **WAL silently degrades**: WASI has no shared memory.
-  So Rails' default `journal_mode = wal` `PRAGMA` leaves the database in rollback-journal mode.
-  SQLite reports the old mode, and nothing errors.
-- **No real file locking**: WASI p1 has no `fcntl` locks.
-  So writers in *separate processes* running at the same time are unprotected.
-  Inside one server process the per-connection mutexes plus SQLite's `sqlite3_busy_timeout` apply.
-- `strict:` and `extensions:` are not supported.
-  `strict:` needs a variable number of arguments to `sqlite3_db_config`.
-  The shim ignores `strict:` and raises on `extensions:`.
+The page header names the mode the four gems run in, `dewasm gems` or `native gems`, with a color
+of its own, and the time the page took on the server up to the header.
+The page header has a `Profiling: off` button.
+Turned on, every following page request is recorded by Vernier, and the page served links to its own
+flame graph; `?profile=1` records a single request.
+Assets and the profile pages themselves are not recorded.
+`/profiles` lists the recordings with the mode each was taken in, in pages, with a search over
+the path and the mode; `/profiles/<id>` draws one.
+A click on a frame narrows the picture to it: the frame becomes the bottom row, the full width,
+and a click on that row widens the picture by one level.
+A link saves the recording for the Firefox Profiler.
+`lib/request_profiler.rb` is the Rack layer that records, `lib/flame_graph.rb` the drawing.
 
-## Numbers (M-series laptop, development mode)
+Frames are colored by the kind of code they run: a converted gem, a native gem's C method,
+dewasm cext, a C function of Ruby itself, or Ruby (the application, Rails, and the other gems).
+The gem a frame belongs to is in the frame's title, and in the summary under the picture.
+With `--function-names` (the conversion flag `cext/lib/dewasm_cext/compiler.rb` passes), a
+frame reads `Sqlite3Ext#sqlite3VdbeExec`.
 
-- `ruby test_shim.rb` (open + 30 statements): ~0.9 s total.
-- Rails boot (`rails runner`): ~1.6 s.
-- Simple JSON request with 1-4 queries: ~20 ms end-to-end.
-  Individual ActiveRecord queries log at 0.5 to 2 ms.
+Vernier is a C extension, and it is the one exception to "Ruby alone".
+It loads on the first profiled request only, and `/stats` reports it apart as instrumentation.
+A profiler in Ruby alone was tried and measured (`agents/experiments.md`): a sampling thread gets
+the interpreter about 8 times a second, 84 with `RUBY_THREAD_TIMESLICE=1`, which is too few
+for one request.
+
+## Pygments on a converted CPython
+
+A post page has a `View HTML` link (`?code=1`): the body is then shown as the HTML it is served
+as, highlighted, in place of the rendering.
+The seeded post's HTML has no `<script>` tag, since `sanitize` removed the one its author wrote.
+The highlighting is Pygments, a Python library, running on CPython 3.14.6: the interpreter is
+compiled to wasm, converted to Ruby by dewasm, and loaded as the gem in `pygments/`
+(`Dewasm::Pygments.highlight(source, "html")`).
+It runs at page load; nothing is stored.
+
+The interpreter is a reactor (`pygments/ext/pyg.c`, linked against `libpython3.14.a`) with two
+exports: `pyg_init` starts CPython, imports Pygments and runs the common lexers once, and
+`pyg_highlight` turns source into HTML.
+A converted CPython takes about 40 seconds to boot and import Pygments.
+So Wizer runs `pyg_init` ahead of time and writes the memory it leaves into the module, and the
+Ruby code starts from that memory: the first highlight takes about a second (YJIT warms up), the
+next ones 0.1 to 0.4 seconds.
+The `cpython-sdk` app of `examples/apps/setup.sh` is the library build the reactor links against.
+`dewasm_pygments` in the Gemfile builds the gem under `bundle install`, as `dewasm_gem` does:
+the Pygments wheel at a fixed version, the link, Wizer, and the conversion.
+
+## The same application on the native extensions
+
+```console
+$ bundle config set --local without dewasm
+$ bundle install
+```
+
+With the `dewasm` group excluded, each `dewasm_gem` line does nothing, and Bundler takes the
+gems' own native extensions, as in any Rails application; the lock follows.
+`bundle config unset --local without` and `bundle install` switch back.
+`bin/rails test` passes in both modes, and in the native one expects the four extensions in
+`/stats`.
+`script/flamegraph.rb` draws a recorded request from `storage/profiles/<id>.json`.
+With the 26 posts the test seed makes on the index, on an M-series laptop:
+
+| | converted | native |
+| --- | --- | --- |
+| `GET /posts` | 2.2 s (10860 samples) | 92 ms (460 samples) |
+| self time in SQLite | 60% (`Sqlite3Ext#sqlite3VdbeExec` and its callees, as Ruby frames) | 1% (`SQLite3::Statement#step`, one C frame) |
+| self time in Nokogiri | 15% | 5% |
+| self time in dewasm cext | 2% | — |
+
+In the converted picture, a query fans out into the SQLite functions it runs; in the native one,
+the same query is a single dark leaf, and most of the time is Rails itself.
+A native gem's C method has a color of its own, so the two pictures tell apart at a glance.
+
+## Profile from the command line
+
+```console
+$ bin/rails runner script/profile.rb tmp/profile.json
+$ ruby script/flamegraph.rb tmp/profile.json tmp/flamegraph.svg
+```
+
+`script/profile.rb` drives the application in one process through the integration session and
+records it with Vernier; `script/flamegraph.rb` draws the flame graph and prints where the time
+goes.
+The recording opens in the Firefox Profiler.
+
+Ten rounds of index, post page, comment, and sign-in on an M-series laptop:
+
+| Where the code lives | Self time |
+| --- | --- |
+| converted `sqlite3` | 45% |
+| Ruby: the application, Rails, and the other gems | 25% |
+| converted `bcrypt` | 11% |
+| converted `nokogiri` | 10% |
+| Ruby's own C functions (`IO::Buffer#get_value`, `Integer#^`, ...) | 8% |
+| dewasm cext | 1% |
+
+## Limits
+
+- Speed: under YJIT the converted code runs 50 to 130 times slower than native.
+  A page with a few queries renders in tens of milliseconds; a template compiles in about a second.
+  `bcrypt` at its default cost of 12 takes 19 seconds per sign-in, so
+  `config/initializers/bcrypt_cost.rb` sets cost 5.
+  Herb's 1 second parse limit is raised in `config/initializers/herb_templates.rb`.
+- A callback into Ruby holds the instance's lock.
+  Ruby code that waits for another thread inside such a callback deadlocks.
+- WASI has no `iconv`, threads, `dlopen`, or shared memory.
+  libxml2 decodes UTF-8, UTF-16, ISO-8859-1, and ASCII documents itself.
+  SQLite runs without loadable extensions, and `config/database.yml` sets a rollback journal
+  (`journal_mode: delete`), since a database left in WAL mode by a native SQLite does not open.
+- Rails 8.1: the Herb template handler is the Rails 8.2 class, vendored as an initializer.

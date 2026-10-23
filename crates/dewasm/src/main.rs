@@ -51,6 +51,12 @@ struct Cli {
     /// Parse the module's DWARF .debug_* sections and emit source-position markers.
     #[arg(long)]
     dwarf_line: bool,
+
+    /// Name generated functions after the module's name section as well as their index
+    /// (`_f12_sqlite3VdbeExec`), so profiles and stack traces read like the C source.
+    /// Ruby backend only; the others ignore it.
+    #[arg(long)]
+    function_names: bool,
 }
 
 fn main() -> Result<()> {
@@ -146,6 +152,7 @@ fn main() -> Result<()> {
         runtime: RuntimeLinkage::Embedded,
         default_wasi: !cli.no_default_wasi,
         data_file,
+        function_names: cli.function_names,
     };
     // Component-model binaries (layer 1) are out of scope.
     // Reject them at conversion time with a clear, attributed error.

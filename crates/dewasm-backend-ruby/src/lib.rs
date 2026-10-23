@@ -194,6 +194,7 @@ pub fn generate_class_with_units(
         default_wasi,
         &BTreeSet::new(),
         None,
+        false,
     )
 }
 
@@ -204,6 +205,7 @@ fn generate_class_inner(
     default_wasi: bool,
     extra_seeds: &BTreeSet<String>,
     data_file: Option<&str>,
+    function_names: bool,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&RubyBackend, module)?;
     // A global that can cross an instantiation boundary needs a shared mutable cell (`Rt::Global`).
@@ -237,6 +239,7 @@ fn generate_class_inner(
         module,
         extracted,
         default_wasi,
+        function_names,
         uses: RefCell::new(extra_seeds.clone()),
         frames: RefCell::new(flat::Frames::default()),
         frame_stack: RefCell::new(Vec::new()),
@@ -338,6 +341,7 @@ impl Backend for RubyBackend {
             opts.default_wasi,
             &extra_seeds,
             opts.data_file.as_ref().map(|c| c.data_file_name.as_str()),
+            opts.function_names,
         )?;
 
         let mut w = CodeWriter::new("\t");
@@ -701,6 +705,8 @@ struct Gen<'a> {
     /// The extracted functions follow them.
     extracted: extract::Extracted,
     default_wasi: bool,
+    /// Append the `name` section's function name to each `_fN` (see `func_name`).
+    function_names: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
     /// Per-function frame classification, set by `function()`.
@@ -979,7 +985,7 @@ impl<'a> Gen<'a> {
                 let methods: Vec<String> = self
                     .tail_callers
                     .iter()
-                    .map(|f| format!("method(:_f{f}_body)"))
+                    .map(|f| format!("method(:{}_body)", self.func_name(*f)))
                     .collect();
                 w.line(format!("@__tm = [{}]", methods.join(", ")));
             }
@@ -1162,7 +1168,27 @@ impl<'a> Gen<'a> {
         if (func_idx as usize) < self.module.imported_funcs.len() {
             format!("@if{func_idx}")
         } else {
-            format!("method(:_f{func_idx})")
+            format!("method(:{})", self.func_name(func_idx))
+        }
+    }
+
+    /// The Ruby method name of defined function `func_idx`: `_f{idx}`, or with `function_names`
+    /// also the module's own name for it, as `_f12_sqlite3VdbeExec`.
+    /// The index stays first, so names are unique and valid whatever the name section holds.
+    fn func_name(&self, func_idx: u32) -> String {
+        if !self.function_names {
+            return format!("_f{func_idx}");
+        }
+        match self.module.func_names.get(&func_idx) {
+            Some(name) => {
+                let sanitized: String = name
+                    .chars()
+                    .take(64)
+                    .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+                    .collect();
+                format!("_f{func_idx}_{sanitized}")
+            }
+            None => format!("_f{func_idx}"),
         }
     }
 
@@ -1222,9 +1248,9 @@ impl<'a> Gen<'a> {
         if (func_idx as usize) < self.module.imported_funcs.len() {
             format!("@if{func_idx}.call({args})")
         } else if args.is_empty() {
-            format!("_f{func_idx}")
+            self.func_name(func_idx)
         } else {
-            format!("_f{func_idx}({args})")
+            format!("{}({args})", self.func_name(func_idx))
         }
     }
 
@@ -1242,20 +1268,21 @@ impl<'a> Gen<'a> {
         // The public `_fN` is the trampoline that unwraps them.
         // So every existing call site is unchanged.
         let is_tail_caller = self.tail_callers.contains(&idx);
+        let base = self.func_name(idx);
         let name = if is_tail_caller {
-            format!("_f{idx}_body")
+            format!("{base}_body")
         } else {
-            format!("_f{idx}")
+            base.clone()
         };
         if is_tail_caller {
             self.use_unit("rt/tail_call");
             let header = if params.is_empty() {
-                format!("def _f{idx}")
+                format!("def {base}")
             } else {
-                format!("def _f{idx}({params})")
+                format!("def {base}({params})")
             };
             w.block(header, "end", |w| {
-                w.line(format!("trampoline(_f{idx}_body({params}))"));
+                w.line(format!("trampoline({base}_body({params}))"));
             });
             w.line("");
         }

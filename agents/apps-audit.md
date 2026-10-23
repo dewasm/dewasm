@@ -31,6 +31,7 @@ The entry then records that evidence so the investigation is not repeated.
 | `quickjs-ng` v0.15.1 | fixed version in `setup.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **deepened**³) |
 | sqlite3 3.53.3 (three shapes) | fixed version in `setup.sh` | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, **deepened**⁴) |
 | CPython 3.14.6 | fixed version in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |
+| CPython 3.14.6 as a library (`cpython-sdk`) | `wasi-sdk` build in `setup.sh` from the source release at a fixed version | none in the reactor `examples/rails/pygments` links from it (it carries the features `wasi-sdk` 34 emits by default: bulk memory, sign extension, nontrapping conversions, mutable globals, multi-value, reference-types *encoding only*¹) | ✅ in scope (a build input, not a module: the Rails example's Pygments reactor¹⁷) |
 | CRuby 3.4 (ruby.wasm 2.9.4) | fixed version in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |
 | CRuby 3.4 packed with `wasi-vfs` | derived in-cache by `setup.sh`¹³ | none (audited 2026-08-04) | ✅ in scope (shipping, **executes on every backend**¹³) |
 | `mruby` 3.4.0 | `wasi-sdk` build in `setup.sh` from a source release at a fixed version | **exception-handling** (accepted input¹⁴), reference-types *encoding only*¹ | ✅ in scope (shipping, **executes on every backend but Bash**¹⁴) |
@@ -441,6 +442,17 @@ wasm3 natively interprets roughly 6x slower than `wasmtime`, where `toywasm` sit
 That makes converted wasm3 the carrier that keeps a converted interpreter competitive.
 It competes with the wasm interpreters hand-written in the target languages (`wardite`, `pywasm`).
 The speed benchmark suite measures that comparison.
+
+¹⁷ **CPython as a library (`cpython-sdk`, audited 2026-10-23).**
+CPython 3.14.6 built from its source release with `wasi-sdk`, by its own `Tools/wasm/wasi`.
+The cache holds `libpython3.14.a`, the static libraries of its built-in modules, the headers with
+this build's `pyconfig.h`, and the standard library without its tests.
+It is a build input: no e2e case converts it, and nothing runs it as is.
+`examples/rails/pygments/ext/pyg.c` links a reactor against it with Pygments imported in
+`pyg_init`, Wizer runs that function ahead of time and writes the memory into the module, and
+the Rails example converts the result with the Ruby backend.
+So the converted interpreter starts with Pygments ready, in place of about 40 seconds of boot.
+The `cpython` app above is the same version as a command, from a prebuilt release.
 
 ## Deferred: Pandoc
 

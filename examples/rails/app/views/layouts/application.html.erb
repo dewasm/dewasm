@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title><%= content_for(:title) || "Rails on dewasm" %></title>
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+    <%= yield :head %>
+    <%= stylesheet_link_tag :app, "data-turbo-track": "reload" %>
+  </head>
+
+  <% mode = NativeExtensions.mode %>
+  <body class="mode-<%= mode %>">
+    <header class="topbar">
+      <div class="inner">
+        <%= link_to "Rails on dewasm", root_path, class: "brand" %>
+        <span class="badge <%= mode %>" title="<%= mode == "dewasm" ? "sqlite3, nokogiri, herb, and bcrypt run converted by dewasm" : "sqlite3, nokogiri, herb, and bcrypt run their own native extensions" %>"><%= mode %> gems</span>
+        <span class="timing" title="Time on the server, from the start of the request to this point of the page">
+          <%= RequestProfiler.elapsed_ms(request) %> ms
+        </span>
+        <nav>
+          <%= link_to "Posts", posts_path %>
+          <%= link_to "Profiles", profiles_path %>
+          <%= button_to profiling? ? "Profiling: on" : "Profiling: off", toggle_profiles_path,
+                        class: profiling? ? "pill on" : "pill" %>
+          <% if authenticated? %>
+            <%= button_to "Sign out", session_path, method: :delete, class: "pill" %>
+          <% else %>
+            <%= link_to "Sign in", new_session_path, class: "pill" %>
+          <% end %>
+        </nav>
+      </div>
+    </header>
+
+    <main class="<%= yield :page_class %>">
+      <% if (record = request.env[RequestProfiler::ENV_KEY]) %>
+        <p class="flash notice">This request is being profiled: <%= link_to "flame graph", profile_path(record) %></p>
+      <% end %>
+      <%= tag.p(notice, class: "flash notice") if notice %>
+      <%= tag.p(alert, class: "flash alert") if alert %>
+      <%= yield %>
+    </main>
+  </body>
+</html>

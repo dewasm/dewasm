@@ -145,7 +145,7 @@ A helper that only test tables need must not become a CLI behaviour nobody can r
   The generated output is byte-identical for every name that was already valid.
 - Every library-mode conversion must now pass `--module-name`.
   `dewasm add.wasm --mode library` alone is an error.
-  `examples/rails/build.sh` spells it out.
+  `examples/rails/cext/lib/dewasm_cext/compiler.rb` spells it out.
   So do the library guides in `README.md` and `docs/getting-started.md`.
 - The module name's meaning is mode-dependent.
   It is an internal name in library mode, only an output file name in standalone.

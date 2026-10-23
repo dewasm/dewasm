@@ -9,6 +9,7 @@ ruby.compile = true
 binaryen = "aqua:WebAssembly/binaryen"
 wasi-sdk = "github:WebAssembly/wasi-sdk"
 wasi-vfs = "github:kateinoigakukun/wasi-vfs"
+wizer = "ubi:bytecodealliance/wizer"
 
 [tools]
 binaryen = "133"
@@ -19,6 +20,7 @@ python = "3.14.8"
 ruby = "4.0.7"
 shellcheck = "0.11.0"
 wasi-vfs = "0.6.3"
+wizer = "11.0.3"
 
 [tools.wasi-sdk]
 version = "34"

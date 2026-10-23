@@ -1085,6 +1085,7 @@ mod tests {
             datas: vec![],
             start: None,
             debug_files: vec![],
+            func_names: Default::default(),
         }
     }
 

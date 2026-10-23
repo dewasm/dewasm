@@ -279,9 +279,14 @@ fn tracked_files(root: &Path) -> Vec<String> {
         .collect()
 }
 
+/// Tracked files another program writes, text included: Active Record rewrites this one, with
+/// its own header, on every schema dump.
+const WRITTEN_BY_A_PROGRAM: &[&str] = &["examples/rails/db/schema.rb"];
+
 /// Whether the checks read `path`.
 fn is_checked_text(path: &str) -> bool {
-    path.ends_with(".md") || comment_markers(path).is_some()
+    !WRITTEN_BY_A_PROGRAM.contains(&path)
+        && (path.ends_with(".md") || comment_markers(path).is_some())
 }
 
 /// Each defect of the text file `path` under `root`, as `path:line: what`.

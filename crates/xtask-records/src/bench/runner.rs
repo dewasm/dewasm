@@ -868,6 +868,7 @@ fn convert(backend: &(dyn Backend + Sync), bytes: &[u8]) -> Result<String> {
                             runtime: RuntimeLinkage::Embedded,
                             default_wasi: true,
                             data_file: None,
+                            function_names: false,
                         },
                     )?
                     .remove(0)

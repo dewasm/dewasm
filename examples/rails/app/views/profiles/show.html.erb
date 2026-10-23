@@ -1,0 +1,67 @@
+<% content_for :title, "Profile #{@profile.id}" %>
+<% content_for :page_class, "wide" %>
+
+<div class="page-head">
+  <h1>
+    <code><%= @profile.http_method %> <%= @profile.path %></code>
+    <span class="badge <%= @profile.mode %>"><%= @profile.mode || "?" %> gems</span>
+  </h1>
+  <div class="actions">
+    <% if @focus %><%= link_to "Whole request", profile_path(@profile), class: "button" %><% end %>
+    <%= link_to "Save for the Firefox Profiler", profile_path(@profile, format: :json), class: "button" %>
+    <%= link_to "All profiles", profiles_path, class: "button" %>
+  </div>
+</div>
+<p class="meta">
+  Recorded on the <%= @profile.mode %> gems: status <%= @profile.status %>, <%= @profile.duration_ms&.round %> ms,
+  <%= @graph.total %> samples at <%= RequestProfiler::INTERVAL_US %> µs.
+  Click a frame to narrow the picture to it; the bottom row then widens it again.
+  Hover a frame for its share.
+</p>
+
+<div class="flamegraph"><%= @svg.html_safe %></div>
+
+<div class="summary">
+  <section>
+    <h2>Self time by kind of code</h2>
+    <table>
+      <% @graph.by_kind.each do |kind, weight| %>
+        <tr>
+          <td><span class="swatch" style="background: <%= FlameGraph.color_of(kind) %>"></span> <%= kind %></td>
+          <td class="num"><%= @graph.pct(weight) %></td>
+        </tr>
+      <% end %>
+    </table>
+  </section>
+
+  <section>
+    <h2>Time with an extension on the stack</h2>
+    <% if @graph.extensions_on_stack.empty? %>
+      <p class="meta">No converted or native extension ran in this request.</p>
+    <% else %>
+      <table>
+        <% @graph.extensions_on_stack.each do |label, weight| %>
+          <tr><td><%= label %></td><td class="num"><%= @graph.pct(weight) %></td></tr>
+        <% end %>
+      </table>
+    <% end %>
+  </section>
+</div>
+
+<h2>Top self time</h2>
+<table>
+  <thead><tr><th>Function</th><th>Kind</th><th class="num">Self</th></tr></thead>
+  <% @graph.top_self(20).each do |func, weight| %>
+    <tr>
+      <td><code><%= @graph.display_name(func) %></code></td>
+      <td><%= @graph.label(func) %></td>
+      <td class="num"><%= @graph.pct(weight) %></td>
+    </tr>
+  <% end %>
+</table>
+
+<h2>C functions of Ruby itself on the stack</h2>
+<p class="meta">
+  <%= @graph.cfuncs_seen.size %> distinct<%= @graph.native? ? "; the native extensions' own count as native gem above" : ", and no other" %>:
+  <%= @graph.cfuncs_seen.first(30).map { |f| @graph.func_names[f] }.join(", ") %><%= "…" if @graph.cfuncs_seen.size > 30 %>
+</p>

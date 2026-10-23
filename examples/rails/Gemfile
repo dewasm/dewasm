@@ -1,0 +1,51 @@
+source "https://rubygems.org"
+
+# `dewasm_gem`: a gem with its C extension converted to Ruby by dewasm; see README.md.
+require_relative "cext/lib/dewasm_cext/gemfile"
+# `dewasm_pygments`: Pygments on a CPython converted to Ruby by dewasm, in `pygments/`.
+require_relative "pygments/gemfile"
+
+gem "rails", "~> 8.1.4"
+# The modern asset pipeline for Rails [https://github.com/rails/propshaft]
+gem "propshaft"
+# Use sqlite3 as the database for Active Record
+gem "sqlite3", ">= 2.1"
+# WEBrick serves, in place of Puma, since Puma is a C extension.
+gem "webrick"
+gem "rackup"
+# Use JavaScript with ESM import maps [https://github.com/rails/importmap-rails]
+gem "importmap-rails"
+# Hotwire's SPA-like page accelerator [https://turbo.hotwired.dev]
+gem "turbo-rails"
+# Hotwire's modest JavaScript framework [https://stimulus.hotwired.dev]
+gem "stimulus-rails"
+
+# Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
+gem "bcrypt", "~> 3.1.7"
+# The HTML-aware ERB engine, the default of Rails 8.2; `config/initializers/herb_templates.rb`
+# uses it on 8.1.
+gem "herb"
+
+# Windows does not include zoneinfo files, so bundle the tzinfo-data gem
+gem "tzinfo-data", platforms: %i[ windows jruby ]
+
+# The four gems with a C extension, converted: these lines replace the ones above, and add
+# `nokogiri`, a dependency of `rails`.
+# `bundle config set --local without dewasm` turns them off, and the application then runs on
+# the gems' own native extensions; `bundle config unset --local without` turns them back on.
+# `bundle install` after either applies it.
+group :dewasm do
+  dewasm_gem "sqlite3", "2.10.1"
+  dewasm_gem "bcrypt", "3.1.22"
+  dewasm_gem "herb", "0.11.1"
+  dewasm_gem "nokogiri", "1.19.4"
+end
+
+# Syntax highlighting of a post's HTML, by Pygments running on a converted CPython.
+# It has no native form: the interpreter is Ruby in both modes above.
+dewasm_pygments
+
+group :development, :test do
+  # The profiler behind the `/profiles` pages; loaded on the first profiled request only.
+  gem "vernier", require: false
+end

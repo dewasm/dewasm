@@ -270,6 +270,7 @@ fn convert_source(
                         runtime: RuntimeLinkage::Embedded,
                         default_wasi: true,
                         data_file: None,
+                        function_names: false,
                     },
                 )?;
                 anyhow::ensure!(!files.is_empty(), "backend produced no output file");

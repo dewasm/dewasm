@@ -1,0 +1,16 @@
+<%# Links to the previous and next page of `page` (a `Pagination`), keeping the search query. %>
+<% if page.pages > 1 %>
+  <nav class="pagination" aria-label="Pages">
+    <% if page.first? %>
+      <span class="button disabled">‹ Newer</span>
+    <% else %>
+      <%= link_to "‹ Newer", url_for(request.query_parameters.merge(page: page.number - 1)), class: "button", rel: "prev" %>
+    <% end %>
+    <span class="meta">Page <%= page.number %> of <%= page.pages %> · <%= page.from %>–<%= page.to %> of <%= page.total %></span>
+    <% if page.last? %>
+      <span class="button disabled">Older ›</span>
+    <% else %>
+      <%= link_to "Older ›", url_for(request.query_parameters.merge(page: page.number + 1)), class: "button", rel: "next" %>
+    <% end %>
+  </nav>
+<% end %>

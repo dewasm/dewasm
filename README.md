@@ -48,7 +48,8 @@ inst.invoke("add", 2, 3) # => 5
 
 Beyond simple examples, `dewasm` scales to *real libraries and applications* too:
 
-- [`examples/rails`](examples/rails) uses **[SQLite](https://sqlite.org)**, converted to pure Ruby by `dewasm`, as a Rails app's database engine.
+- [`examples/rails`](examples/rails) runs a **Rails** blog on Ruby alone.
+  The C extensions of `sqlite3`, `nokogiri`, `herb`, and `bcrypt` are converted to Ruby by `dewasm`.
 - [`examples/doom`](examples/doom) ports the WebAssembly version of **[DOOM](https://github.com/jacobenget/doom.wasm)** to multiple languages, *including Bash*.
 - [`examples/nes`](examples/nes) converts a **NES emulator** ([`agnes`](https://github.com/kgabis/agnes)) once.
   It turns every backend language into a native NES player.

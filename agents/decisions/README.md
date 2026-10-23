@@ -71,7 +71,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 42 | [Ruby Backend Label-Variable Chain for Multi-Level `br`](42-ruby-label-variable-chain.md) | Accepted |
 | 43 | [Ruby Backend i64 Mask Fixnum Fast Path](43-ruby-i64-mask-fast-path.md) | Accepted |
 | 44 | [Ruby Backend Fixed-Arity `call_indirect` Dispatch](44-ruby-call-indirect-arity.md) | Accepted |
-| 45 | [Rails Example via a sqlite3-Gem Shim over Converted libsqlite3](45-rails-sqlite3-shim-example.md) | Accepted |
+| 45 | [Rails Example via a sqlite3-Gem Shim over Converted libsqlite3](45-rails-sqlite3-shim-example.md) | Superseded (decision 102) |
 | 46 | [Host-OS-Scoped Expected-Failure Lists for the WASI Testsuite Harness](46-host-scoped-wasi-expected-failures.md) | Accepted |
 | 47 | [Inline Quiet-NaN Guard for Ruby f64.sub](47-ruby-f64-sub-quiet-guard.md) | Accepted |
 | 48 | [Two-Speed Slow-Test Classification (`slow_test` / `ultra_slow_test`)](48-slow-test-speeds.md) | Accepted |
@@ -128,6 +128,9 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 99 | [Text Uses a Learner Word List Plus Project Terms](99-allowed-vocabulary.md) | Accepted |
 | 100 | [Each `xtask` Command Group Is Its Own `xtask-<name>` Crate](100-xtask-crates.md) | Accepted |
 | 101 | [A Tool Version Is Stated Once, in a `mise` File](101-tool-versions-in-mise.md) | Accepted |
+| 102 | [Rails Example Runs Gem C Extensions Through a dewasm `ruby.h`](102-rails-c-extensions-through-a-dewasm-ruby-h.md) | Accepted |
+| 103 | [Function Names From the Name Section Are an Option, After the Index](103-function-names-option.md) | Accepted |
+| 104 | [Pygments Runs on a CPython Reactor That Wizer Pre-Initializes](104-pygments-on-a-pre-initialized-cpython.md) | Accepted |
 
 ## Adding a new decision
 

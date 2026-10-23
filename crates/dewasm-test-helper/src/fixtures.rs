@@ -52,6 +52,7 @@ pub fn convert_bytes(backend: &dyn Backend, bytes: &[u8], mode: Mode, name: &str
                 runtime: RuntimeLinkage::Embedded,
                 default_wasi: true,
                 data_file: None,
+                function_names: false,
             },
         )
         .expect("generate")

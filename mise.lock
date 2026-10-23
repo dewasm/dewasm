@@ -217,3 +217,11 @@ url_api = "https://api.github.com/repos/kateinoigakukun/wasi-vfs/releases/assets
 checksum = "sha256:b3d86d63350ae48fda9b5877647cca4d9c1ff2f637db5e4eb40852aa5361c340"
 url = "https://github.com/kateinoigakukun/wasi-vfs/releases/download/v0.6.3/wasi-vfs-cli-x86_64-apple-darwin.zip"
 url_api = "https://api.github.com/repos/kateinoigakukun/wasi-vfs/releases/assets/394907751"
+
+[[tools.wizer]]
+version = "11.0.3"
+backend = "ubi:bytecodealliance/wizer"
+specifiers = ["11.0.3"]
+
+[tools.wizer."platforms.macos-arm64-wizer"]
+checksum = "blake3:663bfb6a0b9aeb602051e3224f50eecb3f3ffaa36855c963fc720b93fc89f034"

@@ -6,6 +6,8 @@
 //! A value folds into its consumer where it can and takes a temp only where it must.
 //! `func.rs` owns the spill discipline that keeps evaluation order and trap points correct.
 
+use std::collections::HashMap;
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub enum ValType {
     I32,
@@ -66,6 +68,9 @@ pub struct Module {
     /// [`SourcePos::file`] indexes them.
     /// Empty unless DWARF line back-mapping was requested (`BuildOptions::debug_line`).
     pub debug_files: Vec<String>,
+    /// Function names from the `name` custom section, keyed by function index.
+    /// Empty when the module has no name section, which `--strip-all` produces.
+    pub func_names: HashMap<u32, String>,
 }
 
 impl Module {
