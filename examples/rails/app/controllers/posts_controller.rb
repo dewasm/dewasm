@@ -11,9 +11,9 @@ class PostsController < ApplicationController
     @posts = @page.slice(posts)
   end
 
-  # `?code=1` shows the body as the HTML it is served as, highlighted, in place of the rendering.
+  # The view's `code` state shows the body as the HTML it is served as, highlighted.
+  # The browser asks for that branch as a `slots` request, which renders here without the layout.
   def show
-    @code = params[:code] == "1"
     @comments = @post.comments.order(:created_at)
     @comment = Comment.new
   end

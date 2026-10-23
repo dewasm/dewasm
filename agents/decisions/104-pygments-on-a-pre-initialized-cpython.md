@@ -1,8 +1,10 @@
 # Decision 104: `pygments.rb` Runs on a CPython Reactor That Wizer Pre-Initializes
 
 Status: **Accepted, 2026-10-23.**
-The Rails example (decision 102) shows a post's body as the HTML it is served as, on request
-(`?code=1`), highlighted through the `pygments.rb` gem.
+The Rails example (decision 102) shows a post's body as the HTML it is served as, on a switch
+that is a ReActionView state, highlighted through the `pygments.rb` gem.
+The browser asks the server for the branch as a `slots` request, which is the request a profile
+of the switch shows.
 That gem runs the Pygments it ships in a `python3` child process.
 Converted, the process is CPython 3.14.6 compiled to wasm and converted to Ruby, in the Rails
 process: a reactor of the recipe's own, `cext/lib/dewasm_cext/recipes/pygments_rb/mentos_host.c`,
@@ -85,3 +87,5 @@ Two conditions hold the snapshot together, and both are checked by use:
   stamp catches.
   `Pygments.engine` is one `Popen` per thread in the gem; the loader shares one interpreter
   under a lock.
+- Watch: ReActionView's developer tools are off, since with them the slot client did not place
+  the fetched branch (0.6.0, native Herb included); a later version may lift that.

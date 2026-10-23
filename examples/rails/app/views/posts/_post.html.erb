@@ -2,12 +2,5 @@
   <h2><%= link_to post.title, post %></h2>
   <p class="meta"><%= post.created_at.to_fs(:long) %> · <%= pluralize(post.comments.size, "comment") %></p>
   <%# `sanitize` runs rails-html-sanitizer, so Loofah and Nokogiri parse every body as HTML5. %>
-  <%# With `code`, the sanitized HTML is shown as source, highlighted by Pygments. %>
-  <div class="body">
-    <% if local_assigns[:code] %>
-      <%= highlighted sanitize(post.body), "html" %>
-    <% else %>
-      <%= sanitize post.body %>
-    <% end %>
-  </div>
+  <div class="body"><%= sanitize post.body %></div>
 </article>

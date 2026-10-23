@@ -34,7 +34,7 @@ class BlogTest < ActionDispatch::IntegrationTest
 
     get posts_path(q: "日本語")
     assert_select "article.post", 1
-    assert_includes response.body, "1 post matching"
+    assert_select "p.meta", text: /1 post matching/
     get posts_path(q: "no such post")
     assert_select "article.post", 0
   end
@@ -73,21 +73,41 @@ class BlogTest < ActionDispatch::IntegrationTest
     assert_includes response.body, "Nice <b>post</b>"
   end
 
-  test "the post page shows the served HTML with ?code=1, highlighted by Pygments" do
+  # The request the ReActionView client makes when the `code` state of the post page is on.
+  SLOTS_ACCEPT = "application/vnd.herb.slots+json".freeze
+
+  def code_slots_headers
+    { "Accept" => SLOTS_ACCEPT, "Herb-State" => { "app/views/posts/show.html.erb" => { "code" => true } }.to_json }
+  end
+
+  # Every string in a `slots` response, joined: the values the client would put into the page.
+  def slot_text(body)
+    strings = []
+    walk = lambda do |value|
+      case value
+      when Hash then value.each_value { |v| walk.call(v) }
+      when Array then value.each { |v| walk.call(v) }
+      when String then strings << value
+      end
+    end
+    walk.call(JSON.parse(body))
+    strings.join("\n")
+  end
+
+  test "the post page's View HTML state shows the served HTML, highlighted by Pygments" do
     post = Post.find_by!(title: "Hello from pure Ruby")
     get post_path(post)
-    assert_select "a[href=?]", post_path(post, code: 1)
+    assert_select "button[data-herb-toggle=code]", text: /View HTML/
     assert_select "article .body pre.highlight", 0
+    assert_select "head style", /\.highlight \.nt/
 
-    get post_path(post, code: 1)
+    get post_path(post), params: { format: :slots }, headers: code_slots_headers
     assert_response :success
-    assert_select "a[href=?]", post_path(post)
-    assert_select "article .body pre.highlight", 1
-    source = css_select("article .body pre.highlight").first.to_html
-    assert_includes source, %(<span class="nt">b</span>), "the source is not highlighted"
-    assert_not_includes source, "script", "sanitize left the script tag in"
-    assert_includes response.body, "Pygments #{Pygments.pygments_version} through pygments.rb"
-    assert_select "style", /\.highlight \.nt/
+    slots = slot_text(response.body)
+    assert_includes slots, %(<span class="nt">b</span>), "the source is not highlighted"
+    assert_not_includes slots, "nt\">script", "sanitize left the script tag in"
+    assert_includes slots, "View rendered"
+    assert_includes slots, "Pygments #{Pygments.pygments_version} through pygments.rb"
   end
 
   test "a profiled request records a flame graph" do
@@ -96,7 +116,7 @@ class BlogTest < ActionDispatch::IntegrationTest
     record = RequestProfile.last
     assert_includes response.body, profile_path(record), "the profiled page does not link to its profile"
     assert_equal converted? ? "dewasm" : "native", record.mode
-    assert_match(/\d+ ms/, response.body, "the header does not show the time")
+    assert_match(/\d+ ms/, css_select(".timing").text, "the header does not show the time")
     assert_no_difference("RequestProfile.count", "a profile page was recorded") do
       get profiles_path
       get profile_path(record)
@@ -104,7 +124,7 @@ class BlogTest < ActionDispatch::IntegrationTest
     post toggle_profiles_path
 
     get profiles_path
-    assert_includes response.body, "GET /posts"
+    assert_select "table code", text: %r{GET /posts}
 
     get profile_path(record)
     assert_response :success
@@ -116,7 +136,7 @@ class BlogTest < ActionDispatch::IntegrationTest
       assert_match(/native gem: (sqlite3|nokogiri|herb|bcrypt)/, response.body, "no native extension frame")
     end
 
-    get post_path(Post.first, code: 1, profile: 1)
+    get post_path(Post.first), params: { format: :slots, profile: 1 }, headers: code_slots_headers
     post_record = RequestProfile.last
     get profile_path(post_record)
     if converted?
@@ -132,6 +152,7 @@ class BlogTest < ActionDispatch::IntegrationTest
   test "/stats reports which native extensions the process holds" do
     get stats_path
     stats = response.parsed_body
+    assert_includes stats["erb_handler"], "ReActionView", "templates do not go through ReActionView"
     assert stats["erb_implementation"].end_with?("::Herb"), "templates are not compiled by Herb"
     outside = stats["native_extensions"]["outside_ruby"]
     if converted?

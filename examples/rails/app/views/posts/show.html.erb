@@ -1,16 +1,30 @@
+<%# herb:slots server %>
+<%# herb:state (code: false) %>
 <% content_for :title, @post.title %>
-<% content_for :head, tag.style(highlight_css.html_safe) if @code %>
+<% content_for :head, tag.style(highlight_css.html_safe) %>
 
-<%= render @post, code: @code %>
+<%# `code` is a ReActionView state the browser owns; the button flips it, and the browser asks the
+    server for the branches below that read it. The HTML branch runs Pygments on each request. %>
+<article id="<%= dom_id @post %>" class="post">
+  <h2><%= link_to @post.title, @post %></h2>
+  <p class="meta"><%= @post.created_at.to_fs(:long) %> · <%= pluralize(@post.comments.size, "comment") %></p>
+  <div class="body">
+    <% if code %>
+      <%= highlighted sanitize(@post.body), "html" %>
+    <% else %>
+      <%= sanitize @post.body %>
+    <% end %>
+  </div>
+</article>
 
 <div class="actions">
-  <% if @code %>
-    <%= link_to "View rendered", post_path(@post), class: "button" %>
+  <button type="button" class="button" data-herb-toggle="code">
+    <% if code %>View rendered<% else %>View HTML<% end %>
+  </button>
+  <% if code %>
     <span class="meta">
-      The HTML this post is served as, highlighted on this page load by <%= pygments_description %>.
+      The HTML this post is served as, highlighted for this request by <%= pygments_description %>.
     </span>
-  <% else %>
-    <%= link_to "View HTML", post_path(@post, code: 1), class: "button" %>
   <% end %>
   <% if authenticated? %>
     <%= link_to "Edit this post", edit_post_path(@post), class: "button" %>

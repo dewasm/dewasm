@@ -1,0 +1,6 @@
+# Herb's settings for this application; `Herb::Engine` reads `engine` for its defaults.
+engine:
+  parser_options:
+    # The converted Herb parses about 100 times slower than the native one, so Herb's 1 second
+    # parse limit is raised; a template compiles in about a second.
+    timeout: 120

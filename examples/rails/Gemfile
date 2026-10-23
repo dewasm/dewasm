@@ -20,9 +20,10 @@ gem "stimulus-rails"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
 gem "bcrypt", "~> 3.1.7"
-# The HTML-aware ERB engine, the default of Rails 8.2; `config/initializers/herb_templates.rb`
-# uses it on 8.1.
+# The HTML-aware ERB engine, the default of Rails 8.2, and ReActionView, which brings it to 8.1
+# (`config/initializers/reactionview.rb`) with Herb's error page and its reactive templates.
 gem "herb"
+gem "reactionview", "~> 0.6"
 # Syntax highlighting of a post's HTML; the gem runs the Pygments it ships in a Python process.
 gem "pygments.rb", "~> 5.0"
 

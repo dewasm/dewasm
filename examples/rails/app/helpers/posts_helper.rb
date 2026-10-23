@@ -7,8 +7,10 @@ module PostsHelper
     tag.pre(class: "highlight") { tag.code(html.html_safe) }
   end
 
-  # The style rules of Pygments' token classes, for `pre.highlight`.
-  def highlight_css = Pygments.css(".highlight")
+  # The style rules of Pygments' token classes, for `pre.highlight`; the same for every page.
+  def highlight_css
+    Rails.cache.fetch("pygments.css") { Pygments.css(".highlight") }
+  end
 
   # Where Pygments runs, for the page: on the converted CPython, or in a Python process.
   # The converted gem's loader is what defines `Popen.dewasm_call`.

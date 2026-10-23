@@ -141,9 +141,13 @@ for one request.
 
 ## Pygments on a converted CPython
 
-A post page has a `View HTML` link (`?code=1`): the body is then shown as the HTML it is served
-as, highlighted, in place of the rendering.
+A post page has a `View HTML` button: the body is then shown as the HTML it is served as,
+highlighted, in place of the rendering.
 The seeded post's HTML has no `<script>` tag, since `sanitize` removed the one its author wrote.
+The button is a ReActionView state (`herb:state` in `app/views/posts/show.html.erb`): the browser
+flips it and asks the server for the branches that read it, as a `slots` request.
+That request renders the HTML branch, so it is what a profile of the switch shows; with profiling
+on, it is recorded like any other request.
 The highlighting is `pygments.rb`, used as any Rails application would (`Pygments.highlight`,
 `Pygments.css`).
 That gem runs the Pygments it ships in a `python3` child process and talks to it over a pipe.
@@ -218,11 +222,15 @@ Ten rounds of index, post page, comment, and sign-in on an M-series laptop:
   A page with a few queries renders in tens of milliseconds; a template compiles in about a second.
   `bcrypt` at its default cost of 12 takes 19 seconds per sign-in, so
   `config/initializers/bcrypt_cost.rb` sets cost 5.
-  Herb's 1 second parse limit is raised in `config/initializers/herb_templates.rb`.
+  Herb's 1 second parse limit is raised in `config/initializers/reactionview.rb`.
 - A callback into Ruby holds the instance's lock.
   Ruby code that waits for another thread inside such a callback deadlocks.
 - WASI has no `iconv`, threads, `dlopen`, or shared memory.
   libxml2 decodes UTF-8, UTF-16, ISO-8859-1, and ASCII documents itself.
   SQLite runs without loadable extensions, and `config/database.yml` sets a rollback journal
   (`journal_mode: delete`), since a database left in WAL mode by a native SQLite does not open.
-- Rails 8.1: the Herb template handler is the Rails 8.2 class, vendored as an initializer.
+- Rails 8.1: the Herb template handler comes from ReActionView, which carries the class Rails 8.2
+  ships, and its reactive templates drive the `View HTML` switch.
+  Its developer tools are off, since their element outlines keep the slot client from placing a
+  fetched branch (ReActionView 0.6.0, with the native Herb too).
+  Its development server is off, since the file watcher it uses (`cruise`) is a native extension.
