@@ -220,8 +220,25 @@ url_api = "https://api.github.com/repos/kateinoigakukun/wasi-vfs/releases/assets
 
 [[tools.wizer]]
 version = "11.0.3"
-backend = "ubi:bytecodealliance/wizer"
+backend = "github:bytecodealliance/wizer"
 specifiers = ["11.0.3"]
 
-[tools.wizer."platforms.macos-arm64-wizer"]
-checksum = "blake3:663bfb6a0b9aeb602051e3224f50eecb3f3ffaa36855c963fc720b93fc89f034"
+[tools.wizer."platforms.linux-arm64"]
+checksum = "sha256:73bffcbaf736ef24109a48cac431d070c43cb2ee8a14a840576f7aec0133d8d6"
+url = "https://github.com/bytecodealliance/wizer/releases/download/v11.0.3/wizer-v11.0.3-aarch64-linux.tar.xz"
+url_api = "https://api.github.com/repos/bytecodealliance/wizer/releases/assets/370881984"
+
+[tools.wizer."platforms.linux-x64"]
+checksum = "sha256:36016e7f846f38ad09f22eb4bafb99068f038c431eb9613ddf59e31ad8a21414"
+url = "https://github.com/bytecodealliance/wizer/releases/download/v11.0.3/wizer-v11.0.3-x86_64-linux.tar.xz"
+url_api = "https://api.github.com/repos/bytecodealliance/wizer/releases/assets/370882002"
+
+[tools.wizer."platforms.macos-arm64"]
+checksum = "sha256:7c54896b456b6ca024af6005ebc5538282dee7cd9f0c9c1155855d29b9c461b1"
+url = "https://github.com/bytecodealliance/wizer/releases/download/v11.0.3/wizer-v11.0.3-aarch64-macos.tar.xz"
+url_api = "https://api.github.com/repos/bytecodealliance/wizer/releases/assets/370881989"
+
+[tools.wizer."platforms.macos-x64"]
+checksum = "sha256:325bcd4758e9509dd81849d7f4ab8cf69cbe084795e138a996c70f471b6f8b83"
+url = "https://github.com/bytecodealliance/wizer/releases/download/v11.0.3/wizer-v11.0.3-x86_64-macos.tar.xz"
+url_api = "https://api.github.com/repos/bytecodealliance/wizer/releases/assets/370882008"

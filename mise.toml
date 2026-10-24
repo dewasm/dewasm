@@ -9,7 +9,7 @@ ruby.compile = true
 binaryen = "aqua:WebAssembly/binaryen"
 wasi-sdk = "github:WebAssembly/wasi-sdk"
 wasi-vfs = "github:kateinoigakukun/wasi-vfs"
-wizer = "ubi:bytecodealliance/wizer"
+wizer = "github:bytecodealliance/wizer"
 
 [tools]
 binaryen = "133"
