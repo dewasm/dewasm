@@ -1,6 +1,6 @@
 source "https://rubygems.org"
 
-require_relative "cext/lib/dewasm_cext/gemfile"
+require_relative "dewasm_cext/lib/dewasm_cext/gemfile"
 
 gem "rails", "~> 8.1.4"
 gem "propshaft"

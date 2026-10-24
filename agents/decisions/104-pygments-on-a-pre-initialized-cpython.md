@@ -7,8 +7,9 @@ The browser asks the server for the branch as a `slots` request, which is the re
 of the switch shows.
 That gem runs the Pygments it ships in a `python3` child process.
 Converted, the process is CPython 3.14.6 compiled to wasm and converted to Ruby, in the Rails
-process: a reactor of the recipe's own, `cext/lib/dewasm_cext/recipes/pygments_rb/mentos_host.c`,
-linked against the `cpython-sdk` library build of `examples/apps/setup.sh`.
+process: a reactor of the recipe's own, linked against the `cpython-sdk` library build of
+`examples/apps/setup.sh`.
+The reactor is `dewasm_cext/lib/dewasm_cext/recipes/pygments_rb/mentos_host.c`.
 Wizer runs its `pyg_init` ahead of time and writes the initialized memory into the module.
 The gem's Ruby and Python are unmodified; `dewasm_gem "pygments.rb"` builds it like the others.
 

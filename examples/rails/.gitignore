@@ -1,6 +1,6 @@
 # The converted gems, their downloads, and the libraries built for them (`dewasm_gem`).
 /vendor/dewasm/
-/cext/test/cache/
+/dewasm_cext/test/cache/
 
 # A standard Rails application's ignores.
 /.bundle

@@ -6,9 +6,9 @@ The native extensions of `sqlite3`, `nokogiri`, `herb`, and `bcrypt` are compile
 a dewasm-specific `ruby.h`, converted to Ruby, and loaded in place of the `.so` files.
 Three parts landed:
 
-- `examples/rails/cext/`: the header (`include/ruby.h`), its guest-side C (`support.c`), and the
+- `examples/rails/dewasm_cext/`: the header (`include/ruby.h`), its guest-side C (`support.c`), and the
   host runtime (`lib/dewasm_cext.rb`) that implements the Ruby C API as imports;
-- `cext/lib/dewasm_cext/`: a recipe per gem (sources, flags, the `Init_*` symbol), the builder
+- `dewasm_cext/lib/dewasm_cext/`: a recipe per gem (sources, flags, the `Init_*` symbol), the builder
   (fetch with a checksum, compile, convert, loader, stamp), and `dewasm_gem` for a Gemfile;
 - the application, a Rails 8.1 blog with its tests, and its profile pages.
 

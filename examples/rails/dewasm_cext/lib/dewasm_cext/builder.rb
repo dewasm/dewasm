@@ -31,10 +31,17 @@ module DewasmCExt
     def converted_name = recipe.converted_name || "#{File.basename(recipe.extension)}_wasm"
     def gemspec_path = File.join(gem_dir, "#{name}.gemspec")
 
-    def built? = File.exist?(stamp_path) && File.read(stamp_path).strip == stamp_key && File.exist?(loader_path)
+    def compiled? = File.exist?(stamp_path) && File.read(stamp_path).strip == stamp_key
+
+    def built? = compiled? && loader_paths.all? { |path| File.exist?(path) && File.read(path) == recipe.loader(from: File.dirname(path)) }
+
+    def refresh_loaders
+      write_loader unless built?
+      gem_dir
+    end
 
     def ensure_built
-      return gem_dir if built?
+      return refresh_loaders if compiled?
 
       say "building #{name} #{version} (#{recipe.class.gem_name ? 'its recipe' : 'the generic recipe'})"
       fetch
@@ -118,10 +125,14 @@ module DewasmCExt
 
     # A gem tries `<ruby major.minor>/` first with a plain `require`; a copy there keeps an
     # installed native build of the same gem out.
-    def write_loader
+    def loader_paths
       paths = [loader_path]
       paths << File.join(File.dirname(loader_path), ruby_minor, File.basename(loader_path)) if recipe.support
-      paths.each do |path|
+      paths
+    end
+
+    def write_loader
+      loader_paths.each do |path|
         FileUtils.mkdir_p(File.dirname(path))
         File.write(path, recipe.loader(from: File.dirname(path)))
       end

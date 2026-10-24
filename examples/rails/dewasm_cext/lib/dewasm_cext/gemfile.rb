@@ -14,7 +14,8 @@ module DewasmCExt
       root = Bundler.root
       builder = Builder.new(name, version, cache_dir: Builder.default_cache(root),
                                            lock_path: File.join(root, "dewasm-gems.lock"))
-      if builder.built?
+      if builder.compiled?
+        builder.refresh_loaders
       elsif DewasmCExt::Gemfile.build_allowed?
         builder.ensure_built
       else

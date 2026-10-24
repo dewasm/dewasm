@@ -436,8 +436,8 @@ A gem's own Ruby fallback beats its C extension converted by dewasm.
   `racc`'s `cparse` calls back into Ruby per reduction, so its Ruby runtime wins the same way.
 - **Invalidated when**: the Ruby backend's memory access or masking gets several times cheaper.
   Or a fallback is itself slow, such as a parser written against a C API.
-- **Details**: `examples/rails/cext/lib/dewasm_cext/recipes/websocket_driver.rb` is the build,
-  and `examples/rails/cext/test/bench/websocket_driver.rb` the measurement.
+- **Details**: `examples/rails/dewasm_cext/lib/dewasm_cext/recipes/websocket_driver.rb` is the build,
+  and `examples/rails/dewasm_cext/test/bench/websocket_driver.rb` the measurement.
   The pull request that rewrites `examples/rails` carries the discussion.
 
 ## `ruby-sampling-profiler` (2026-10-23)

@@ -13,14 +13,14 @@ of the `.so` files:
 | `pygments.rb` 5.0.0 | no C: the Python process it runs the Pygments it ships in, so CPython 3.14.6 itself, with Pygments 2.20.0 imported | 52 MB |
 
 The gems' own Ruby and C code run unmodified.
-What makes that possible is dewasm cext, under `cext/`: a `ruby.h` of this example's own, in
-which every Ruby C API function is a wasm import, and `cext/lib/dewasm_cext.rb`, which
+What makes that possible is dewasm cext, under `dewasm_cext/`: a `ruby.h` of this example's own, in
+which every Ruby C API function is a wasm import, and `dewasm_cext/lib/dewasm_cext.rb`, which
 implements the API on the host over a handle table.
 The application is a `rails new` application; its Gemfile asks for the converted gems in one
 line each:
 
 ```ruby
-require_relative "cext/lib/dewasm_cext/gemfile"
+require_relative "dewasm_cext/lib/dewasm_cext/gemfile"
 
 gem "sqlite3", ">= 2.1"
 
@@ -42,7 +42,7 @@ The gems with a Ruby fallback of their own (`nio4r`, `websocket-driver`, `racc`)
 Rails 8.1 (unmodified), templates compiled by Herb
   └─ sqlite3, nokogiri, herb, bcrypt: the gems' Ruby (unmodified)
        └─ <gem>_wasm.rb: the gem's C extension converted by dewasm (generated)
-            └─ dewasm cext (cext/lib/dewasm_cext.rb): the Ruby C API as imports (rb_str_new, ...)
+            └─ dewasm cext (dewasm_cext/lib/dewasm_cext.rb): the Ruby C API as imports (rb_str_new, ...)
 ```
 
 ## Run it
@@ -72,18 +72,18 @@ library it builds (`cpython-sdk`), and `bundle install` says so when it is missi
 
 Pieces, individually:
 
-- `cext/bin/build-gem <gem> <version>`: the command-line form of `dewasm_gem`, into
+- `dewasm_cext/bin/build-gem <gem> <version>`: the command-line form of `dewasm_gem`, into
   `vendor/dewasm/` under the working directory.
-- `cext/test/run.sh`: dewasm cext's own checks against a small extension (`test/demo_ext.c`).
+- `dewasm_cext/test/run.sh`: dewasm cext's own checks against a small extension (`test/demo_ext.c`).
   They cover strings, exceptions through guest frames, `rb_protect`, blocks, typed data, and
   handle collection.
-- `cext/test/smoke/<gem>.rb <gem directory>`: each gem's own API on its converted extension,
+- `dewasm_cext/test/smoke/<gem>.rb <gem directory>`: each gem's own API on its converted extension,
   including the callbacks the earlier shim could not offer: SQLite functions and collations, SAX
   handlers.
 - `script/profile.rb` and `script/flamegraph.rb`: a Vernier profile of request handling, and a
   flame graph from it (below).
 
-## dewasm cext (`cext/`)
+## dewasm cext (`dewasm_cext/`)
 
 `include/ruby.h` declares each `rb_*` function as an import from module `ruby`.
 A `VALUE` is a 32-bit tagged word: a fixnum, one of the four constants, or a handle index.
@@ -130,7 +130,7 @@ A link saves the recording for the Firefox Profiler.
 Frames are colored by the kind of code they run: a converted gem, a native gem's C method,
 dewasm cext, a C function of Ruby itself, or Ruby (the application, Rails, and the other gems).
 The gem a frame belongs to is in the frame's title, and in the summary under the picture.
-With `--function-names` (the conversion flag `cext/lib/dewasm_cext/compiler.rb` passes), a
+With `--function-names` (the conversion flag `dewasm_cext/lib/dewasm_cext/compiler.rb` passes), a
 frame reads `Sqlite3Ext#sqlite3VdbeExec`.
 
 Vernier is a C extension, and it is the one exception to "Ruby alone".
@@ -155,7 +155,7 @@ Converted, the process is CPython 3.14.6 compiled to wasm and converted to Ruby,
 process; the gem's Ruby and Python are unmodified.
 It runs at page load; nothing is stored.
 
-The recipe (`cext/lib/dewasm_cext/recipes/pygments_rb.rb`) builds a reactor around CPython,
+The recipe (`dewasm_cext/lib/dewasm_cext/recipes/pygments_rb.rb`) builds a reactor around CPython,
 `mentos_host.c`, with two exports: `pyg_init` starts CPython, imports the gem's `mentos.py` and
 runs the common lexers once, and `pyg_mentos` answers one request of the gem's protocol.
 A converted CPython takes about 40 seconds to boot and import Pygments.
