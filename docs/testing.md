@@ -16,7 +16,8 @@ The following tools and set-up steps are required to run all tests correctly:
 - **Every other tool at a fixed version**: [`mise`](https://mise.jdx.dev) installs them with `mise install`.
   `mise.toml` states each version, and `mise.lock` holds the URL and checksum of each fetched file.
   CI installs from the same two files.
-  * They are Ruby, Python, Go, Java, Codon, `wasi-sdk`, Binaryen, `wasi-vfs`, Wizer, and `shellcheck`.
+  * They are Ruby, Python, Go, Java, Codon, `wasi-sdk`, Binaryen, `wasi-vfs`, Wizer, and Wasmtime.
+    `shellcheck` is one more.
     The host provides Bash and Perl.
   * Run the commands in a shell where `mise` is active, or put `mise exec --` in front of each.
     Each tool is then on `PATH`, and `WASI_SDK_PATH` is set.
@@ -45,7 +46,7 @@ The following tools and set-up steps are required to run all tests correctly:
     - [`wasi-sdk`](https://github.com/WebAssembly/wasi-sdk/releases) with `WASI_SDK_PATH` set to its root, for sqlite3 and others.
     - Binaryen and `wasi-vfs`, for the modules built or packed here.
     - A host Ruby with `rake`, for `mruby`.
-    - A host Python and `wasmtime`, for `cpython-sdk` (CPython's own build script runs both).
+    - A host Python and Wasmtime, for `cpython-sdk` (CPython's own build script runs both).
   * Each `scripts/*.sh` fails loudly naming what it is missing.
 - **The word lists of the text check**: fetch them once with `crates/xtask-text-check/setup.sh`.
   `cargo test -p xtask-text-check` reads them from `crates/xtask-text-check/cache`.

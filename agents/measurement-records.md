@@ -13,7 +13,7 @@ This file holds what a user of the numbers never needs and whoever takes them al
   Those are `$DEWASM_MONORUBY`, `$DEWASM_JRUBY`, and the other `$DEWASM_*` names the list output shows.
   Set them when the binary is not on PATH.
 - `MISE_ENV=bench mise install` installs the tools of `mise.bench.toml` beside those of `mise.toml`.
-  Those are JRuby, GraalPy, TinyGo, `wasmtime`, and `wabt`.
+  Those are JRuby, GraalPy, TinyGo, and `wabt`; `wasmtime` is in `mise.toml` itself.
   Take the record under `MISE_ENV=bench` too, so that they are on PATH.
   A shell where `mise` is not active needs `mise exec --` in front of each command.
 - The JIT-enabled CPython is the `python3` of `mise.toml`.

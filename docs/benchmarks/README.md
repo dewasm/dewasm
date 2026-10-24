@@ -7,7 +7,7 @@ The results are in [results.md](results.md) with its figures under `figs/`; the 
 
 ```console
 $ export MISE_ENV=bench              # adds the tools of mise.bench.toml to those of mise.toml
-$ mise install                       # installs wasmtime, wabt, and the engines with a release to fetch
+$ mise install                       # installs wabt and the engines with a release to fetch
 $ examples/apps/setup.sh             # fetches and builds the pinned apps (sqlite3-shell, cowsay, ...)
 $ benchmarks/setup.sh                # builds the microbenchmarks, pins pywasm and wardite
 $ cargo xtask record-speed           # measures every workload on every runner
