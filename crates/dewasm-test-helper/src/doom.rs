@@ -54,8 +54,8 @@ pub fn doom_wasm_path() -> PathBuf {
     crate::fixtures::apps_cache_dir().join("doom.wasm")
 }
 
-/// `examples/apps/snapshots/doom_frame.ppm`, the checked-in framebuffer snapshot
-/// (in the shared snapshots directory, so its stem carries the `doom_` prefix).
+/// `examples/apps/snapshots/doom_frame.ppm`, the checked-in framebuffer snapshot.
+/// It sits in the shared snapshots directory, so its stem carries the `doom_` prefix.
 pub fn doom_frame_snapshot_path() -> PathBuf {
     crate::fixtures::apps_snapshot_dir().join("doom_frame.ppm")
 }

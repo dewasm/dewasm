@@ -3,8 +3,8 @@
 # shellcheck source=common.sh
 
 # CPython 3.14.6 as a library for wasm32-wasip1, built from the source release with `wasi-sdk`.
-# The prebuilt `cpython` app is a command; a program that embeds the interpreter needs the static
-# library instead, which no release ships.
+# The prebuilt `cpython` app is a command.
+# A program that embeds the interpreter needs the static library instead, which no release ships.
 # `examples/rails/pygments` links its reactor against it.
 #
 # The result is `cache/cpython-sdk/`:

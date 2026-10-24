@@ -1172,8 +1172,8 @@ impl<'a> Gen<'a> {
         }
     }
 
-    /// The Ruby method name of defined function `func_idx`: `_f{idx}`, or with `function_names`
-    /// also the module's own name for it, as `_f12_sqlite3VdbeExec`.
+    /// The Ruby method name of defined function `func_idx`: `_f{idx}`.
+    /// With `function_names` it also carries the module's own name, as `_f12_sqlite3VdbeExec`.
     /// The index stays first, so names are unique and valid whatever the name section holds.
     fn func_name(&self, func_idx: u32) -> String {
         if !self.function_names {

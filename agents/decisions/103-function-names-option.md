@@ -1,16 +1,16 @@
 # Decision 103: Function Names From the Name Section Are an Option, After the Index
 
 Status: **Accepted, 2026-10-23.**
-`--function-names` (`GenOptions::function_names`) names a generated Ruby method after the module's
-`name` section as well as its index: `_f289_sqlite3VdbeExec`.
+`--function-names` (`GenOptions::function_names`) names a generated method after the `name` section.
+The index stays in front: `_f289_sqlite3VdbeExec`.
 `dewasm_core::ir::Module::func_names` carries the section; the Ruby backend's `func_name` reads it.
 Off, the output is unchanged.
 
 ## Context
 
 A profile of the Rails example (decision 102) showed its time in `Sqlite3Ext#_f1286`.
-The wasm module knew the function as `sqlite3VdbeExec`: `wasm-ld` keeps the `name` section
-under `--strip-debug`, and only `--strip-all` removes it.
+The wasm module knew the function as `sqlite3VdbeExec`.
+`wasm-ld` keeps the `name` section under `--strip-debug`, and only `--strip-all` removes it.
 The backend ignored the section and named every function `_f{index}`.
 
 ## Decision

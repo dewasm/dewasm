@@ -1,8 +1,7 @@
 # Decision 45: Rails Example via a sqlite3-Gem Shim over Converted libsqlite3
 
 Status: **Superseded (decision 102), 2026-10-23.**
-[Decision 102](102-rails-c-extensions-through-a-dewasm-ruby-h.md) replaced the shim with the gem's own
-extension, compiled against a dewasm `ruby.h`.
+[Decision 102](102-rails-c-extensions-through-a-dewasm-ruby-h.md) replaced the shim with the gem's own extension, compiled against a dewasm `ruby.h`.
 The original record follows.
 
 `examples/rails` runs an unmodified Rails 8 app on `libsqlite3.wasm` converted to Ruby.

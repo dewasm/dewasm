@@ -43,8 +43,7 @@ pub const NES_PALETTE_ENTRIES: usize = 64;
 /// Every frame is real wall time under Bash, so smaller is better; the snapshot uses this count.
 pub const NES_FRAMES: u32 = 40;
 
-/// The cached `nes.wasm` reactor library (populated by
-/// `examples/apps/scripts/nes.sh`).
+/// The cached `nes.wasm` reactor library, which `examples/apps/scripts/nes.sh` builds.
 pub fn nes_wasm_path() -> PathBuf {
     crate::fixtures::apps_cache_dir().join("nes.wasm")
 }
@@ -54,8 +53,8 @@ pub fn alter_ego_rom_path() -> PathBuf {
     crate::fixtures::apps_cache_dir().join("alter_ego.nes")
 }
 
-/// `examples/apps/snapshots/nes_frame.ppm`, the checked-in framebuffer snapshot
-/// (in the shared snapshots directory, so its stem carries the `nes_` prefix).
+/// `examples/apps/snapshots/nes_frame.ppm`, the checked-in framebuffer snapshot.
+/// It sits in the shared snapshots directory, so its stem carries the `nes_` prefix.
 pub fn nes_frame_snapshot_path() -> PathBuf {
     crate::fixtures::apps_snapshot_dir().join("nes_frame.ppm")
 }

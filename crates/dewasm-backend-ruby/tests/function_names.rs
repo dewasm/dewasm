@@ -1,5 +1,5 @@
-//! `GenOptions::function_names`: a generated method carries the module's own function name
-//! after its index, and the output still runs.
+//! `GenOptions::function_names`: a generated method carries the module's own name after its index.
+//! The output still runs.
 
 use dewasm_backend::{Backend, GenOptions, Mode, RuntimeLinkage};
 use dewasm_backend_ruby::{find_ruby, RubyBackend};

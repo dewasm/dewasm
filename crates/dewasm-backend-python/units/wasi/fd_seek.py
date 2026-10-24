@@ -19,8 +19,8 @@ def wasi_fd_seek(self, fd, offset, whence, out_ptr):
         io.seek(Rt.s64(offset), mode)
         self.memory.ids(out_ptr, io.tell() & Rt.M64)
     except OSError as e:
-        # A negative resulting offset is EINVAL, which WASI reports as INVAL
-        # (not the generic IO used for other seek failures).
+        # A negative resulting offset is EINVAL, which WASI reports as INVAL.
+        # Other seek failures report the generic IO.
         if e.errno == errno.EINVAL:
             return self.ERRNO_INVAL
         return self.ERRNO_IO

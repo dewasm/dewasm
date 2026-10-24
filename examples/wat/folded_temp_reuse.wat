@@ -19,8 +19,8 @@
     call $big
     i32.add)
 
-  ;; The store spills the memory-reading pending at depth 1 into T1, which
-  ;; (T0 + T1), still pending at depth 0, reads.
+  ;; The store spills the memory-reading pending at depth 1 into T1.
+  ;; (T0 + T1), still pending at depth 0, reads T1.
   (func $spilled (result i32)
     call $one
     call $two

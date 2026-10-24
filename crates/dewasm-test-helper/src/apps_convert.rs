@@ -201,8 +201,9 @@ pub fn apps_convert_main(backend: &'static (dyn Backend + Sync), slow_test: bool
 }
 
 /// Convert one cached app and require non-empty source.
-/// A missing cache file fails loud; a conversion error surfaces with its full chain so a
-/// `check_module_support` rejection or a codegen bug reads plainly.
+/// A missing cache file fails loud.
+/// A conversion error surfaces with its full chain.
+/// A `check_module_support` rejection or a codegen bug then reads plainly.
 fn run_convert(backend: &'static (dyn Backend + Sync), entry: &AppConvert) -> Result<(), Failed> {
     let wasm = apps_cache_dir().join(format!("{}.wasm", entry.stem));
     if !wasm.exists() {

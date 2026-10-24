@@ -16,8 +16,7 @@ The following tools and set-up steps are required to run all tests correctly:
 - **Every other tool at a fixed version**: [`mise`](https://mise.jdx.dev) installs them with `mise install`.
   `mise.toml` states each version, and `mise.lock` holds the URL and checksum of each fetched file.
   CI installs from the same two files.
-  * The tools are Ruby, Python, Go, Java, Codon, `wasi-sdk`, Binaryen, `wasi-vfs`, Wizer, and
-    `shellcheck`.
+  * They are Ruby, Python, Go, Java, Codon, `wasi-sdk`, Binaryen, `wasi-vfs`, Wizer, and `shellcheck`.
     The host provides Bash and Perl.
   * Run the commands in a shell where `mise` is active, or put `mise exec --` in front of each.
     Each tool is then on `PATH`, and `WASI_SDK_PATH` is set.

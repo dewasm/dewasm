@@ -445,11 +445,11 @@ The speed benchmark suite measures that comparison.
 
 ¹⁷ **CPython as a library (`cpython-sdk`, audited 2026-10-23).**
 CPython 3.14.6 built from its source release with `wasi-sdk`, by its own `Tools/wasm/wasi`.
-The cache holds `libpython3.14.a`, the static libraries of its built-in modules, the headers with
-this build's `pyconfig.h`, and the standard library without its tests.
+The cache holds `libpython3.14.a` and the static libraries of its built-in modules.
+It also holds the headers, this build's `pyconfig.h`, and the standard library without its tests.
 It is a build input: no e2e case converts it, and nothing runs it as is.
-The `pygments.rb` recipe of `examples/rails/cext` links a reactor against it, with the Pygments
-that gem ships imported in `pyg_init`.
+The `pygments.rb` recipe of `examples/rails/dewasm_cext` links a reactor against it.
+The reactor imports the Pygments that gem ships in `pyg_init`.
 Wizer runs that function ahead of time and writes the memory into the module.
 The Rails example converts the result with the Ruby backend.
 So the converted interpreter starts with Pygments ready, in place of about 40 seconds of boot.

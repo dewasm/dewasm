@@ -22,8 +22,7 @@ There the host owns the event loop, the clock, and the screen.
 In that case `--mode library`'s import surface, not WASI, is the platform boundary.
 doom.wasm is the sharpest available specimen:
 
-- ten imported functions: framebuffer hand-off, monotonic clock, WAD loading,
-  save games, logging;
+- ten imported functions: framebuffer hand-off, monotonic clock, WAD loading, save games, logging;
 - four exports plus memory;
 - no WASI;
 - the shareware WAD embedded, so the example needs zero game assets.

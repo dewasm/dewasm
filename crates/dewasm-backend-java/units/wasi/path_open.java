@@ -53,8 +53,8 @@ int wasi_path_open(int dirfd, int dirflags, int pathPtr, int pathLen, int oflags
         fds.put(nextFd, new Dir(hostPath, null));
         meta.put(nextFd, new FdMeta(base, inh, fdflags));
     } else if (wantDir) {
-        // O_DIRECTORY distinguishes "missing" (ENOENT) from "not a directory"
-        // (ENOTDIR); guests (`opendir` of `wasi-libc`) branch on the difference.
+        // O_DIRECTORY tells "missing" (ENOENT) from "not a directory" (ENOTDIR).
+        // Guests (`opendir` of `wasi-libc`) branch on the difference.
         return exists ? WASI_NOTDIR : WASI_NOENT;
     } else if (trailingSlash) {
         // A slash-suffixed non-directory: ENOTDIR when existing, ENOENT when missing.
