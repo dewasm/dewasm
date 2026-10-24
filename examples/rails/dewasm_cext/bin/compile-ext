@@ -1,9 +1,6 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# `compile-ext <name> <ModuleName> <Init_symbol> <out dir> <c sources...>`: compile C sources
-# against the dewasm `ruby.h` and convert them, for an extension that is not a gem.
-# Extra compiler flags come from `$CFLAGS`.
 require "shellwords"
 require_relative "../lib/dewasm_cext/compiler"
 

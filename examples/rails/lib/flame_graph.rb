@@ -4,11 +4,11 @@ require "json"
 
 class FlameGraph
   KINDS = {
-    "Ruby (app, Rails, gems)" => "#f3b562",
-    "converted gem" => "#3d7be8",
-    "native gem" => "#1b2f6e",
-    "dewasm cext" => "#20b2aa",
-    "cfunc (Ruby core)" => "#9aa3ad"
+    "Ruby (app, Rails, gems)" => "#e9ecef",
+    "dewasm gem" => "#3b82f6",
+    "native gem" => "#f97316",
+    "dewasm cext" => "#a8c5fa",
+    "cfunc (Ruby core)" => "#cfd4da"
   }.freeze
   NATIVE_NAMESPACES = {
     "SQLite3" => "sqlite3", "Nokogiri" => "nokogiri", "Herb" => "herb", "BCrypt" => "bcrypt"
@@ -80,7 +80,7 @@ class FlameGraph
       gem = NATIVE_NAMESPACES[name[/\A([A-Z]\w*)(?:::|[#.])/, 1]]
       gem ? ["native gem", gem] : ["cfunc (Ruby core)", nil]
     when %r{/([a-z0-9_]+)_wasm\.rb\z}
-      ["converted gem", Regexp.last_match(1).sub(/_(ext|native)\z/, "")]
+      ["dewasm gem", Regexp.last_match(1).sub(/_(ext|native)\z/, "")]
     when %r{/dewasm_cext\.rb\z} then ["dewasm cext", nil]
     else ["Ruby (app, Rails, gems)", nil]
     end
@@ -111,10 +111,6 @@ class FlameGraph
   def extensions_on_stack = @extension_on_stack.sort_by { |_, w| -w }
 
   def top_self(n = 15) = @self_weight.sort_by { |_, w| -w }.first(n)
-
-  def cfuncs_seen
-    @self_weight.keys.select { |f| @kinds[f] == "cfunc (Ruby core)" }.sort_by { |f| -@self_weight[f] }
-  end
 
   def depth(node = @root, d = 0)
     node.children.values.map { |child| depth(child, d + 1) }.max || d

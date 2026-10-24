@@ -2,14 +2,14 @@
 
 Status: **Accepted, 2026-10-23.**
 `examples/rails` runs a Rails 8.1 blog application on Ruby alone.
-The native extensions of `sqlite3`, `nokogiri`, `herb`, and `bcrypt` are compiled to wasm against
-a dewasm-specific `ruby.h`, converted to Ruby, and loaded in place of the `.so` files.
+The native extensions of `sqlite3`, `nokogiri`, `herb`, and `bcrypt` are compiled to wasm.
+The header is a dewasm-specific `ruby.h`; the converted Ruby loads in place of the `.so` files.
 Three parts landed:
 
-- `examples/rails/dewasm_cext/`: the header (`include/ruby.h`), its guest-side C (`support.c`), and the
-  host runtime (`lib/dewasm_cext.rb`) that implements the Ruby C API as imports;
-- `dewasm_cext/lib/dewasm_cext/`: a recipe per gem (sources, flags, the `Init_*` symbol), the builder
-  (fetch with a checksum, compile, convert, loader, stamp), and `dewasm_gem` for a Gemfile;
+- `examples/rails/dewasm_cext/`: the header (`include/ruby.h`) and its guest-side C (`support.c`).
+  Its `lib/dewasm_cext.rb` is the host runtime that implements the Ruby C API as imports;
+- `dewasm_cext/lib/dewasm_cext/`: a recipe per gem (sources, flags, the `Init_*` symbol).
+  Beside it sit the builder (fetch, checksum, compile, convert, loader, stamp) and `dewasm_gem`;
 - the application, a Rails 8.1 blog with its tests, and its profile pages.
 
 It replaces [decision 45](45-rails-sqlite3-shim-example.md).
@@ -35,8 +35,9 @@ So the missing piece was a `ruby.h` whose functions are imports, and a host that
 
 ## Decision
 
-**Bridge at the Ruby C API, not at a gem's API: compile the gem's own extension against a
-dewasm `ruby.h`, and implement that API on the host over a handle table.**
+**Bridge at the Ruby C API, not at a gem's API.**
+**Compile the gem's own extension against a dewasm `ruby.h`.**
+**Implement that API on the host over a handle table.**
 The gem's Ruby code and C code both run unmodified.
 The rules that make it work:
 
@@ -45,8 +46,8 @@ The rules that make it work:
 - A handle made during a call stays strong until a collection at depth 0.
   What keeps it strong is a registered address or a wrapped struct's `dmark`, as in CRuby.
   Any other handle turns weak: valid while its object lives anywhere in Ruby, as a `VALUE` is.
-  C code keeps handles in memory the host cannot see, such as a libxml2 node's `_private`, and
-  `dmark` on the array holding those nodes says nothing about their handles.
+  C code keeps handles in memory the host cannot see, such as a libxml2 node's `_private`.
+  A `dmark` on the array holding those nodes says nothing about their handles.
   The index is reused once the object is gone.
 - A pointer into a Ruby String is a copy in linear memory.
   The host writes it back at every point the C code could observe a change.
@@ -79,7 +80,7 @@ The converted C is 3 to 6 times slower than the fallback for `websocket-driver`.
 
 - Positive: the four gems convert without a source change, and callbacks work.
   `create_function`, aggregates, collations, SAX handlers, and `rb_protect` all run.
-  The application's `/stats` lists the native extensions loaded beyond Ruby's own: none.
+  The test lists the native extensions loaded beyond Ruby's own: none.
   A profile shows Rails calling `Sqlite3Ext#sqlite3VdbeExec` as a Ruby method (decision 103).
 - Negative: speed.
   Under YJIT the converted code runs 50 to 130 times slower than native.
@@ -91,10 +92,11 @@ The converted C is 3 to 6 times slower than the fallback for `websocket-driver`.
   libxml2 decodes UTF-8, UTF-16, ISO-8859-1, and ASCII itself.
   SQLite runs without loadable extensions, and WAL mode degrades to a rollback journal.
 - Carry-over: dewasm cext covers what four gems use, about 200 functions.
-  A gem outside that set adds imports to `ruby.h` and `lib/dewasm_cext.rb`, and a recipe when the
-  generic one (every `.c` under `ext/<name>/`) does not fit.
-  `dewasm_gem` is a Gemfile method over a `path:` gem; a Bundler source plugin was weighed and
-  left for a published gem, since it binds to Bundler's plugin API for the same result.
+  A gem outside that set adds imports to `ruby.h` and `lib/dewasm_cext.rb`.
+  It adds a recipe when the generic one (every `.c` under `ext/<name>/`) does not fit.
+  `dewasm_gem` is a Gemfile method over a `path:` gem.
+  A Bundler source plugin was weighed and left for a published gem.
+  It binds to Bundler's plugin API for the same result.
   The generated `Rt::Table` carries only the `callN` arities the module uses.
   So the host reads a slot directly; an entry point for any arity belongs in the product.
   Publishing the layer as a gem is possible later; it is not planned now.

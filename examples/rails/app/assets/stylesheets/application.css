@@ -37,7 +37,6 @@ h1 code { font-size: 0.85em; }
 h2 { font-size: 1.2rem; margin: 2rem 0 0.6rem; }
 h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; }
 
-/* Header */
 .topbar { background: var(--panel); border-bottom: 1px solid var(--line); }
 .topbar .inner {
   max-width: var(--max-wide);
@@ -52,7 +51,6 @@ h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; }
 .brand:hover { text-decoration: none; color: var(--accent); }
 .topbar nav { display: flex; align-items: center; gap: 0.25rem 1rem; flex-wrap: wrap; margin-left: auto; }
 
-/* The mode the four gems run in colors the header: teal for dewasm, amber for native. */
 .badge {
   display: inline-block;
   font-size: 0.75rem;
@@ -62,10 +60,10 @@ h3 { font-size: 1.05rem; margin: 1.5rem 0 0.5rem; }
   border-radius: 999px;
   white-space: nowrap;
 }
-.badge.dewasm { background: #d2f1ec; color: #0b5f58; }
-.badge.native { background: #ffe6bf; color: #7a4a00; }
-.mode-dewasm .topbar { background: #e9f7f5; border-bottom-color: #9fd9d0; }
-.mode-native .topbar { background: #fff4e0; border-bottom-color: #f0c97a; }
+.badge.dewasm { background: #dbe7fd; color: #1d4ed8; }
+.badge.native { background: #ffe4d1; color: #9a3412; }
+.mode-dewasm .topbar { background: #eef4ff; border-bottom-color: #a9c3f0; }
+.mode-native .topbar { background: #fff3ea; border-bottom-color: #f6b48a; }
 .timing { color: var(--muted); font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .topbar nav a { color: var(--text); }
 .topbar form { display: inline; margin: 0; }
@@ -84,7 +82,6 @@ form.pill { border: 0; padding: 0; background: none; }
 .pill button:hover, a.pill:hover { border-color: var(--text); text-decoration: none; }
 .pill.on button { background: var(--accent); border-color: var(--accent); color: #fff; }
 
-/* Page */
 main { max-width: var(--max); margin: 0 auto; padding: 1.5rem 1.25rem 3rem; }
 main.wide { max-width: var(--max-wide); }
 
@@ -104,7 +101,6 @@ main.wide { max-width: var(--max-wide); }
 .meta { color: var(--muted); font-size: 0.875rem; }
 .empty { color: var(--muted); font-style: italic; }
 
-/* Cards: posts */
 .post {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -118,7 +114,6 @@ main.wide { max-width: var(--max-wide); }
 .post .body p { margin: 0.5rem 0; }
 .post .body img { max-width: 100%; }
 
-/* Forms */
 .field { margin-bottom: 0.9rem; }
 label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
 input[type=text], input[type=email], input[type=password], textarea {
@@ -166,7 +161,6 @@ input[type=submit]:hover { filter: brightness(0.92); }
 .page-head .actions { margin: 0; }
 .button.disabled { color: var(--muted); border-color: var(--soft); cursor: default; }
 
-/* Search and pages */
 .search { display: flex; gap: 0.4rem; align-items: center; }
 .search input[type=search] {
   font: inherit;
@@ -184,7 +178,6 @@ q { quotes: "“" "”"; }
 .actions .danger { color: var(--accent); }
 .sign-in { max-width: 24rem; }
 
-/* Tables */
 table {
   width: 100%;
   border-collapse: separate;
@@ -200,6 +193,8 @@ td { overflow-wrap: anywhere; }
 th { background: var(--soft); font-weight: 600; font-size: 0.875rem; }
 tr:last-child td { border-bottom: 0; }
 th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.facts { width: auto; margin: 0 0 1rem; }
+.facts th { width: 7rem; }
 .swatch {
   display: inline-block;
   width: 0.8rem;
@@ -209,7 +204,6 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   margin-right: 0.25rem;
 }
 
-/* Highlighted source (Pygments token classes) */
 pre.highlight {
   margin: 0;
   padding: 0.75rem 0.9rem;
@@ -222,9 +216,7 @@ pre.highlight {
   overflow-wrap: anywhere;
 }
 pre.highlight code { background: none; padding: 0; font-size: inherit; }
-/* The token colors come from `Pygments.css`, inlined by the page that shows HTML. */
 
-/* Flame graph */
 .flamegraph {
   overflow-x: auto;
   background: var(--panel);

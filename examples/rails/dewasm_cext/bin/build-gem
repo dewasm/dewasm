@@ -1,9 +1,6 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# `build-gem <name> <version>`: fetch the gem, compile and convert its extension, print the
-# directory a Gemfile can name with `path:`.
-# `dewasm_gem` in a Gemfile does the same on `bundle install`; this is the command-line form.
 require_relative "../lib/dewasm_cext/builder"
 
 name, version = ARGV

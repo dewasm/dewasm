@@ -137,12 +137,14 @@ class BlogTest < ActionDispatch::IntegrationTest
     FileUtils.rm_f(RequestProfiler.path_for(post_record)) if post_record
   end
 
-  test "/stats reports which native extensions the process holds" do
-    get stats_path
-    stats = response.parsed_body
-    assert_includes stats["erb_handler"], "ReActionView", "templates do not go through ReActionView"
-    assert stats["erb_implementation"].end_with?("::Herb"), "templates are not compiled by Herb"
-    outside = stats["native_extensions"]["outside_ruby"]
+  test "the process holds the native extensions its mode expects" do
+    handler = ActionView::Template.registered_template_handler(:erb)
+    handler_name = handler.is_a?(Class) ? handler.name : handler.class.name
+    assert_includes handler_name, "ReActionView", "templates do not go through ReActionView"
+    implementation = ReActionView::Template::Handlers::Herb.erb_implementation.name
+    assert implementation.end_with?("::Herb"), "templates are not compiled by Herb"
+    get posts_path
+    outside = NativeExtensions.outside_ruby
     if converted?
       assert_empty outside, "native extensions outside Ruby"
     else

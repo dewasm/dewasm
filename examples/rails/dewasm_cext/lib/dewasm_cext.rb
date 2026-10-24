@@ -228,8 +228,8 @@ module DewasmCExt
 
     def read_values(ptr, n) = Array.new(n) { |i| from_v(mem_u32(ptr + 4 * i)) }
 
-    # The shadow stack pointer is saved here, so an exception unwinding through guest frames
-    # (which run no epilogue) leaves the stack where it was.
+    # The shadow stack pointer is saved here and restored on the way out.
+    # An exception unwinding through guest frames runs no epilogue that would restore it.
     def enter(permanent: false)
       synchronize do
         @depth += 1

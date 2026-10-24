@@ -12,12 +12,12 @@
     <%= link_to "All profiles", profiles_path, class: "button" %>
   </div>
 </div>
-<p class="meta">
-  Recorded on the <%= @profile.mode %> gems: status <%= @profile.status %>, <%= @profile.duration_ms&.round %> ms,
-  <%= @graph.total %> samples at <%= RequestProfiler::INTERVAL_US %> µs.
-  Click a frame to narrow the picture to it; the bottom row then widens it again.
-  Hover a frame for its share.
-</p>
+<table class="facts">
+  <tr><th>Recorded</th><td><%= @profile.created_at.to_fs(:long) %></td></tr>
+  <tr><th>Status</th><td><%= @profile.status %></td></tr>
+  <tr><th>Duration</th><td><%= @profile.duration_ms&.round %> ms</td></tr>
+  <tr><th>Samples</th><td><%= @graph.total %></td></tr>
+</table>
 
 <div class="flamegraph"><%= @svg.html_safe %></div>
 
@@ -59,9 +59,3 @@
     </tr>
   <% end %>
 </table>
-
-<h2>C functions of Ruby itself on the stack</h2>
-<p class="meta">
-  <%= @graph.cfuncs_seen.size %> distinct<%= @graph.native? ? "; the native extensions' own count as native gem above" : ", and no other" %>:
-  <%= @graph.cfuncs_seen.first(30).map { |f| @graph.func_names[f] }.join(", ") %><%= "…" if @graph.cfuncs_seen.size > 30 %>
-</p>

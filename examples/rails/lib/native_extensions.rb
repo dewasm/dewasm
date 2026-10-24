@@ -26,18 +26,5 @@ module NativeExtensions
     end
   end
 
-  def self.instrumentation
-    loaded.select { |path| (spec = gem_of(path)) && INSTRUMENTATION_GEMS.include?(spec.name) }
-  end
-
   def self.mode = defined?(DewasmCExt::Runtime) ? "dewasm" : "native"
-
-  def self.report
-    {
-      mode: mode,
-      loaded: loaded.map { |path| [gem_of(path)&.full_name || "ruby", File.basename(path)] },
-      instrumentation: instrumentation.map { |path| gem_of(path).full_name },
-      outside_ruby: outside_ruby
-    }
-  end
 end

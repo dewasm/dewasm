@@ -123,8 +123,8 @@ module DewasmCExt
                        log: build_log)
     end
 
-    # A gem tries `<ruby major.minor>/` first with a plain `require`; a copy there keeps an
-    # installed native build of the same gem out.
+    # A gem tries `<ruby major.minor>/` first with a plain `require`.
+    # A copy there keeps an installed native build of the same gem out.
     def loader_paths
       paths = [loader_path]
       paths << File.join(File.dirname(loader_path), ruby_minor, File.basename(loader_path)) if recipe.support
