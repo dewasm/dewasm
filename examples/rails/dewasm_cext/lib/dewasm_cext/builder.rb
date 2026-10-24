@@ -43,7 +43,7 @@ module DewasmCExt
     def ensure_built
       return refresh_loaders if compiled?
 
-      say "building #{name} #{version} (#{recipe.class.gem_name ? 'its recipe' : 'the generic recipe'})"
+      say "building #{name} #{version}"
       fetch
       unpack
       File.delete(build_log) if File.exist?(build_log)

@@ -92,8 +92,8 @@ The converted C is 3 to 6 times slower than the fallback for `websocket-driver`.
   libxml2 decodes UTF-8, UTF-16, ISO-8859-1, and ASCII itself.
   SQLite runs without loadable extensions, and WAL mode degrades to a rollback journal.
 - Carry-over: dewasm cext covers what four gems use, about 200 functions.
-  A gem outside that set adds imports to `ruby.h` and `lib/dewasm_cext.rb`.
-  It adds a recipe when the generic one (every `.c` under `ext/<name>/`) does not fit.
+  A gem outside that set adds imports to `ruby.h` and `lib/dewasm_cext.rb`, and a recipe.
+  Every gem has a recipe; the generic one was removed, since no gem's `extconf.rb` left it fitting.
   `dewasm_gem` is a Gemfile method over a `path:` gem.
   A Bundler source plugin was weighed and left for a published gem.
   It binds to Bundler's plugin API for the same result.

@@ -9,19 +9,20 @@ module DewasmCExt
       def registry = (@registry ||= {})
 
       def register(gem_name, &block)
+        source_path = caller_locations(1, 1).first.path
         registry[gem_name] = Class.new(self, &block).tap do |klass|
           klass.gem_name = gem_name
-          klass.source_path = caller_locations(1, 1).first.path
+          klass.source_path = source_path
         end
       end
 
       def for(gem_name)
-        registry.fetch(gem_name) { Generic }
+        registry.fetch(gem_name) do
+          raise ArgumentError, "no recipe for #{gem_name}: add #{File.join(__dir__, 'recipes', "#{gem_name.tr('-', '_')}.rb")}"
+        end
       end
 
-      attr_accessor :gem_name
-      attr_writer :source_path
-      def source_path = @source_path || __FILE__
+      attr_accessor :gem_name, :source_path
 
       def checksums = (@checksums ||= {})
       def checksum(version, sha256) = checksums[version] = sha256
@@ -79,24 +80,5 @@ module DewasmCExt
     def init_symbol = init || "Init_#{File.basename(extension)}"
 
     def source_digest = Digest::SHA256.file(self.class.source_path).hexdigest[0, 16]
-
-    class Generic < Recipe
-      def self.gem_name = nil
-
-      def gem_name = builder.name
-
-      def configure
-        self.sources = ["ext/#{builder.name}/*.c"]
-        self.include_dirs = ["ext/#{builder.name}"]
-        self.extension = loader_target
-      end
-
-      def loader_target
-        ext_dir = File.join(builder.gem_dir, "ext", builder.name)
-        extconf = File.read(File.join(ext_dir, "extconf.rb"))
-        target = extconf[/create_makefile\(\s*["']([^"']+)["']/, 1] || builder.name
-        target.sub(%r{\A(lib/)?}, "")
-      end
-    end
   end
 end

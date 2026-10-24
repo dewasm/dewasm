@@ -2,6 +2,9 @@
 /vendor/dewasm/
 /dewasm_cext/test/cache/
 
+# The lock differs by mode: `BUNDLE_WITHOUT=dewasm` leaves the `path:` gems out of it.
+/Gemfile.lock
+
 # A standard Rails application's ignores.
 /.bundle
 /log/*
