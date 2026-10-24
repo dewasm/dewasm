@@ -170,13 +170,13 @@ The `cpython-sdk` app of `examples/apps/setup.sh` is the library build the react
 ## The same application on the native extensions
 
 ```console
-$ bundle config set --local without dewasm
+$ export BUNDLE_WITHOUT=dewasm
 $ bundle install
 ```
 
 With the `dewasm` group excluded, each `dewasm_gem` line does nothing, and Bundler takes the
 gems' own native extensions, as in any Rails application; the lock follows.
-`bundle config unset --local without` and `bundle install` switch back.
+Without the variable, `bundle install` switches back.
 `bin/rails test` passes in both modes, and in the native one expects the four extensions in
 `/stats`.
 `script/flamegraph.rb` draws a recorded request from `storage/profiles/<id>.json`.

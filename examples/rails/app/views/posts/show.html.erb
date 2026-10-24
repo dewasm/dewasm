@@ -3,10 +3,6 @@
 <% content_for :title, @post.title %>
 <% content_for :head, tag.style(highlight_css.html_safe) %>
 
-<%# `code` is a ReActionView state the browser owns: the check box below is bound to it, and the
-    browser asks the server for the branch it has not seen. The HTML branch runs Pygments.
-    The two branches differ in shape on purpose; two outputs alone would be merged into one slot
-    that no longer reads `code`, and the page would not switch back. %>
 <article id="<%= dom_id @post %>" class="post">
   <h2><%= link_to @post.title, @post %></h2>
   <p class="meta"><%= @post.created_at.to_fs(:long) %></p>

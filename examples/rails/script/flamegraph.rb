@@ -1,9 +1,5 @@
 # frozen_string_literal: true
 
-# Turn a Vernier profile (`script/profile.rb` output, or a `storage/profiles/<id>.json` the
-# application recorded) into a flame graph and a summary.
-# Usage: `ruby script/flamegraph.rb <profile.json> <out.svg>`.
-# The drawing itself is `lib/flame_graph.rb`, which the application's profile pages share.
 require_relative "../lib/flame_graph"
 
 profile_path = ARGV.fetch(0)

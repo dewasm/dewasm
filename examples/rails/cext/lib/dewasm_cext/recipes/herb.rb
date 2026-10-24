@@ -1,8 +1,5 @@
 # frozen_string_literal: true
 
-# `herb`: `ext/herb`, its parser under `src/` (minus the CLI's `main.c`), and the Prism it vendors.
-# The source list and flags follow its `extconf.rb`.
-# `HERB_USE_MALLOC` is its own switch for a platform without `mmap`, which WASI is.
 DewasmCExt::Recipe.register "herb" do
   checksum "0.11.1", "7a5a74c4931b341a2b7b7f5a530616801f5721a633d2655f002156ff553cd2d7"
 

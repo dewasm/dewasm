@@ -1,4 +1,3 @@
-/* Guest-side pieces of the dewasm ruby.h that need no host help beyond the plain imports. */
 #include <ruby.h>
 
 int rb_scan_args(int argc, const VALUE *argv, const char *fmt, ...) {
@@ -15,7 +14,6 @@ int rb_scan_args(int argc, const VALUE *argv, const char *fmt, ...) {
     if (*p == '&') { f_block = 1; p++; }
 
     VALUE hash = Qnil;
-    /* CRuby only takes a keyword-flagged hash; a trailing Hash is the approximation here. */
     if (f_hash && argc > 0 && RB_TYPE_P(argv[argc - 1], T_HASH)) {
         hash = argv[argc - 1];
         argc--;
@@ -67,13 +65,10 @@ int rb_scan_args(int argc, const VALUE *argv, const char *fmt, ...) {
     return argc;
 }
 
-/* --- formatting ---
- * CRuby's `rb_raise`, `rb_sprintf`, and friends take `printf` formats plus `PRIsVALUE`.
- * `PRIsVALUE` is `"li" RUBY_PRI_VALUE_MARK`: a `%li` conversion followed by a `\v` byte.
- * Its argument is a VALUE, shown with `to_s`, or with `inspect` when the `+` flag is set.
+/* CRuby's `PRIsVALUE` is a `%li` conversion followed by a `\v` byte.
+ * Its argument is a VALUE shown with `to_s`, or with `inspect` under the `+` flag.
  * A `vsnprintf` cannot do that, so every conversion is dispatched one by one here.
  */
-
 static size_t dw_put(char *buf, size_t size, size_t pos, const char *s, size_t n) {
     if (pos < size) {
         size_t room = size - pos - 1;
@@ -229,19 +224,14 @@ void rb_fatal(const char *fmt, ...) {
     __builtin_unreachable();
 }
 
-/* `rb_integer_pack` as the sqlite3 gem uses it: one native-order word of 8 bytes, two's complement.
- * The result codes are CRuby's: 0 for zero, +-1 when the value fits, +-2 on overflow.
- */
 int rb_integer_pack(VALUE val, void *words, size_t numwords, size_t wordsize, size_t nails, int flags) {
     (void)nails; (void)flags;
     if (numwords != 1 || wordsize != 8) rb_raise(rb_eNotImpError, "rb_integer_pack: only one 64-bit word");
     return rb_dw_int64_pack(val, (long long *)words);
 }
 
-/* WASI has no processes, so its C library lacks `getpid`; the `sqlite3` gem records the value. */
 pid_t getpid(void) { return 1; }
 
-/* --- `st_table`: open addressing with linear probing, keys compared by the table's type --- */
 #include <ruby/st.h>
 
 struct st_table {
@@ -343,7 +333,7 @@ int st_delete(st_table *t, st_data_t *key, st_data_t *value) {
     if (!found) { if (value) *value = 0; return 0; }
     if (value) *value = t->values[i];
     *key = t->keys[i];
-    t->used[i] = 2; /* a tombstone keeps the probe chain intact */
+    t->used[i] = 2;
     t->num_entries--;
     return 1;
 }

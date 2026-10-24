@@ -1,11 +1,7 @@
 require "test_helper"
 
-# The application driven through its own stack: the index, a sign-in, a post with HTML in its
-# body, a profiled request with its flame graph, and the `/stats` report.
-# On the converted gems, `/stats` must show no native extension beyond Ruby's own.
-# With the `dewasm` group excluded, the four gems' own extensions must be the ones loaded.
 class BlogTest < ActionDispatch::IntegrationTest
-  GEMS = %w[sqlite3 bcrypt herb nokogiri].freeze # the gems with a native extension to find
+  GEMS = %w[sqlite3 bcrypt herb nokogiri].freeze
 
   setup { Rails.application.load_seed }
 
@@ -69,14 +65,12 @@ class BlogTest < ActionDispatch::IntegrationTest
     assert_not_includes body, "onerror"
   end
 
-  # The request the ReActionView client makes when the `code` state of the post page is on.
   SLOTS_ACCEPT = "application/vnd.herb.slots+json".freeze
 
   def code_slots_headers
     { "Accept" => SLOTS_ACCEPT, "Herb-State" => { "app/views/posts/show.html.erb" => { "code" => true } }.to_json }
   end
 
-  # Every string in a `slots` response, joined: the values the client would put into the page.
   def slot_text(body)
     strings = []
     walk = lambda do |value|

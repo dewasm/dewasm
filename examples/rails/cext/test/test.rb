@@ -127,7 +127,7 @@ end
 check("dfree runs after the wrapper is collected") do
   10.times { Demo::Counter.new.incr }
   5.times { GC.start; Demo.add(0, 0); break if Demo.freed_count >= 1 }
-  Demo.add(0, 0) # a safe point: queued frees run at depth 0
+  Demo.add(0, 0)
   Demo.freed_count >= 1
 end
 

@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-# `bcrypt`: `ext/mri`, the `$objs` of its `extconf.rb` minus the x86 assembly.
 DewasmCExt::Recipe.register "bcrypt" do
   checksum "3.1.22", "1f0072e88c2d705d94aff7f2c5cb02eb3f1ec4b8368671e19112527489f29032"
 

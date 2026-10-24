@@ -2,28 +2,17 @@
 
 require "securerandom"
 
-# Record a Vernier profile of one request, on demand, for the application's profile pages.
-#
-# Profiling is on for a request when the `profile_requests` cookie is set (the button in the
-# page header) or the query carries `profile=1`.
-# The record (`RequestProfile`) is created before the request runs, so the page being served can
-# link to its own profile; the profile file lands under `storage/profiles/` once the request ends.
-# Vernier is loaded on the first profiled request only, so a process that never profiles holds
-# no native extension beyond Ruby's own; `NativeExtensions` reports it apart as instrumentation.
 module RequestProfiler
   COOKIE = "profile_requests"
   ENV_KEY = "request_profiler.record"
   STARTED_KEY = "request_profiler.started_at"
   INTERVAL_US = 200
 
-  # The time since the request entered the Rack stack, for the page header.
-  # The layout renders after the page's own template, so the figure covers the action and the view.
   def self.elapsed_ms(request)
     started = request.env[STARTED_KEY] or return nil
     ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round
   end
 
-  # First in the Rack stack: notes when a request entered, for `elapsed_ms`.
   class Clock
     def initialize(app)
       @app = app
@@ -47,9 +36,6 @@ module RequestProfiler
     page?(request) && (request.cookies[COOKIE] == "1" || request.params["profile"] == "1")
   end
 
-  # A request for a page, as against an asset, a service worker, or an image: those are the
-  # requests with no file extension outside `/assets/`.
-  # The profile pages themselves are left out too, so reading profiles adds none.
   def self.page?(request)
     path = request.path
     !path.start_with?("/assets/", "/profiles") && File.extname(path).empty?
@@ -64,6 +50,7 @@ module RequestProfiler
       request = Rack::Request.new(env)
       return @app.call(env) unless RequestProfiler.wanted?(request)
 
+      # Loaded here, so that a process that never profiles holds no native extension beyond Ruby's.
       require "vernier"
       record = Rails.application.executor.wrap do
         RequestProfile.create!(http_method: request.request_method, path: request.fullpath,
@@ -74,7 +61,6 @@ module RequestProfiler
       response = nil
       result = Vernier.profile(interval: INTERVAL_US, allocation_interval: 0) do
         response = @app.call(env)
-        # The body is rendered inside the profiled window, as the server would render it.
         status, headers, body = response
         chunks = []
         body.each { |chunk| chunks << chunk }

@@ -1,13 +1,3 @@
-/* A minimal `ruby.h` for C extensions compiled to wasm32-wasi and converted by dewasm.
- *
- * Every Ruby C API function is an import from module "ruby".
- * The host (`lib/dewasm_cext.rb`) implements them over a handle table.
- *
- * VALUE encoding (32-bit):
- *   fixnum:     low bit 1, 31-bit two's complement payload (like CRuby on 32-bit)
- *   `Qfalse`=0 `Qtrue`=2 `Qnil`=4 `Qundef`=6
- *   heap object: handle index << 3, index >= 1
- */
 #ifndef DEWASM_RUBY_H
 #define DEWASM_RUBY_H
 
@@ -53,7 +43,7 @@ typedef unsigned long ID;
 #define FIXABLE(i) ((long long)(i) <= FIXNUM_MAX && (long long)(i) >= FIXNUM_MIN)
 #define POSFIXABLE(i) ((unsigned long long)(i) <= (unsigned long long)FIXNUM_MAX)
 
-/* --- well-known objects: permanent handles the host pre-populates in this order --- */
+/* The host creates these handles in this order. */
 #define RB_WK(n) ((VALUE)((n) << 3))
 #define rb_cObject         RB_WK(1)
 #define rb_cBasicObject    RB_WK(2)
@@ -104,7 +94,6 @@ typedef unsigned long ID;
 #define rb_stderr          RB_WK(47)
 #define RB_WK_COUNT 47
 
-/* --- integers and floats --- */
 RB_IMPORT(rb_ll2inum) VALUE rb_ll2inum(long long);
 RB_IMPORT(rb_ull2inum) VALUE rb_ull2inum(unsigned long long);
 RB_IMPORT(rb_num2ll) long long rb_num2ll(VALUE);
@@ -142,7 +131,6 @@ static inline unsigned long long NUM2ULL(VALUE v) { return FIXNUM_P(v) ? (unsign
 #define rb_int2inum(i) LONG2NUM(i)
 #define rb_uint2inum(i) ULONG2NUM(i)
 
-/* --- type checks --- */
 enum ruby_value_type {
     T_NONE = 0x00, T_OBJECT = 0x01, T_CLASS = 0x02, T_MODULE = 0x03, T_FLOAT = 0x04,
     T_STRING = 0x05, T_REGEXP = 0x06, T_ARRAY = 0x07, T_HASH = 0x08, T_STRUCT = 0x09,
@@ -199,7 +187,6 @@ RB_IMPORT(rb_str_split) VALUE rb_str_split(VALUE, const char *);
 RB_IMPORT(rb_keyword_given_p) int rb_keyword_given_p(void);
 RB_IMPORT(rb_class_name) VALUE rb_class_name(VALUE);
 
-/* --- symbols and IDs: an ID is the permanent handle of the Symbol itself --- */
 RB_IMPORT(rb_intern) ID rb_intern(const char *);
 RB_IMPORT(rb_intern2) ID rb_intern2(const char *, long);
 RB_IMPORT(rb_intern_str) ID rb_intern_str(VALUE);
@@ -214,7 +201,6 @@ RB_IMPORT(rb_sym2str) VALUE rb_sym2str(VALUE);
 #define rb_intern_const rb_intern
 #define CONST_ID(var, str) ((var) = rb_intern(str))
 
-/* --- classes, modules, methods --- */
 RB_IMPORT(rb_define_module) VALUE rb_define_module(const char *);
 RB_IMPORT(rb_define_module_under) VALUE rb_define_module_under(VALUE, const char *);
 RB_IMPORT(rb_define_class) VALUE rb_define_class(const char *, VALUE);
@@ -247,7 +233,6 @@ RB_IMPORT(rb_cv_set) void rb_cv_set(VALUE, const char *, VALUE);
 RB_IMPORT(rb_gv_get) VALUE rb_gv_get(const char *);
 RB_IMPORT(rb_ext_ractor_safe) void rb_ext_ractor_safe(int);
 
-/* --- calls, blocks --- */
 RB_IMPORT(rb_funcallv) VALUE rb_funcallv(VALUE, ID, int, const VALUE *);
 RB_IMPORT(rb_funcallv_public) VALUE rb_funcallv_public(VALUE, ID, int, const VALUE *);
 RB_IMPORT(rb_funcall_with_block) VALUE rb_funcall_with_block(VALUE, ID, int, const VALUE *, VALUE);
@@ -270,16 +255,13 @@ RB_IMPORT(rb_proc_call) VALUE rb_proc_call(VALUE, VALUE);
 RB_IMPORT(rb_proc_new) VALUE rb_proc_new(VALUE (*)(ANYARGS), VALUE);
 RB_IMPORT(rb_block_call) VALUE rb_block_call(VALUE, ID, int, const VALUE *, VALUE (*)(ANYARGS), VALUE);
 RB_IMPORT(rb_need_block) void rb_need_block(void);
-/* `rb_scan_args` is parsed on the guest side (`support.c`); the host supplies `rb_eArgError`. */
 int rb_scan_args(int argc, const VALUE *argv, const char *fmt, ...);
 
-/* --- exceptions, formatting, and non-local exits --- */
 RB_IMPORT(rb_exc_raise) RB_NORETURN void rb_exc_raise(VALUE);
 RB_IMPORT(rb_exc_new_str) VALUE rb_exc_new_str(VALUE, VALUE);
 RB_IMPORT(rb_exc_new) VALUE rb_exc_new(VALUE, const char *, long);
 RB_IMPORT(rb_dw_warn_str) void rb_dw_warn_str(VALUE);
 RB_IMPORT(rb_dw_bug_str) RB_NORETURN void rb_dw_bug_str(VALUE);
-/* The `printf`-style functions are in support.c; they understand `PRIsVALUE`. */
 #define PRIsVALUE "li\v"
 RB_NORETURN void rb_raise(VALUE, const char *, ...);
 void rb_warn(const char *, ...);
@@ -293,7 +275,6 @@ VALUE rb_vsprintf(const char *, va_list);
 VALUE rb_str_catf(VALUE, const char *, ...);
 VALUE rb_exc_new_str_f(VALUE, const char *, ...);
 #define rb_enc_sprintf(enc, ...) rb_sprintf(__VA_ARGS__)
-/* `rb_protect` and friends take a guest function pointer; the host calls it through the table. */
 RB_IMPORT(rb_protect) VALUE rb_protect(VALUE (*)(VALUE), VALUE, int *);
 RB_IMPORT(rb_ensure) VALUE rb_ensure(VALUE (*)(VALUE), VALUE, VALUE (*)(VALUE), VALUE);
 RB_IMPORT(rb_rescue) VALUE rb_rescue(VALUE (*)(VALUE), VALUE, VALUE (*)(VALUE, VALUE), VALUE);
@@ -307,7 +288,6 @@ RB_IMPORT(rb_exc_new_cstr) VALUE rb_exc_new_cstr(VALUE, const char *);
 #define rb_exc_new3 rb_exc_new_str
 enum { TAG_NONE = 0, TAG_RETURN = 1, TAG_BREAK = 2, TAG_NEXT = 3, TAG_RETRY = 4, TAG_REDO = 5, TAG_RAISE = 6, TAG_THROW = 7, TAG_FATAL = 8 };
 
-/* --- strings: bytes live in a shadow buffer in linear memory, synced by the host --- */
 RB_IMPORT(rb_str_new) VALUE rb_str_new(const char *, long);
 RB_IMPORT(rb_str_new_cstr) VALUE rb_str_new_cstr(const char *);
 RB_IMPORT(rb_utf8_str_new) VALUE rb_utf8_str_new(const char *, long);
@@ -370,7 +350,6 @@ static inline char *rb_string_value_cstr(volatile VALUE *p) {
 #define rb_usascii_str_new_static rb_str_new
 #define rb_sym2str_cstr(s) rb_dw_str_ptr(rb_sym2str(s))
 
-/* --- encodings: an `rb_encoding *` is an opaque non-null id the host hands out --- */
 typedef struct rb_encoding rb_encoding;
 RB_IMPORT(rb_utf8_encoding) rb_encoding *rb_utf8_encoding(void);
 RB_IMPORT(rb_ascii8bit_encoding) rb_encoding *rb_ascii8bit_encoding(void);
@@ -413,7 +392,6 @@ RB_IMPORT(rb_usascii_encindex) int rb_usascii_encindex(void);
 #define rb_enc_mbminlen(enc) 1
 #define rb_enc_dummy_p(enc) 0
 
-/* --- arrays --- */
 RB_IMPORT(rb_ary_new) VALUE rb_ary_new(void);
 RB_IMPORT(rb_ary_new_capa) VALUE rb_ary_new_capa(long);
 RB_IMPORT(rb_ary_new_from_values) VALUE rb_ary_new_from_values(long, const VALUE *);
@@ -450,7 +428,6 @@ RB_IMPORT(rb_dw_array_len) long rb_dw_array_len(VALUE);
 #define Check_Array_Type(v) rb_check_array_type(v)
 #define rb_Array(v) rb_check_array_type(v)
 
-/* --- hashes --- */
 RB_IMPORT(rb_hash_new) VALUE rb_hash_new(void);
 RB_IMPORT(rb_hash_aref) VALUE rb_hash_aref(VALUE, VALUE);
 RB_IMPORT(rb_hash_aset) VALUE rb_hash_aset(VALUE, VALUE, VALUE);
@@ -468,7 +445,6 @@ RB_IMPORT(rb_dw_hash_size_num) long rb_dw_hash_size_num(VALUE);
 #define RHASH_SIZE(v) rb_dw_hash_size_num(v)
 #define RHASH_EMPTY_P(v) (RHASH_SIZE(v) == 0)
 
-/* --- typed data --- */
 typedef void (*RUBY_DATA_FUNC)(void *);
 struct rb_data_type_struct {
     const char *wrap_struct_name;
@@ -496,7 +472,6 @@ RB_IMPORT(rb_check_typeddata) void *rb_check_typeddata(VALUE, const rb_data_type
 RB_IMPORT(rb_typeddata_is_kind_of) int rb_typeddata_is_kind_of(VALUE, const rb_data_type_t *);
 RB_IMPORT(rb_dw_data_ptr) void *rb_dw_data_ptr(VALUE);
 RB_IMPORT(rb_dw_data_set_ptr) void rb_dw_data_set_ptr(VALUE, void *);
-/* A wrapped object's data pointer lives in a guest cell, so `DATA_PTR(v) = p` can assign it. */
 RB_IMPORT(rb_dw_data_ptr_ref) void **rb_dw_data_ptr_ref(VALUE);
 RB_IMPORT(rb_dw_data_type_p) int rb_dw_data_type_p(VALUE, const rb_data_type_t *);
 #define TypedData_Wrap_Struct(klass, type, sval) rb_data_typed_object_wrap((klass), (sval), (type))
@@ -510,7 +485,6 @@ RB_IMPORT(rb_dw_data_type_p) int rb_dw_data_type_p(VALUE, const rb_data_type_t *
 #define RTYPEDDATA_P(v) (rb_dw_type(v) == T_DATA)
 #define rb_typeddata_inherited_p(a, b) ((a) == (b))
 
-/* --- GC --- */
 RB_IMPORT(rb_gc_mark) void rb_gc_mark(VALUE);
 #define rb_gc_mark_movable rb_gc_mark
 RB_IMPORT(rb_gc_register_address) void rb_gc_register_address(VALUE *);
@@ -525,7 +499,6 @@ RB_IMPORT(rb_gc) void rb_gc(void);
 #define rb_gc_location(v) (v)
 #define rb_gc_mark_locations(a, b) ((void)0)
 
-/* --- memory: the guest heap is the extension's own --- */
 #define xmalloc malloc
 #define xcalloc calloc
 #define xrealloc realloc
@@ -540,7 +513,6 @@ RB_IMPORT(rb_gc) void rb_gc(void);
 #define ZALLOC_N(T, n) ((T *)calloc((n), sizeof(T)))
 #define REALLOC_N(p, T, n) ((p) = (T *)realloc((p), sizeof(T) * (n)))
 #define ALLOCA_N(T, n) ((T *)alloca(sizeof(T) * (n)))
-/* `ALLOCV`: a temporary buffer whose handle `v` is a raw guest pointer, never shown to the host. */
 #define ALLOCV_N(T, v, n) ((T *)((v) = (VALUE)malloc(sizeof(T) * (n) + 1)))
 #define ALLOCV(v, n) ALLOCV_N(char, v, n)
 #define ALLOCV_END(v) free((void *)(v))
@@ -548,7 +520,6 @@ RB_IMPORT(rb_gc) void rb_gc(void);
 #define MEMZERO(p, T, n) memset((p), 0, sizeof(T) * (n))
 #define MEMMOVE(d, s, T, n) memmove((d), (s), sizeof(T) * (n))
 
-/* --- other --- */
 RB_IMPORT(rb_io_write) VALUE rb_io_write(VALUE, VALUE);
 RB_IMPORT(rb_require) VALUE rb_require(const char *);
 RB_IMPORT(rb_eval_string) VALUE rb_eval_string(const char *);
@@ -562,7 +533,6 @@ RB_IMPORT(rb_Float) VALUE rb_Float(VALUE);
 RB_IMPORT(rb_String) VALUE rb_String(VALUE);
 RB_IMPORT(rb_to_float) VALUE rb_to_float(VALUE);
 RB_IMPORT(rb_num_coerce_bin) VALUE rb_num_coerce_bin(VALUE, VALUE, ID);
-/* Without a GVL to release, the function runs in place. */
 static inline void *rb_thread_call_without_gvl(void *(*func)(void *), void *data1, void (*ubf)(void *), void *data2) {
     (void)ubf; (void)data2;
     return func(data1);
@@ -575,7 +545,6 @@ static inline void *rb_thread_call_without_gvl(void *(*func)(void *), void *data
 #define RB_NOGVL_INTR_FAIL 0
 
 typedef int rb_pid_t;
-/* WASI has no processes; `support.c` defines this stand-in. */
 pid_t getpid(void);
 #define rb_check_safe_obj(v) ((void)(v))
 #define RUBY_API_VERSION_MAJOR 4
@@ -596,4 +565,4 @@ pid_t getpid(void);
 #define RB_UNLIKELY(x) __builtin_expect(!!(x), 0)
 #define RB_LIKELY(x) __builtin_expect(!!(x), 1)
 
-#endif /* DEWASM_RUBY_H */
+#endif

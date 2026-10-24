@@ -1,8 +1,5 @@
 # frozen_string_literal: true
 
-# The unmodified sqlite3 gem on the converted extension.
-# It covers what ActiveRecord's adapter uses, plus the callbacks the old shim could not offer.
-# Usage: `ruby sqlite3.rb <unpacked gem dir> <scratch dir>`.
 require "tmpdir"
 
 gem_dir = ARGV.fetch(0)
@@ -53,7 +50,6 @@ check("UTF-8 round trip and i64 boundaries") do
   db.execute("INSERT INTO posts (title, views) VALUES (?, ?)", ["max", 2**63 - 1])
   rows = db.execute("SELECT title, views FROM posts WHERE id > 1 ORDER BY id")
   raise rows.inspect unless rows == [["日本語の題", -(2**63)], ["max", 2**63 - 1]]
-  # Past int64 the gem binds a double, as the native extension does.
   db.execute("INSERT INTO posts (title, views) VALUES (?, ?)", ["wide", 2**63])
   raise "2**63" unless db.execute("SELECT views FROM posts WHERE title = 'wide'").first == [2.0**63]
 end

@@ -2,17 +2,6 @@
 
 require "json"
 
-# A flame graph and a summary from a Vernier profile.
-#
-# Each frame is colored by the kind of code it runs, so the picture itself answers the question
-# "which part of a request runs in a converted extension, and does any C extension appear":
-# - generated Ruby of a converted extension (`*_wasm.rb`);
-# - a method of one of those gems written in C (`SQLite3::Statement#step` as a `<cfunc>`), which
-#   appears only when the gem's own native extension is loaded;
-# - dewasm cext, the host side of the Ruby C API (`cext/lib/dewasm_cext.rb`);
-# - Ruby methods written in C (`<cfunc>`), which with the converted gems are all Ruby's own;
-# - everything else: the application, Rails, and the other gems.
-# The gem a converted or native frame belongs to is kept apart from the kind, for the summary.
 class FlameGraph
   KINDS = {
     "Ruby (app, Rails, gems)" => "#f3b562",
@@ -21,22 +10,18 @@ class FlameGraph
     "dewasm cext" => "#20b2aa",
     "cfunc (Ruby core)" => "#9aa3ad"
   }.freeze
-  # A C method of one of the four gems, by the namespace it is defined under.
   NATIVE_NAMESPACES = {
     "SQLite3" => "sqlite3", "Nokogiri" => "nokogiri", "Herb" => "herb", "BCrypt" => "bcrypt"
   }.freeze
   ROW = 16
   MIN_WIDTH = 0.4
 
-  # A node of the call tree: `[weight, children]`, children keyed by function index.
   Node = Struct.new(:func, :weight, :children)
 
   attr_reader :total, :root, :func_names, :func_files, :self_weight
 
-  # `profile` is the parsed JSON of a Vernier profile (the Firefox Profiler format).
   def self.from_vernier(profile)
     profile = JSON.parse(profile) if profile.is_a?(String)
-    # The request runs in a server thread, so the thread with the most samples is the one wanted.
     thread = profile["threads"].max_by { |t| t["samples"]["length"] }
     strings = thread["stringArray"] || profile.dig("shared", "stringArray")
     names = thread["funcTable"]["name"].map { |i| strings[i] }
@@ -63,7 +48,6 @@ class FlameGraph
     new(names, files, stacks)
   end
 
-  # `stacks` is `[[function indices, root first], weight]` per sample.
   def initialize(func_names, func_files, stacks)
     @func_names = func_names
     @func_files = func_files
@@ -90,7 +74,6 @@ class FlameGraph
     end
   end
 
-  # `[kind, gem]`: the kind of code a function is, and for an extension's frame, its gem.
   def self.classify(file, name = "")
     case file
     when nil, /\A<cfunc>/
@@ -105,36 +88,28 @@ class FlameGraph
 
   def self.color_of(kind) = KINDS.fetch(kind)
 
-  # Whether any frame is a native extension's C method.
   def native? = @kinds_seen.key?("native gem")
 
-  # The kinds in the picture, in the legend's order.
   def legend = KINDS.keys.select { |kind| @kinds_seen[kind] }
 
-  # `Sqlite3Ext#_f289_sqlite3VdbeExec` reads better as `Sqlite3Ext#sqlite3VdbeExec`.
   def display_name(func) = @func_names[func].sub(/#_f\d+_(?=\w)/, "#")
 
   def kind(func) = @kinds[func]
 
   def gem_of(func) = @gems[func]
 
-  # The kind with the gem: `converted gem: sqlite3`.
   def label(func) = @gems[func] ? "#{@kinds[func]}: #{@gems[func]}" : @kinds[func]
 
-  # `converted sqlite3` or `native sqlite3` for an extension's frame; `nil` for any other.
   def extension_label(func)
     @gems[func] && "#{@kinds[func].delete_suffix(' gem')} #{@gems[func]}"
   end
 
   def pct(w) = @total.zero? ? "0.0%" : format("%.1f%%", 100.0 * w / @total)
 
-  # `[kind, weight]`, largest first.
   def by_kind = @kind_weight.sort_by { |_, w| -w }
 
-  # `[extension label, weight]` of the converted or native extensions on the stack at all.
   def extensions_on_stack = @extension_on_stack.sort_by { |_, w| -w }
 
-  # `[function, weight]`, largest self time first.
   def top_self(n = 15) = @self_weight.sort_by { |_, w| -w }.first(n)
 
   def cfuncs_seen
@@ -145,10 +120,9 @@ class FlameGraph
     node.children.values.map { |child| depth(child, d + 1) }.max || d
   end
 
-  # Children in a stable order; a focus path names them by position in this order.
+  # A focus path names a child by its position in this order, so the order has to be stable.
   def ordered_children(node) = node.children.values.sort_by { |c| @func_names[c.func] }
 
-  # The node a focus path such as "0.3.1" names, with the frames above it.
   def resolve_focus(path)
     node = @root
     ancestors = []
@@ -160,11 +134,6 @@ class FlameGraph
     [node, ancestors]
   end
 
-  # The flame graph as SVG.
-  # `focus` narrows the picture to one node; `link` turns a frame into a link that does so.
-  # `link` is called with the focus path of a frame and returns a URL, or `nil` for no links.
-  # The node the picture is narrowed to is the bottom row, the full width.
-  # A click on it widens the picture by one level.
   def svg(width: 1400, focus: nil, title: nil, link: nil)
     focus_node, ancestors = resolve_focus(focus)
     base = ancestors.empty? ? 0 : 1
@@ -206,7 +175,6 @@ class FlameGraph
     end
   end
 
-  # One frame: a box of width `w` at `x`, `level` rows above the bottom, linking to `href`.
   def bar(out, node, x, w, level, height, href)
     y = height - 30 - (level + 1) * ROW
     name = display_name(node.func)

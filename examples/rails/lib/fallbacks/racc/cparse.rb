@@ -1,5 +1,4 @@
 # frozen_string_literal: true
 
-# `racc` requires `racc/cparse` (its C extension); on a `LoadError` it uses its Ruby runtime.
-# This file, ahead of the gem on the load path, is that `LoadError`.
+# Found ahead of the C extension on the load path; `racc` falls back to its Ruby runtime on it.
 raise LoadError, "racc/cparse: the Ruby racc runtime is used instead"

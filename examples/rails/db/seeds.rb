@@ -1,12 +1,8 @@
-# The one account, and two posts whose bodies carry HTML for `sanitize` to filter.
 user = User.find_or_create_by!(email_address: "author@example.com") do |u|
   u.password = "secret"
 end
-# A hash made at another cost (the initializer sets 5) would make every sign-in pay that cost.
 user.update!(password: "secret") if BCrypt::Password.new(user.password_digest).cost != BCrypt::Engine.cost
 
-# In the test environment, two dozen posts with a few paragraphs each, so a profiled index has
-# real work for SQLite and Nokogiri to do: it runs `sanitize` on every body.
 (Rails.env.test? ? 24 : 0).times do |i|
   Post.find_or_create_by!(title: "Post #{i + 1}: on converted extensions") do |post|
     post.body = (1..4).map do |n|

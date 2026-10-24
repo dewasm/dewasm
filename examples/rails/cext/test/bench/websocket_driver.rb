@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-# The converted `websocket_mask` against the gem's Ruby `WebSocket::Mask`, per payload size.
-# Usage: `ruby websocket_driver.rb <unpacked gem dir>`.
 require "benchmark"
 
 gem_dir = File.expand_path(ARGV.fetch(0))

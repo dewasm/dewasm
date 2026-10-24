@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-# The unmodified `nokogiri` gem on the converted extension: `libxml2`, `libxslt`, and `gumbo`.
-# Usage: `ruby nokogiri.rb <unpacked gem dir>`.
 gem_dir = ARGV.fetch(0)
 $LOAD_PATH.unshift File.join(gem_dir, "lib")
 require "nokogiri"

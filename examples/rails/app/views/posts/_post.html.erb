@@ -1,6 +1,5 @@
 <article id="<%= dom_id post %>" class="post">
   <h2><%= link_to post.title, post %></h2>
   <p class="meta"><%= post.created_at.to_fs(:long) %></p>
-  <%# `sanitize` runs rails-html-sanitizer, so Loofah and Nokogiri parse every body as HTML5. %>
   <div class="body"><%= sanitize post.body %></div>
 </article>

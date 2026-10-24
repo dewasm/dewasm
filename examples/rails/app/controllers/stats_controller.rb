@@ -1,5 +1,3 @@
-# What runs this process: the versions of the converted libraries, and which native extensions
-# are loaded beyond Ruby's own.
 class StatsController < ApplicationController
   allow_unauthenticated_access
 

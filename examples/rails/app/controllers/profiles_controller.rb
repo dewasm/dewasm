@@ -1,4 +1,3 @@
-# The profiles the request profiler recorded, and the flame graph of each.
 class ProfilesController < ApplicationController
   allow_unauthenticated_access
   helper_method :profiling?
@@ -31,7 +30,6 @@ class ProfilesController < ApplicationController
     end
   end
 
-  # Turn profiling of every following request on or off (a cookie the Rack layer reads).
   def toggle
     if profiling?
       cookies.delete(RequestProfiler::COOKIE)

@@ -1,5 +1,4 @@
 class RequestProfile < ApplicationRecord
-  # The recordings whose method and path contain `query` (`GET /posts`), or whose mode is it.
   scope :search, ->(query) {
     next all if query.blank?
 

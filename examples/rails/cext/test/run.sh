@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Build the test extension and run the host runtime's checks against it.
 set -euo pipefail
 cd "$(dirname "$0")"
 out=cache/demo

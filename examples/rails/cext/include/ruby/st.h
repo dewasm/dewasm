@@ -1,6 +1,3 @@
-/* A small `st_table`: the keyed table CRuby exposes to extensions, here a guest-local hash map.
- * It covers numeric keys (`st_init_numtable`) and C string keys (`st_init_strtable`).
- */
 #ifndef DEWASM_RUBY_ST_H
 #define DEWASM_RUBY_ST_H
 #include <stddef.h>

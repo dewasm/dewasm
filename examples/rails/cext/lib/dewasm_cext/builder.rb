@@ -9,20 +9,11 @@ require_relative "recipe"
 Dir[File.join(__dir__, "recipes/*.rb")].sort.each { |f| require f }
 
 module DewasmCExt
-  # One gem at one version: fetched from rubygems.org, unpacked, its extension compiled and
-  # converted, and a loader `.rb` put where the gem requires its native extension from.
-  # The result is a directory a Gemfile can name with `path:`.
-  #
-  # A stamp beside the directory records what it was built from.
-  # A new gem checksum, a changed recipe, a changed dewasm cext, or a changed toolchain rebuilds.
   class Builder
-    # The build directory: `vendor/dewasm` under the Gemfile (`dewasm_gem`) or the working
-    # directory (`bin/build-gem`), unless `DEWASM_CEXT_CACHE` names one.
     def self.default_cache(root = Dir.pwd) = ENV["DEWASM_CEXT_CACHE"] || File.join(root, "vendor/dewasm")
 
     attr_reader :name, :version, :cache_dir, :lock_path, :gem_dir, :recipe
 
-    # `lock_path` records the checksum of a `.gem` the recipe does not know, on first fetch.
     def initialize(name, version, cache_dir: Builder.default_cache, lock_path: nil, log: $stderr)
       @name = name
       @version = version
@@ -42,7 +33,6 @@ module DewasmCExt
 
     def built? = File.exist?(stamp_path) && File.read(stamp_path).strip == stamp_key && File.exist?(loader_path)
 
-    # Fetch, unpack, compile, convert, and write the loader, unless the stamp is current.
     def ensure_built
       return gem_dir if built?
 
@@ -64,8 +54,6 @@ module DewasmCExt
 
     def ruby_minor = RUBY_VERSION[/\A\d+\.\d+/]
 
-    # ---- fetch ---------------------------------------------------------------
-
     def fetch
       return if File.exist?(gem_file) && Digest::SHA256.file(gem_file).hexdigest == gem_checksum(allow_new: true)
 
@@ -84,7 +72,6 @@ module DewasmCExt
 
     def download(uri, path) = Compiler.download(uri, path)
 
-    # The checksum the recipe or the lock file knows; `nil` when neither does.
     def known_checksum
       recipe.class.checksums[version] || lock_entries["#{name}-#{version}"]
     end
@@ -104,10 +91,6 @@ module DewasmCExt
       File.open(lock_path, "a") { |f| f.puts("#{name}-#{version} #{sha256}") }
     end
 
-    # ---- unpack --------------------------------------------------------------
-
-    # The `.gemspec` written beside the files drops `extensions`, so Bundler does not build the
-    # native one; the recipe may change it further.
     def unpack
       FileUtils.rm_rf(gem_dir)
       package = Gem::Package.new(gem_file)
@@ -117,8 +100,6 @@ module DewasmCExt
       recipe.gemspec(spec)
       File.write(gemspec_path, spec.to_ruby)
     end
-
-    # ---- compile and loader -----------------------------------------------
 
     def compile
       sources = recipe.sources.flat_map { |g| Dir[File.expand_path(g, gem_dir)].sort }
@@ -135,12 +116,8 @@ module DewasmCExt
                        log: build_log)
     end
 
-    # The `.rb` the gem requires in place of its native extension, from the recipe.
-    # For a C extension a copy sits under `<dir>/<ruby major.minor>/` too, the place a prebuilt
-    # gem keeps its extension, since a gem tries that path first with a plain `require`.
-    # Found there, the `require` never asks RubyGems for a gem that could provide the file, so an
-    # installed native copy of the gem stays out.
-    # The paths are relative, so the build directory moves with the application.
+    # A gem tries `<ruby major.minor>/` first with a plain `require`; a copy there keeps an
+    # installed native build of the same gem out.
     def write_loader
       paths = [loader_path]
       paths << File.join(File.dirname(loader_path), ruby_minor, File.basename(loader_path)) if recipe.support

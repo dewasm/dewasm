@@ -4,16 +4,10 @@ require "digest"
 require "pathname"
 
 module DewasmCExt
-  # How one gem's C extension is compiled against the dewasm `ruby.h`.
-  #
-  # A recipe names the sources, the flags, the `Init_*` symbol, and where the gem requires its
-  # native extension from; the builder does the rest.
-  # A gem without a recipe of its own gets the generic one: every `.c` under `ext/<name>/`.
   class Recipe
     class << self
       def registry = (@registry ||= {})
 
-      # `register "name" do ... end`: define a recipe class for a gem, set up by the block.
       def register(gem_name, &block)
         registry[gem_name] = Class.new(self, &block).tap do |klass|
           klass.gem_name = gem_name
@@ -26,11 +20,9 @@ module DewasmCExt
       end
 
       attr_accessor :gem_name
-      # The file the recipe is defined in, part of the build stamp.
       attr_writer :source_path
       def source_path = @source_path || __FILE__
 
-      # Known `.gem` checksums by version; a version outside this table is recorded on first use.
       def checksums = (@checksums ||= {})
       def checksum(version, sha256) = checksums[version] = sha256
 
@@ -40,31 +32,17 @@ module DewasmCExt
       end
     end
 
-    # Globs of C sources, relative to the unpacked gem.
     setting :sources, []
-    # Include directories, relative to the unpacked gem, or absolute.
     setting :include_dirs, []
-    # C definitions: `{ "NAME" => "1" }`, or `nil` for `-DNAME` with no value.
     setting :defines, {}
     setting :cflags, []
-    # The symbol the gem's `extconf.rb` builds: `Init_<extension name>`.
     setting :init
-    # Where the gem requires its extension from, relative to `lib/`: `"sqlite3/sqlite3_native"`.
     setting :extension
-    # Ruby source appended to `DewasmCExt::Runtime.new(...)` in the loader, such as `preopens:`.
     setting :runtime_options, ""
-    # Whether the module is a Ruby C extension: linked with `support.c`, exporting `Init_*`, and
-    # loaded through `DewasmCExt::Runtime`.
-    # A recipe for a program of its own (an interpreter a gem drives) sets it to `false` and
-    # writes its own `loader`.
     setting :support, true
-    # Further exports, and what the link ends with (libraries, linker flags).
     setting :exports, []
     setting :link_flags, []
-    # The directory under the gem the loader goes in; `lib` for a C extension.
-    # Another directory, put first in the gem's `require_paths`, shadows a file of the gem.
     setting :loader_dir, "lib"
-    # The converted module's file name without `.rb`: `<extension>_wasm` unless set.
     setting :converted_name
 
     attr_reader :builder
@@ -74,22 +52,14 @@ module DewasmCExt
       configure
     end
 
-    # Per-gem settings, with the gem's sources at `builder.gem_dir`.
     def configure; end
 
-    # Work before the compile, such as building a library the extension links against.
-    # It may add to `cflags` and `include_dirs`.
     def before_compile; end
 
-    # Work on the linked module before the conversion; returns the module to convert.
     def after_compile(wasm) = wasm
 
-    # Changes to the `.gemspec` written beside the unpacked gem.
     def gemspec(spec); end
 
-    # The Ruby the gem requires in place of its native extension, at `builder.loader_path` or
-    # the copy under `<ruby major.minor>/`; `from` is the directory the file is written in.
-    # It loads the host runtime, the converted class, and runs the extension's `Init_*`.
     def loader(from:)
       runtime = File.expand_path("../dewasm_cext.rb", __dir__)
       converted = File.join(File.dirname(builder.loader_path), builder.converted_name)
@@ -108,10 +78,8 @@ module DewasmCExt
     def module_name = "#{gem_name.split(/[^a-z0-9]/i).map(&:capitalize).join}Ext"
     def init_symbol = init || "Init_#{File.basename(extension)}"
 
-    # A checksum of the recipe's own code, part of the build stamp.
     def source_digest = Digest::SHA256.file(self.class.source_path).hexdigest[0, 16]
 
-    # The generic recipe: `ext/<name>/*.c` with `ext/<name>` on the include path.
     class Generic < Recipe
       def self.gem_name = nil
 
@@ -123,7 +91,6 @@ module DewasmCExt
         self.extension = loader_target
       end
 
-      # The generic recipe guesses the require path from the gem's `extconf.rb` location.
       def loader_target
         ext_dir = File.join(builder.gem_dir, "ext", builder.name)
         extconf = File.read(File.join(ext_dir, "extconf.rb"))

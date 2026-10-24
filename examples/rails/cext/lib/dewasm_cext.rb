@@ -1,8 +1,5 @@
 # frozen_string_literal: true
 
-# Host side of the dewasm `ruby.h` experiment.
-# It implements the Ruby C API as imports (module "ruby") over a handle table.
-# See include/ruby.h for the VALUE encoding and the import list.
 require "monitor"
 
 module DewasmCExt
@@ -60,16 +57,11 @@ module DewasmCExt
 
     attr_reader :instance, :stats
 
-    # `mod_class` is the dewasm-generated class; `init_name` is the extension's `Init_*` export.
-    # `cwd` is the guest's working directory; relative paths the extension opens resolve against it.
     def initialize(mod_class, init_name, gc_threshold: 4096, preopens: {}, cwd: nil)
       super()
       @objs = WELL_KNOWN.dup
-      # Object to handle index, by identity; an entry goes when the object does.
       @ids = ObjectSpace::WeakMap.new
       WELL_KNOWN.each_with_index { |o, i| @ids[o] = i if i.positive? }
-      # A handle turned weak keeps its index while its object lives somewhere in Ruby.
-      # `@weak` maps a slot's key object to the object; `@slot_keys` holds the key objects.
       @weak = ObjectSpace::WeakMap.new
       @slot_keys = []
       @weak_indices = {}
@@ -96,7 +88,6 @@ module DewasmCExt
       @gc_threshold = gc_threshold
       @stats = Hash.new(0)
       @rt = mod_class::Rt
-      # A module with no WASI import has a constructor without the `preopens:` keyword.
       @inst =
         if mod_class.instance_method(:initialize).parameters.any? { |_, name| name == :preopens }
           mod_class.new({ "ruby" => self }, preopens: preopens)
@@ -112,8 +103,6 @@ module DewasmCExt
       enter(permanent: true) { @inst.invoke(init_name) }
     end
 
-    # Point the guest's C library at `path`.
-    # Its `chdir` is an export of every extension built here.
     def chdir(path)
       bytes = path.to_s.b
       p = guest_malloc(bytes.bytesize + 1)
@@ -136,10 +125,7 @@ module DewasmCExt
     def weak_handles = @weak_indices.size
     def perm_handles = @perm.size
 
-    # Force a handle collection (for tests).
     def collect! = synchronize { collect }
-
-    # ---- VALUE <-> object ------------------------------------------------
 
     def to_v(obj)
       case obj
@@ -180,7 +166,6 @@ module DewasmCExt
     def handle(obj)
       i = @ids[obj]
       if i
-        # A weak handle in use again is strong until the next collection.
         if @weak_indices.delete(i)
           @objs[i] = obj
           @live[i] = true
@@ -204,8 +189,6 @@ module DewasmCExt
     def s32(v) = v >= 0x8000_0000 ? v - 0x1_0000_0000 : v
     def s64(v) = v >= 0x8000_0000_0000_0000 ? v - 0x1_0000_0000_0000_0000 : v
 
-    # ---- guest memory ------------------------------------------------------
-
     def guest_malloc(n)
       p = @inst.invoke("malloc", n)
       raise NoMemoryError, "guest malloc(#{n}) failed" if p.zero?
@@ -216,7 +199,6 @@ module DewasmCExt
       @inst.invoke("free", p) unless p.zero?
     end
 
-    # `Rt::Memory` bundles only the helpers the module itself uses, so the host goes to the buffer.
     def mem_u32(a) = @mem.buffer.get_value(:u32, a)
     def mem_set_u32(a, v) = @mem.buffer.set_value(:u32, a, v & M32)
 
@@ -246,10 +228,7 @@ module DewasmCExt
 
     def read_values(ptr, n) = Array.new(n) { |i| from_v(mem_u32(ptr + 4 * i)) }
 
-    # ---- frames ------------------------------------------------------------
-
-    # Every entry into guest code goes through here.
-    # It saves the shadow stack pointer, so an exception unwinding through guest frames
+    # The shadow stack pointer is saved here, so an exception unwinding through guest frames
     # (which run no epilogue) leaves the stack where it was.
     def enter(permanent: false)
       synchronize do
@@ -302,8 +281,6 @@ module DewasmCExt
     TYPE_KEYS = (0..16).map { |n| :"#{(['i32'] * n).join(',')}->i32" }.freeze
     def type_key(n) = TYPE_KEYS[n]
 
-    # The generated `Rt::Table` bundles only the `callN` arities the module itself uses.
-    # So the host reads the slot directly: `[type_symbol, callable]`.
     def table_call(i, key, *args)
       slot = @table.instance_variable_get(:@slots)[i]
       raise @rt::Trap, "uninitialized element #{i}" if slot.nil?
@@ -338,7 +315,6 @@ module DewasmCExt
       end
     end
 
-    # The method a guest frame runs, for `rb_call_super`.
     def with_method(recv, name)
       @method_frames.push([recv, name])
       yield
@@ -346,13 +322,8 @@ module DewasmCExt
       @method_frames.pop
     end
 
-    # ---- handle collection -------------------------------------------------
-
     # Sound at depth 0 only: no guest frame holds a VALUE in a local then.
-    # A handle that a registered address or a wrapped struct's `dmark` marks stays strong.
-    # Any other handle becomes weak: as in CRuby, a `VALUE` stays valid while its object lives.
-    # C code may keep one in memory the host cannot see, such as a libxml2 node's `_private`.
-    # Its index is freed once the object is gone.
+    # C code may keep a handle in memory the host cannot see, such as a libxml2 node's `_private`.
     def collect
       @stats[:collections] += 1
       @marks = {}
@@ -406,10 +377,6 @@ module DewasmCExt
       @in_frees = false
     end
 
-    # ---- string shadows ----------------------------------------------------
-
-    # A guest pointer into a Ruby String is a copy in linear memory.
-    # Writes through it are copied back at every sync point.
     def shadow_ptr(v, str)
       @shadow_stack.reverse_each do |frame|
         entry = frame[v]
@@ -452,8 +419,6 @@ module DewasmCExt
       nil
     end
 
-    # ---- imports: numbers -------------------------------------------------
-
     def i_rb_ll2inum(v) = to_v(s64(v))
     def i_rb_ull2inum(v) = to_v(v)
     def i_rb_num2ll(v)
@@ -464,7 +429,6 @@ module DewasmCExt
     def i_rb_num2ull(v) = Integer(from_v(v)) & M64
     def i_rb_num2dbl(v) = Float(from_v(v))
 
-    # One 64-bit two's complement word; the codes are CRuby's `rb_integer_pack` results.
     def i_rb_dw_int64_pack(v, out)
       n = Integer(from_v(v))
       @mem.buffer.set_value(:u64, out, n & M64)
@@ -481,8 +445,6 @@ module DewasmCExt
     def i_rb_Float(v) = to_v(Float(from_v(v)))
     def i_rb_String(v) = to_v(String(from_v(v)))
     def i_rb_to_float(v) = to_v(Float(from_v(v)))
-
-    # ---- imports: types ---------------------------------------------------
 
     def type_of(obj)
       case obj
@@ -560,7 +522,6 @@ module DewasmCExt
     def i_rb_apply(recv, mid, args) = to_v(from_v(recv).__send__(from_v(mid), *from_v(args)))
     def i_rb_str_split(s, p) = to_v(from_v(s).split(read_cstr(p)))
 
-    # `rb_call_super` needs the method the guest is running; the frame stack records it.
     def i_rb_call_super(argc, argv)
       frame = @method_frames.last or raise RuntimeError, "rb_call_super outside a method"
       recv, name = frame
@@ -568,9 +529,6 @@ module DewasmCExt
       to_v(sup.call(*read_values(argv, argc)))
     end
 
-    # `rb_get_kwargs(hash, table, required, optional, values)`: `table` holds IDs, `values` VALUEs.
-    # A key in `table` beyond `required` is optional; a missing optional slot is `Qundef`.
-    # `optional < 0` allows unknown keys (the `-1 - optional` rest convention of CRuby).
     def i_rb_get_kwargs(hash, table, required, optional, values)
       required = s32(required)
       optional = s32(optional)
@@ -598,8 +556,6 @@ module DewasmCExt
     end
     def i_rb_class_name(k) = to_v(from_v(k).name)
 
-    # ---- imports: symbols --------------------------------------------------
-
     def i_rb_intern(p) = to_v(read_cstr(p).force_encoding(Encoding::UTF_8).to_sym)
     def i_rb_intern2(p, n) = to_v(read_bytes(p, n).force_encoding(Encoding::UTF_8).to_sym)
     def i_rb_intern_str(v) = to_v(from_v(v).to_sym)
@@ -616,8 +572,6 @@ module DewasmCExt
         p
       end
     end
-
-    # ---- imports: classes, methods -------------------------------------
 
     def i_rb_define_module(p) = to_v(define_module(Object, read_cstr(p)))
     def i_rb_define_module_under(outer, p) = to_v(define_module(from_v(outer), read_cstr(p)))
@@ -675,8 +629,7 @@ module DewasmCExt
     def i_rb_iv_get(o, p) = to_v(from_v(o).instance_variable_get(ivar_name(read_cstr(p))))
     def i_rb_iv_set(o, p, v) = (from_v(o).instance_variable_set(ivar_name(read_cstr(p)), from_v(v)); v)
 
-    # CRuby lets C code keep an instance variable under a name Ruby code cannot spell, such as
-    # `-aggregators`; such a name is mapped onto a spellable one here.
+    # CRuby lets C code keep an instance variable under a name Ruby cannot spell (`-aggregators`).
     def ivar_name(name)
       name = name.to_s
       name.start_with?("@") ? name : :"@__dewasm_#{name.gsub(/\W/, '_')}"
@@ -685,8 +638,6 @@ module DewasmCExt
     def i_rb_cv_set(k, p, v) = from_v(k).class_variable_set(read_cstr(p), from_v(v))
     def i_rb_gv_get(p) = to_v(eval(read_cstr(p).then { |n| n.start_with?("$") ? n : "$#{n}" })) # rubocop:disable Security/Eval
     def i_rb_ext_ractor_safe(_flag) = nil
-
-    # ---- imports: calls and blocks ------------------------------------
 
     def i_rb_funcallv(recv, mid, argc, argv)
       args = read_values(argv, argc)
@@ -751,8 +702,6 @@ module DewasmCExt
       end)
     end
 
-    # ---- imports: exceptions and non-local exits --------------------------
-
     def i_rb_exc_raise(v) = raise(from_v(v))
     def i_rb_exc_new_str(k, s) = to_v(from_v(k).new(from_v(s)))
     def i_rb_exc_new(k, p, n) = to_v(from_v(k).new(read_bytes(p, n).force_encoding(Encoding::UTF_8)))
@@ -779,7 +728,6 @@ module DewasmCExt
       end
     end
 
-    # A Ruby `ensure` also runs on `break`/`throw`, which no `rescue` sees.
     def i_rb_ensure(b_fn, d1, e_fn, d2)
       sp = @sp.value
       begin
@@ -807,8 +755,6 @@ module DewasmCExt
 
     def i_rb_errinfo = to_v(@errinfo)
     def i_rb_set_errinfo(v) = (@errinfo = from_v(v))
-
-    # ---- imports: strings ----------------------------------------------
 
     def i_rb_str_new(p, n) = to_v(p.zero? ? ("\0" * n).b : read_bytes(p, n))
     def i_rb_str_new_cstr(p) = to_v(read_cstr(p))
@@ -879,8 +825,6 @@ module DewasmCExt
     def i_rb_dw_str_len(v) = from_v(v).bytesize
     def i_rb_obj_encoding(v) = to_v(from_v(v).encoding)
 
-    # ---- imports: encodings ----------------------------------------------
-    # An `rb_encoding *` is a non-zero id into `@encodings`; the id doubles as the encoding index.
 
     def enc_id(enc)
       @encoding_ids[enc] ||= begin
@@ -947,8 +891,6 @@ module DewasmCExt
     def i_rb_str_encode(v, to, _flags, _opts) = to_v(from_v(v).encode(from_v(to)))
     def i_rb_enc_str_asciionly_p(v) = from_v(v).ascii_only? ? 1 : 0
 
-    # ---- imports: arrays --------------------------------------------------
-
     def i_rb_ary_new = to_v([])
     def i_rb_ary_new_capa(_n) = to_v([])
     def i_rb_ary_new_from_values(n, p) = to_v(read_values(p, n))
@@ -971,8 +913,6 @@ module DewasmCExt
       obj.is_a?(Array) ? v : (obj.respond_to?(:to_ary) ? to_v(obj.to_ary) : Qnil)
     end
     def i_rb_dw_array_len(a) = from_v(a).size
-
-    # ---- imports: hashes --------------------------------------------------
 
     def i_rb_hash_new = to_v({})
     def i_rb_hash_aref(h, k) = to_v(from_v(h)[from_v(k)])
@@ -998,8 +938,6 @@ module DewasmCExt
       end
     end
 
-    # ---- imports: typed data ----------------------------------------------
-
     def i_rb_data_typed_object_wrap(k, ptr, type_ptr)
       wrap(k, ptr, type_ptr, nil, mem_u32(type_ptr + 8))
     end
@@ -1008,9 +946,6 @@ module DewasmCExt
       wrap(k, ptr, nil, dmark, dfree)
     end
 
-    # An entry is `[cell, type_ptr, dmark]`.
-    # The data pointer lives in `cell`, 4 bytes of guest memory, so C code can assign `DATA_PTR`.
-    # `ObjectSpace::WeakMap` holds its values weakly too, so the object itself also holds the entry.
     def wrap(k, ptr, type_ptr, dmark, dfree)
       obj = k.zero? ? Object.new : Class.instance_method(:allocate).bind_call(from_v(k))
       cell = guest_malloc(4)
@@ -1023,7 +958,6 @@ module DewasmCExt
     end
 
     # Built outside `wrap`, so the `proc`'s binding does not keep the object alive.
-    # The cell is read at free time: `DATA_PTR` may have been reassigned since the wrap.
     def finalizer(queue, dfree, cell) = proc { queue << [dfree, cell] }
 
     def typeddata_match?(entry, type_ptr)
@@ -1056,8 +990,6 @@ module DewasmCExt
     def i_rb_dw_data_set_ptr(v, ptr) = mem_set_u32(data_cell(v), ptr)
     def i_rb_dw_data_ptr_ref(v) = data_cell(v)
 
-    # ---- imports: GC -------------------------------------------------------
-
     def i_rb_gc_mark(v) = mark(v)
     def i_rb_gc_register_address(addr) = @registered_addrs << addr
     def i_rb_gc_unregister_address(addr) = @registered_addrs.delete(addr)
@@ -1071,16 +1003,12 @@ module DewasmCExt
     end
     def i_rb_gc = GC.start
 
-    # ---- imports: other -----------------------------------------------------
-
     def i_rb_io_write(io, s) = to_v(from_v(io).write(from_v(s)))
     def i_rb_require(p) = (require(read_cstr(p)) ? Qtrue : Qfalse)
     def i_rb_eval_string(p) = to_v(TOPLEVEL_BINDING.eval(read_cstr(p)))
     def i_rb_thread_schedule = Thread.pass
     def i_rb_range_new(a, b, excl) = to_v(Range.new(from_v(a), from_v(b), excl != 0))
 
-    # CRuby's `rb_range_beg_len`: `Qfalse` for a non-Range, `Qnil` when out of `len`, else `Qtrue`
-    # with the clipped begin and length stored.
     def i_rb_range_beg_len(v, beg_ptr, len_ptr, len, err)
       range = from_v(v)
       return Qfalse unless range.is_a?(Range)

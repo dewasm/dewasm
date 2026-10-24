@@ -1,4 +1,3 @@
-/* A small extension that exercises the parts of the C API a real gem leans on. */
 #include <ruby.h>
 #include <ctype.h>
 

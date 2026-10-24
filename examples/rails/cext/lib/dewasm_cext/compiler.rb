@@ -7,15 +7,11 @@ require "shellwords"
 require "uri"
 
 module DewasmCExt
-  # The toolchain: the `clang` of `wasi-sdk` for the compile, dewasm for the conversion.
   module Compiler
     ROOT = File.expand_path("../../../../..", __dir__)
     CEXT = File.expand_path("../..", __dir__)
     INCLUDE = File.join(CEXT, "include")
     SUPPORT = File.join(INCLUDE, "support.c")
-    # What the link exports for the host runtime: the `Init_*` symbol, buffers (`malloc`/`free`),
-    # `chdir` for the working directory, the function table for method calls, and the shadow
-    # stack pointer, which the host restores when an exception unwinds through guest frames.
     EXPORTS = %w[malloc free chdir].freeze
     WASI_SDK_HINT = "set WASI_SDK_PATH to a wasi-sdk root (`mise install` at the repository root does)"
 
@@ -29,7 +25,6 @@ module DewasmCExt
 
     def clang = [File.join(wasi_sdk, "bin/clang"), "--target=wasm32-wasip1", "--no-wasm-opt"]
 
-    # The dewasm command: `$DEWASM`, the release build in this repository, or `cargo run`.
     def dewasm
       return [ENV["DEWASM"]] if ENV["DEWASM"]
       built = File.join(ROOT, "target/release/dewasm")
@@ -37,21 +32,16 @@ module DewasmCExt
       ["cargo", "run", "--release", "-q", "--manifest-path", File.join(ROOT, "Cargo.toml"), "-p", "dewasm", "--"]
     end
 
-    # A checksum of dewasm cext itself, so a header or runtime change rebuilds every gem.
     def layer_digest
       files = Dir[File.join(INCLUDE, "**/*.{h,c}")].sort + [__FILE__]
       Digest::SHA256.hexdigest(files.map { |f| File.read(f) }.join)[0, 16]
     end
 
-    # Compile `sources` into `<out_dir>/<name>.wasm`, then convert it into `<out_dir>/<name>.rb`.
     def build(name:, module_name:, init:, out_dir:, sources:, cflags: [], log: nil)
       wasm = compile(name: name, out_dir: out_dir, sources: sources, cflags: cflags, exports: [init], log: log)
       convert(wasm, File.join(out_dir, "#{name}.rb"), module_name, log: log)
     end
 
-    # Compile and link a reactor: `support.c` (the guest side of the Ruby C API) and `sources`.
-    # With `support: false` the module is a program of its own, such as an interpreter, and
-    # `link_flags` name what it links against.
     def compile(name:, out_dir:, sources:, cflags: [], exports: [], support: true, link_flags: [], log: nil)
       FileUtils.mkdir_p(out_dir)
       wasm = File.join(out_dir, "#{name}.wasm")
@@ -62,15 +52,12 @@ module DewasmCExt
       wasm
     end
 
-    # Convert `wasm` into the Ruby class `module_name` at `rb`.
-    # `--function-names` makes a profile read `sqlite3VdbeExec` rather than `_f1286`.
     def convert(wasm, rb, module_name, log: nil)
       run(dewasm + [wasm, "--target", "ruby", "--mode", "library", "--module-name", module_name,
                     "--function-names", "-o", rb], log: log)
       rb
     end
 
-    # Fetch `uri` into `path`, following up to `limit` redirects.
     def download(uri, path, limit = 5)
       raise Error, "too many redirects for #{uri}" if limit.zero?
       Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https") do |http|
@@ -87,7 +74,6 @@ module DewasmCExt
       end
     end
 
-    # Run a command, keeping its output in `log` (or passing it through), failing loud.
     def run(command, log: nil, chdir: nil, env: {})
       options = {}
       options[:chdir] = chdir if chdir

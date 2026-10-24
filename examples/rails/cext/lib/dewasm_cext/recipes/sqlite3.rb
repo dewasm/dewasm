@@ -1,13 +1,5 @@
 # frozen_string_literal: true
 
-# `sqlite3`: `ext/sqlite3` plus the SQLite amalgamation its `dependencies.yml` names.
-#
-# The `HAVE_*` macros are what its `extconf.rb` would detect, minus `sqlite3_load_extension`.
-# Loadable extensions need `dlopen`, which WASI has no form of, so SQLite is built without them.
-# The SQLite options are the gem recipe's, plus the WASI ones `examples/apps/scripts/sqlite3.sh`
-# uses for the same amalgamation.
-# Guest paths are host paths (`preopens`), so a database file lands where the application names it,
-# and the guest's working directory follows the process's (`cwd`).
 DewasmCExt::Recipe.register "sqlite3" do
   checksum "2.10.1", "7ae52c91f5b766882cf44d2dbd26d2dbbb841606f0ec78df3be019bd07b13ff4"
 
@@ -35,7 +27,6 @@ DewasmCExt::Recipe.register "sqlite3" do
     self.runtime_options = ', preopens: { "/" => "/" }, cwd: Dir.pwd'
   end
 
-  # The amalgamation is fetched once into the cache and shared by every build.
   def before_compile
     src = File.join(builder.cache_dir, "src", SQLITE[:dir])
     unless File.exist?(File.join(src, "sqlite3.c"))

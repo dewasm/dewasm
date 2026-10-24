@@ -1,9 +1,3 @@
-// CPython as a reactor for `pygments.rb`: `pyg_init` starts the interpreter and imports the
-// gem's `mentos.py`; `pyg_mentos` answers one request of the gem's protocol.
-// Wizer runs `pyg_init` ahead of time and writes the initialized memory into the module.
-// The gem directory is preopened as `/gem`: the standard library at `/gem/python3.14`, the
-// gem's `mentos.py` at `/gem/lib/pygments`, and its Pygments at `/gem/vendor/pygments-main`,
-// which `mentos.py` adds to the path itself.
 #include <Python.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,9 +23,6 @@ static void keep(PyObject *string, int error) {
   result_error = error;
 }
 
-// `_dispatch(header_json, text)` does what one turn of `Mentos.start` does, and returns
-// `(error, string)`; the error text `_write_error` would have sent is read back from the
-// stand-in `sys.stdout`.
 static const char *SETUP =
     "import io, json, sys, traceback\n"
     "import mentos\n"
@@ -67,8 +58,6 @@ static const char *SETUP =
     "    _dispatch(json.dumps({'method': 'version', 'args': [], 'kwargs': {}}), '')\n"
     "_warm()\n";
 
-// `[] -> []`, the shape Wizer requires of an initialization function; a failure is reported on
-// `stderr`.
 __attribute__((export_name("pyg_init")))
 void pyg_init(void) {
   PyConfig config;
@@ -96,8 +85,6 @@ void pyg_init(void) {
   Py_DECREF(r);
 }
 
-// One request: the JSON header pygments.rb writes, and the code that follows it.
-// The result is the text the Python process would have sent, or an error message.
 __attribute__((export_name("pyg_mentos")))
 const char *pyg_mentos(const char *header, int header_len, const char *code, int code_len) {
   PyObject *function = PyDict_GetItemString(globals, "_dispatch");

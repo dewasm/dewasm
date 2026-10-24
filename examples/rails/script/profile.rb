@@ -1,10 +1,5 @@
 # frozen_string_literal: true
 
-# Profile request handling in this process with Vernier, through the integration test session.
-# No server is involved: the full stack from the router to the converted SQLite runs here.
-# Usage: `bin/rails runner script/profile.rb <out.json> [requests]`.
-# Open the output in the Firefox Profiler (`profiler.firefox.com`), or draw it with
-# `script/flamegraph.rb`.
 require "vernier"
 require "action_dispatch/testing/integration"
 
@@ -19,7 +14,6 @@ def token_of(session)
   session.response.body[/name="csrf-token" content="([^"]+)"/, 1]
 end
 
-# Warm up: sign in, create a post, and render each page once so that templates are compiled.
 session.get "/session/new"
 session.post "/session", params: { authenticity_token: token_of(session),
                                    email_address: "author@example.com", password: "secret" }
@@ -30,7 +24,6 @@ post_path = session.response.location.sub(%r{\Ahttps?://[^/]+}, "")
 session.get post_path
 session.get "/posts"
 
-# A round covers the index, the post page, and a sign-in check against `bcrypt`.
 Vernier.profile(out: out, interval: 200, allocation_interval: 0) do
   rounds.times do
     session.get "/posts"

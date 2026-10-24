@@ -1,13 +1,5 @@
 # frozen_string_literal: true
 
-# `nokogiri`: `ext/nokogiri` and its HTML5 parser (`gumbo`), over `libxml2` and `libxslt`.
-# Both libraries are built for wasm32-wasip1 from the archives the gem itself ships.
-# Those are under `ports/archives`, and the gem's patches apply to them.
-#
-# The `configure` options are the gem's `extconf.rb` ones, minus what WASI has no form of.
-# Those are threads, loadable modules, `zlib`, `lzma`, `iconv`, and HTTP.
-# Without `iconv`, `libxml2` decodes UTF-8, UTF-16, ISO-8859-1, and ASCII documents.
-# Other encodings are converted by Nokogiri's Ruby side or rejected.
 DewasmCExt::Recipe.register "nokogiri" do
   checksum "1.19.4", "50c951611c92bca05c51411aef45f1cbc50f2821c4802758c5c6d34696533ab5"
 
@@ -35,7 +27,6 @@ DewasmCExt::Recipe.register "nokogiri" do
       #define NOKOGIRI_OTHER_LIBRARY_VERSIONS ""
     H
     self.include_dirs = include_dirs + [File.join(prefix, "include/libxml2"), File.join(prefix, "include")]
-    # The `.a` archives go through `-l`, so the link sees whole libraries rather than object lists.
     self.cflags = cflags + ["-include", header, "-L", File.join(prefix, "lib"), "-lxslt", "-lexslt", "-lxml2"]
   end
 
@@ -48,8 +39,6 @@ DewasmCExt::Recipe.register "nokogiri" do
       "CFLAGS" => "-O2", "CPPFLAGS" => "-DNOKOGIRI_PRECOMPILED_LIBRARIES" }
   end
 
-  # Unpack `ports/archives/<name>-<version>.tar.xz` into the build directory and apply the gem's
-  # patches.
   def unpack_patched(name, version)
     root = File.join(builder.cache_dir, "src")
     dir = File.join(root, "#{name}-#{version}")
