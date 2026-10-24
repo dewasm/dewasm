@@ -153,3 +153,43 @@ jobs:
       - name: Test (slow)
         if: github.event_name != 'pull_request'
         run: cargo test -p dewasm-core -p dewasm-backend -p dewasm -p dewasm-test-helper -p xtask -p xtask-feature-audit -p xtask-records -p xtask-snapshot -p xtask-support-docs --no-fail-fast --features dewasm/slow_test,dewasm-test-helper/wasmtime_test
+
+  # The Rails example: its gems converted by `dewasm_gem`, on the converted and the native gems.
+  rails-example:
+    needs: setup
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: examples/rails
+    steps:
+      - uses: actions/checkout@v7 # no submodules: the example reads none
+      - uses: ./.github/actions/mise
+      # The recipes convert with `cargo run --release -p dewasm`.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rails-example
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # The `pygments.rb` recipe links against the `cpython-sdk` app.
+      - uses: actions/cache/restore@v6
+        with:
+          path: examples/apps/cache
+          key: ${{ needs.setup.outputs.key }}
+          fail-on-cache-miss: true
+      # The converted gems; `bundle install` rebuilds only a gem whose stamp no longer matches.
+      - uses: actions/cache@v6
+        with:
+          path: examples/rails/vendor/dewasm
+          key: dewasm-gems-v1-${{ runner.os }}-${{ hashFiles('examples/rails/dewasm_cext/**', 'examples/rails/Gemfile') }}
+          restore-keys: |
+            dewasm-gems-v1-${{ runner.os }}-
+      - name: Build the converted gems
+        run: bundle install
+      - name: Test on the converted gems
+        run: bin/rails test
+      - name: Check dewasm cext
+        run: dewasm_cext/test/run.sh
+      - name: Test on the native gems
+        env:
+          BUNDLE_WITHOUT: dewasm
+        run: bundle install && bin/rails test
