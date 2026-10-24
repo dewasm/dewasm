@@ -1,7 +1,7 @@
 require "test_helper"
 
 # The application driven through its own stack: the index, a sign-in, a post with HTML in its
-# body, a comment, a profiled request with its flame graph, and the `/stats` report.
+# body, a profiled request with its flame graph, and the `/stats` report.
 # On the converted gems, `/stats` must show no native extension beyond Ruby's own.
 # With the `dewasm` group excluded, the four gems' own extensions must be the ones loaded.
 class BlogTest < ActionDispatch::IntegrationTest
@@ -56,21 +56,17 @@ class BlogTest < ActionDispatch::IntegrationTest
     sign_in
   end
 
-  test "a post and a comment are stored and rendered" do
+  test "a post is stored and rendered" do
     sign_in
     post posts_path, params: { post: { title: "Posted over HTTP",
                                        body: "<p>Hello <em>there</em></p><img src=x onerror=alert(1)>" } }
     created = Post.find_by!(title: "Posted over HTTP")
     assert_redirected_to post_path(created)
 
-    post post_comments_path(created), params: { comment: { author: "reader", body: "Nice <b>post</b>" } }
-    assert_redirected_to post_path(created)
-
     get post_path(created)
     body = css_select("article .body").first.to_html
     assert_includes body, "Hello <em>there</em>"
     assert_not_includes body, "onerror"
-    assert_includes response.body, "Nice <b>post</b>"
   end
 
   # The request the ReActionView client makes when the `code` state of the post page is on.

@@ -104,7 +104,7 @@ main.wide { max-width: var(--max-wide); }
 .meta { color: var(--muted); font-size: 0.875rem; }
 .empty { color: var(--muted); font-style: italic; }
 
-/* Cards: posts and comments */
+/* Cards: posts */
 .post {
   background: var(--panel);
   border: 1px solid var(--line);
@@ -117,8 +117,6 @@ main.wide { max-width: var(--max-wide); }
 .post .body { margin-top: 0.6rem; }
 .post .body p { margin: 0.5rem 0; }
 .post .body img { max-width: 100%; }
-.comment { border-top: 1px solid var(--line); padding: 0.6rem 0; }
-.comment .meta { margin-left: 0.5rem; }
 
 /* Forms */
 .field { margin-bottom: 0.9rem; }

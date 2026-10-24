@@ -9,7 +9,7 @@
     that no longer reads `code`, and the page would not switch back. %>
 <article id="<%= dom_id @post %>" class="post">
   <h2><%= link_to @post.title, @post %></h2>
-  <p class="meta"><%= @post.created_at.to_fs(:long) %> · <%= pluralize(@post.comments.size, "comment") %></p>
+  <p class="meta"><%= @post.created_at.to_fs(:long) %></p>
   <div class="body">
     <% if code %>
       <pre class="highlight"><code><%= highlighted sanitize(@post.body), "html" %></code></pre>
@@ -27,29 +27,5 @@
                   form: { data: { turbo_confirm: "Destroy this post?" } } %>
   <% end %>
 </div>
-
-<section id="comments">
-  <h3><%= pluralize(@comments.size, "comment") %></h3>
-  <% @comments.each do |comment| %>
-    <div id="<%= dom_id comment %>" class="comment">
-      <strong><%= comment.author %></strong>
-      <span class="meta"><%= comment.created_at.to_fs(:short) %></span>
-      <div><%= sanitize comment.body, tags: %w[b i em strong code a], attributes: %w[href] %></div>
-    </div>
-  <% end %>
-
-  <h3>Add a comment</h3>
-  <%= form_with model: [ @post, @comment ] do |form| %>
-    <div class="field">
-      <%= form.label :author %>
-      <%= form.text_field :author, required: true %>
-    </div>
-    <div class="field">
-      <%= form.label :body %>
-      <%= form.textarea :body, rows: 3, required: true %>
-    </div>
-    <div class="actions"><%= form.submit "Add comment" %></div>
-  <% end %>
-</section>
 
 <p><%= link_to "← All posts", posts_path %></p>

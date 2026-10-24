@@ -62,7 +62,7 @@ Reading needs no account; to write a post, sign in as `author@example.com` with 
 own: none.
 
 `bin/rails test` drives the application through its stack: the index, a sign-in, a post with
-HTML in its body, a comment, a profiled request with its flame graph, and the `/stats` report.
+HTML in its body, a profiled request with its flame graph, and the `/stats` report.
 
 Requirements: Ruby 4.0, `wasi-sdk` with `WASI_SDK_PATH` set, `make` and `patch` for libxml2,
 Wizer for `pygments.rb`, and network access for the gems.
@@ -205,21 +205,27 @@ records it with Vernier; `script/flamegraph.rb` draws the flame graph and prints
 goes.
 The recording opens in the Firefox Profiler.
 
-Ten rounds of index, post page, comment, and sign-in on an M-series laptop:
+Ten rounds of index, post page, and sign-in on an M-series laptop:
 
 | Where the code lives | Self time |
 | --- | --- |
-| converted `sqlite3` | 45% |
-| Ruby: the application, Rails, and the other gems | 25% |
-| converted `bcrypt` | 11% |
-| converted `nokogiri` | 10% |
-| Ruby's own C functions (`IO::Buffer#get_value`, `Integer#^`, ...) | 8% |
-| dewasm cext | 1% |
+| converted `herb` | 43% |
+| Ruby's own C functions (`IO::Buffer#get_value`, `Integer#^`, ...) | 29% |
+| converted `bcrypt` | 13% |
+| Ruby: the application, Rails, and the other gems | 8% |
+| dewasm cext | 5% |
+| converted `sqlite3` | 2% |
+| converted `nokogiri` | 2% |
+
+The `herb` share is the slot dependency map: ReActionView parses a page's templates again on
+every render of it (`Herb::Analysis::TemplateDependencies#analyze` keeps no cache in Herb 0.11.1).
+On the converted parser that is about 0.2 seconds per page, outside the time the header shows.
 
 ## Limits
 
 - Speed: under YJIT the converted code runs 50 to 130 times slower than native.
-  A page with a few queries renders in tens of milliseconds; a template compiles in about a second.
+  A page with a few queries renders in tens of milliseconds, and its slot dependency map takes
+  about 0.2 seconds more; a template compiles in about a second.
   `bcrypt` at its default cost of 12 takes 19 seconds per sign-in, so
   `config/initializers/bcrypt_cost.rb` sets cost 5.
   Herb's 1 second parse limit is raised in `config/initializers/reactionview.rb`.

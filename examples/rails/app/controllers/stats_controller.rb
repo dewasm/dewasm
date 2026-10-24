@@ -16,7 +16,6 @@ class StatsController < ApplicationController
       bcrypt: BCrypt::Engine.cost,
       pygments: "#{Pygments.pygments_version} (pygments.rb #{Gem.loaded_specs["pygments.rb"].version})",
       posts: Post.count,
-      comments: Comment.count,
       native_extensions: NativeExtensions.report
     }
   end

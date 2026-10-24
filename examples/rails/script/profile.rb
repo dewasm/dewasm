@@ -28,17 +28,13 @@ session.post "/posts", params: { authenticity_token: token_of(session),
                                  post: { title: "Profiled", body: "<p>body <b>bold</b></p>" } }
 post_path = session.response.location.sub(%r{\Ahttps?://[^/]+}, "")
 session.get post_path
-session.post "#{post_path}/comments", params: { authenticity_token: token_of(session),
-                                                comment: { author: "profiler", body: "warm" } }
 session.get "/posts"
 
-# A round covers the index, the post page, a comment, and a sign-in check against `bcrypt`.
+# A round covers the index, the post page, and a sign-in check against `bcrypt`.
 Vernier.profile(out: out, interval: 200, allocation_interval: 0) do
-  rounds.times do |i|
+  rounds.times do
     session.get "/posts"
     session.get post_path
-    session.post "#{post_path}/comments", params: { authenticity_token: token_of(session),
-                                                    comment: { author: "r#{i}", body: "comment #{i}" } }
     session.get "/session/new"
     session.post "/session", params: { authenticity_token: token_of(session),
                                        email_address: "author@example.com", password: "secret" }

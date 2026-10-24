@@ -14,8 +14,6 @@ class PostsController < ApplicationController
   # The view's `code` state shows the body as the HTML it is served as, highlighted.
   # The browser asks for that branch as a `slots` request, which renders here without the layout.
   def show
-    @comments = @post.comments.order(:created_at)
-    @comment = Comment.new
   end
 
   def new
