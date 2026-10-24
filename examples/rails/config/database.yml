@@ -1,0 +1,22 @@
+# SQLite, as `rails new` sets it up, with one addition: a rollback journal in place of WAL.
+# Rails opens SQLite in WAL mode, which needs shared memory WASI has no form of.
+# So the converted SQLite cannot open a database a native one left in WAL mode.
+# `journal_mode: delete` keeps one database file usable in both modes.
+default: &default
+  adapter: sqlite3
+  pragmas:
+    journal_mode: delete
+  max_connections: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
+  timeout: 5000
+
+development:
+  <<: *default
+  database: storage/development.sqlite3
+
+test:
+  <<: *default
+  database: storage/test.sqlite3
+
+production:
+  <<: *default
+  database: storage/production.sqlite3

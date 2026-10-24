@@ -362,6 +362,7 @@ fn convert_standalone(backend: &(dyn Backend + Sync), bytes: &[u8]) -> Result<St
                 runtime: RuntimeLinkage::Embedded,
                 default_wasi: true,
                 data_file: None,
+                function_names: false,
             },
         )
         .map_err(|e| attribute(&e))?;

@@ -258,4 +258,4 @@ Every backend's provider example is in [`docs/backends/`](backends/).
   It covers `argv`, `--dir`, environment, and exit/trap.
 - [`docs/support.md`](support.md): which features and WASI calls each backend supports.
 - [README](../README.md): what dewasm is, plus the real-world examples it converts.
-  Those are Rails on converted SQLite, DOOM, and NES.
+  Those are Rails on converted C extensions, DOOM, and NES.

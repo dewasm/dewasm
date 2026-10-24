@@ -1,0 +1,61 @@
+<% content_for :title, "Profile #{@profile.id}" %>
+<% content_for :page_class, "wide" %>
+
+<div class="page-head">
+  <h1>
+    <code><%= @profile.http_method %> <%= @profile.path %></code>
+    <span class="badge <%= @profile.mode %>"><%= @profile.mode || "?" %> gems</span>
+  </h1>
+  <div class="actions">
+    <% if @focus %><%= link_to "Whole request", profile_path(@profile), class: "button" %><% end %>
+    <%= link_to "Save for the Firefox Profiler", profile_path(@profile, format: :json), class: "button" %>
+    <%= link_to "All profiles", profiles_path, class: "button" %>
+  </div>
+</div>
+<table class="facts">
+  <tr><th>Recorded</th><td><%= @profile.created_at.to_fs(:long) %></td></tr>
+  <tr><th>Status</th><td><%= @profile.status %></td></tr>
+  <tr><th>Duration</th><td><%= @profile.duration_ms&.round %> ms</td></tr>
+  <tr><th>Samples</th><td><%= @graph.total %></td></tr>
+</table>
+
+<div class="flamegraph"><%= @svg.html_safe %></div>
+
+<div class="summary">
+  <section>
+    <h2>Self time by kind of code</h2>
+    <table>
+      <% @graph.by_kind.each do |kind, weight| %>
+        <tr>
+          <td><span class="swatch" style="background: <%= FlameGraph.color_of(kind) %>"></span> <%= kind %></td>
+          <td class="num"><%= @graph.pct(weight) %></td>
+        </tr>
+      <% end %>
+    </table>
+  </section>
+
+  <section>
+    <h2>Time with an extension on the stack</h2>
+    <% if @graph.extensions_on_stack.empty? %>
+      <p class="meta">No converted or native extension ran in this request.</p>
+    <% else %>
+      <table>
+        <% @graph.extensions_on_stack.each do |label, weight| %>
+          <tr><td><%= label %></td><td class="num"><%= @graph.pct(weight) %></td></tr>
+        <% end %>
+      </table>
+    <% end %>
+  </section>
+</div>
+
+<h2>Top self time</h2>
+<table>
+  <thead><tr><th>Function</th><th>Kind</th><th class="num">Self</th></tr></thead>
+  <% @graph.top_self(20).each do |func, weight| %>
+    <tr>
+      <td><code><%= @graph.display_name(func) %></code></td>
+      <td><%= @graph.label(func) %></td>
+      <td class="num"><%= @graph.pct(weight) %></td>
+    </tr>
+  <% end %>
+</table>

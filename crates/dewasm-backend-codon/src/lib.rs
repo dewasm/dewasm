@@ -233,6 +233,7 @@ impl Backend for CodonBackend {
             opts.default_wasi,
             &extra_seeds,
             false,
+            opts.function_names,
         )?;
 
         let mut w = CodeWriter::new("\t");
@@ -249,7 +250,14 @@ impl Backend for CodonBackend {
             let wasi = wasi_bundled(module, opts.default_wasi, bundler());
             w.line("");
             w.line("");
-            self::standalone_main(&mut w, module, &class_name, &rt_name, wasi);
+            self::standalone_main(
+                &mut w,
+                module,
+                &class_name,
+                &rt_name,
+                wasi,
+                opts.function_names,
+            );
         }
 
         Ok(vec![OutputFile {
@@ -267,6 +275,7 @@ fn standalone_main(
     class_name: &str,
     rt_name: &str,
     wasi: bool,
+    function_names: bool,
 ) {
     w.line("def _run_main():");
     w.indent();
@@ -345,7 +354,8 @@ fn standalone_main(
             w.line(format!("_inst.if{idx}.invoke(List[{rt_name}.Val]())"));
         }
         Some(idx) => {
-            w.line(format!("_inst._f{idx}()"));
+            let suffix = dewasm_backend::function_name_suffix(module, idx, function_names);
+            w.line(format!("_inst._f{idx}{suffix}()"));
         }
         None => {
             w.line("sys.stderr.write(\"no _start export\\n\")");
@@ -385,6 +395,7 @@ pub fn generate_class_with_units(
         default_wasi,
         &BTreeSet::new(),
         false,
+        false,
     )
 }
 
@@ -403,6 +414,7 @@ pub fn generate_spec_class_with_units(
         false,
         &BTreeSet::new(),
         true,
+        false,
     )
 }
 
@@ -413,6 +425,7 @@ fn generate_class_inner(
     default_wasi: bool,
     extra_seeds: &BTreeSet<String>,
     spec: bool,
+    function_names: bool,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&CodonBackend, module)?;
     let rt_name = runtime_name(class_name, linkage);
@@ -471,6 +484,7 @@ fn generate_class_inner(
     let gen = Gen {
         module,
         default_wasi,
+        function_names,
         tail_callers,
         tail_entry_set,
         tail_sigs: tail_sig_set.into_iter().collect(),
@@ -714,6 +728,8 @@ const DATA_LITERAL_HEX_DIGITS: usize = 8192;
 struct Gen<'a> {
     module: &'a Module,
     default_wasi: bool,
+    /// `GenOptions::function_names`: a method carries the module's own name after its index.
+    function_names: bool,
     /// Defined functions (function index space) containing a tail call.
     /// These are the ones split into `_f{idx}_body` plus a trampoline entry.
     tail_callers: BTreeSet<u32>,
@@ -742,6 +758,14 @@ struct Gen<'a> {
 impl<'a> Gen<'a> {
     fn use_unit(&self, id: &str) {
         self.uses.borrow_mut().insert(id.to_string());
+    }
+
+    /// The method name of defined function `func_idx`: `_f{idx}`.
+    /// With `function_names` it also carries the module's own name, as `_f12_sqlite3VdbeExec`.
+    fn func_name(&self, func_idx: u32) -> String {
+        let suffix =
+            dewasm_backend::function_name_suffix(self.module, func_idx, self.function_names);
+        format!("_f{func_idx}{suffix}")
     }
 
     /// Reference a runtime helper, recording its unit.
@@ -934,9 +958,9 @@ impl<'a> Gen<'a> {
             // A tail caller's entry re-enters its body.
             // A plain target's entry completes in one frame, which the criterion permits.
             let call = if self.tail_callers.contains(&idx) {
-                format!("self.p._f{idx}_body({args})")
+                format!("self.p.{}_body({args})", self.func_name(idx))
             } else {
-                format!("self.p._f{idx}({args})")
+                format!("self.p.{}({args})", self.func_name(idx))
             };
             if ty.results.is_empty() {
                 w.line(call);
@@ -1011,7 +1035,7 @@ impl<'a> Gen<'a> {
                 .map(|(k, t)| format!("a[{k}].{}()", val_get(*t)))
                 .collect::<Vec<_>>()
                 .join(", ");
-            let call = format!("self.p._f{idx}({args})");
+            let call = format!("self.p.{}({args})", self.func_name(idx));
             self.emit_boxed_return(w, &call, &ty.results);
             w.dedent();
             w.dedent();
@@ -1515,7 +1539,7 @@ impl<'a> Gen<'a> {
                     .map(|(k, t)| format!("a[{k}].{}()", val_get(*t)))
                     .collect::<Vec<_>>()
                     .join(", ");
-                let call = format!("self._f{idx}({args})");
+                let call = format!("self.{}({args})", self.func_name(idx));
                 self.emit_boxed_return(w, &call, &ty.results);
             }
             w.dedent();
@@ -1587,7 +1611,7 @@ impl<'a> Gen<'a> {
             self.use_unit("rt/boxed");
             format!("self.if{func_idx}.invoke(List[{rt}.Val]())")
         } else {
-            format!("self._f{func_idx}()")
+            format!("self.{}()", self.func_name(func_idx))
         }
     }
 
@@ -1618,12 +1642,12 @@ impl<'a> Gen<'a> {
                 .map(|i| format!("l{i}"))
                 .collect::<Vec<_>>()
                 .join(", ");
-            w.line(format!("def _f{idx}(self{params}){ret}:"));
+            w.line(format!("def {}(self{params}){ret}:", self.func_name(idx)));
             w.indent();
             if ty.results.is_empty() {
-                w.line(format!("self._f{idx}_body({args})"));
+                w.line(format!("self.{}_body({args})", self.func_name(idx)));
             } else {
-                w.line(format!("_r = self._f{idx}_body({args})"));
+                w.line(format!("_r = self.{}_body({args})", self.func_name(idx)));
             }
             w.line("while True:");
             w.indent();
@@ -1646,9 +1670,9 @@ impl<'a> Gen<'a> {
             w.line("");
         }
         let fname = if is_tail_caller {
-            format!("_f{idx}_body")
+            format!("{}_body", self.func_name(idx))
         } else {
-            format!("_f{idx}")
+            self.func_name(idx)
         };
         w.line(format!("def {fname}(self{params}){ret}:"));
         w.indent();
@@ -1968,7 +1992,11 @@ impl<'a> Gen<'a> {
             ))
         } else {
             let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
-            Some(format!("self._f{func}({})", args.join(", ")))
+            Some(format!(
+                "self.{}({})",
+                self.func_name(func),
+                args.join(", ")
+            ))
         }
     }
 
@@ -2376,7 +2404,7 @@ impl<'a> Gen<'a> {
             self.emit_boxed_results(w, &call, results);
         } else {
             let args: Vec<String> = args.iter().map(|a| self.expr(a)).collect();
-            let call = format!("self._f{func}({})", args.join(", "));
+            let call = format!("self.{}({})", self.func_name(func), args.join(", "));
             match results {
                 [] => w.line(call),
                 [r] => w.line(format!("{} = {call}", temp(*r))),

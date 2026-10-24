@@ -373,6 +373,7 @@ fn generated_bytes(backend: &'static (dyn Backend + Sync), bytes: &[u8]) -> Resu
                         runtime: RuntimeLinkage::Embedded,
                         default_wasi: true,
                         data_file: None,
+                        function_names: false,
                     },
                 )?;
                 Ok(files.iter().map(|file| file.contents.len() as u64).sum())

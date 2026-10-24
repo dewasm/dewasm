@@ -14,6 +14,8 @@ Those are `Package::Rt`, `Package::Rt::Memory`, and so on.
 Perl package names are absolute, so the embedded runtime is prefixed rather than lexically nested.
 Control flow lowers to Perl's native labeled blocks and loops, with no flag-variable scheme.
 Every `br` is a direct `last Ln`/`next Ln`.
+A function is a `sub` named `_f<index>`.
+With `--function-names`, the module's `name` section joins it: `_f289_sqlite3VdbeExec`.
 
 In **library** mode, `--module-name` is required and is taken unchanged as the package name.
 It is `::`-separated segments, each matching `[A-Za-z_][A-Za-z0-9_]*`.

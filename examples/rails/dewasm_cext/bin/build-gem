@@ -1,0 +1,8 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+require_relative "../lib/dewasm_cext/builder"
+
+name, version = ARGV
+abort "usage: build-gem <gem name> <version>" unless name && version
+puts DewasmCExt::Builder.new(name, version).ensure_built

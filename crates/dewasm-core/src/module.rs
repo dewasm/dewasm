@@ -4,8 +4,8 @@ use std::collections::HashMap;
 
 use anyhow::{Context, Result};
 use wasmparser::{
-    CompositeInnerType, ConstExpr, DataKind, ElementItems, ElementKind, ExternalKind, Operator,
-    Parser, Payload, TypeRef, Validator, WasmFeatures,
+    BinaryReader, CompositeInnerType, ConstExpr, DataKind, ElementItems, ElementKind, ExternalKind,
+    Name, NameSectionReader, Operator, Parser, Payload, TypeRef, Validator, WasmFeatures,
 };
 
 use crate::debug_line::LineTable;
@@ -84,6 +84,25 @@ fn collect_line_table(bytes: &[u8]) -> Result<Option<LineTable>> {
     LineTable::parse(&debug_sections, code_section_start)
 }
 
+/// The function names of a `name` custom section.
+/// `Validator` does not check custom sections, so a malformed one ends the reading.
+/// The names read so far are kept: they are a debugging aid, not part of the module's meaning.
+fn function_names(data: &[u8], offset: usize) -> HashMap<u32, String> {
+    let mut names = HashMap::new();
+    for subsection in NameSectionReader::new(BinaryReader::new(data, offset)) {
+        let Ok(Name::Function(map)) = subsection else {
+            continue;
+        };
+        for naming in map {
+            let Ok(naming) = naming else {
+                return names;
+            };
+            names.insert(naming.index, naming.name.to_string());
+        }
+    }
+    names
+}
+
 pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result<ir::Module> {
     if let Err(err) = Validator::new_with_features(features()).validate_all(bytes) {
         // Attribute the refusal to the proposals whose features make the module pass `Validator`.
@@ -121,6 +140,7 @@ pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result
             .as_ref()
             .map(|t| t.files.clone())
             .unwrap_or_default(),
+        func_names: HashMap::new(),
     };
 
     // Type indices of defined functions, in code section order.
@@ -358,6 +378,9 @@ pub fn build_module_with_options(bytes: &[u8], options: &BuildOptions) -> Result
                         )
                     })?;
                 module.funcs.push(func);
+            }
+            Payload::CustomSection(reader) if reader.name() == "name" => {
+                module.func_names = function_names(reader.data(), reader.data_offset());
             }
             _ => {}
         }

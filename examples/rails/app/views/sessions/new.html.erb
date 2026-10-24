@@ -1,0 +1,22 @@
+<% content_for :title, "Sign in" %>
+
+<div class="sign-in">
+  <h1>Sign in</h1>
+  <p class="meta">The seeded account is <code>author@example.com</code> with <code>secret</code>.</p>
+
+  <%= form_with url: session_path do |form| %>
+    <div class="field">
+      <%= form.label :email_address, "Email address" %>
+      <%= form.email_field :email_address, required: true, autofocus: true, autocomplete: "username",
+                                           value: params[:email_address] %>
+    </div>
+    <div class="field">
+      <%= form.label :password %>
+      <%= form.password_field :password, required: true, autocomplete: "current-password", maxlength: 72 %>
+    </div>
+    <div class="actions">
+      <%= form.submit "Sign in" %>
+      <%= link_to "Forgot password?", new_password_path %>
+    </div>
+  <% end %>
+</div>

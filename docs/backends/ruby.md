@@ -2,7 +2,7 @@
 
 `--target ruby` (the default).
 The most complete backend, and the host for the SQLite and CRuby goal examples.
-Those go up to and including Rails running on the converted SQLite ([`examples/rails`](../../examples/rails/README.md)).
+Those go up to a Rails application whose C extensions are all converted ([`examples/rails`](../../examples/rails/README.md)).
 
 ## Output shape
 
@@ -20,6 +20,11 @@ A valid name can still match a constant MRI defines.
 For example, `--module-name Ruby` conflicts with Ruby 4.0's built-in `Ruby` module.
 It fails at load with "Ruby is not a class (TypeError)", so pick a free constant.
 In **standalone** mode the class is always `Program` and `--module-name` is rejected.
+
+A function is a method named `_f<index>`.
+With `--function-names`, the module's `name` section joins it: `_f289_sqlite3VdbeExec`.
+A profile or a stack trace then reads like the C source.
+The index stays first, so the name is unique and valid whatever the section holds.
 
 ## Requirements
 

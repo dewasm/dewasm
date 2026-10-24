@@ -18,6 +18,8 @@ Floats are native `float32`/`float`, with `@llvm` units for the bit paths:
 
 Control flow uses the branch-register model.
 Block bodies are spliced inline, and forward branches set a per-function `_br` register.
+A function is a method named `_f<index>`.
+With `--function-names`, the module's `name` section joins it: `_f289_sqlite3VdbeExec`.
 Only real loops become `while True:`.
 
 | Mode | Class | Runtime class |

@@ -175,6 +175,7 @@ pub fn generate_class_with_units(
         default_wasi,
         &BTreeSet::new(),
         None,
+        false,
     )
 }
 
@@ -185,6 +186,7 @@ fn generate_class_inner(
     default_wasi: bool,
     extra_seeds: &BTreeSet<String>,
     data_file: Option<&str>,
+    function_names: bool,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&PythonBackend, module)?;
     // Prefix sums: `data_offsets[i]` is where segment `i` begins in the concatenated blob.
@@ -207,6 +209,7 @@ fn generate_class_inner(
     let gen = Gen {
         module,
         default_wasi,
+        function_names,
         uses: RefCell::new(extra_seeds.clone()),
         flat: RefCell::new(None),
         tail_callers,
@@ -310,6 +313,7 @@ impl Backend for PythonBackend {
             opts.default_wasi,
             &extra_seeds,
             opts.data_file.as_ref().map(|c| c.data_file_name.as_str()),
+            opts.function_names,
         )?;
 
         let mut w = CodeWriter::new("\t");
@@ -554,6 +558,7 @@ const MAX_PARKED_ARITY: usize = 8;
 struct Gen<'a> {
     module: &'a Module,
     default_wasi: bool,
+    function_names: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
     /// Flat-dispatch plan for the function being emitted.
@@ -994,11 +999,24 @@ impl<'a> Gen<'a> {
         py_string(&type_key(ty, val_name))
     }
 
+    /// The method name of defined function `func_idx`: `_f{idx}`.
+    /// With `function_names` it also carries the module's own name, as `_f12_sqlite3VdbeExec`.
+    fn func_name(&self, func_idx: u32) -> String {
+        let suffix =
+            dewasm_backend::function_name_suffix(self.module, func_idx, self.function_names);
+        format!("_f{func_idx}{suffix}")
+    }
+
+    /// The split body of tail-calling function `func_idx`: its name with `_body` after it.
+    fn func_body_name(&self, func_idx: u32) -> String {
+        format!("{}_body", self.func_name(func_idx))
+    }
+
     fn func_ref(&self, func_idx: u32) -> String {
         if (func_idx as usize) < self.module.imported_funcs.len() {
             format!("self.if{func_idx}")
         } else {
-            format!("self._f{func_idx}")
+            format!("self.{}", self.func_name(func_idx))
         }
     }
 
@@ -1033,7 +1051,7 @@ impl<'a> Gen<'a> {
             self.func_ref(func_idx)
         );
         if self.tail_callers.contains(&func_idx) {
-            format!("[{base}, self._f{func_idx}_body]")
+            format!("[{base}, self.{}]", self.func_body_name(func_idx))
         } else {
             format!("[{base}]")
         }
@@ -1044,7 +1062,7 @@ impl<'a> Gen<'a> {
         if (func_idx as usize) < self.module.imported_funcs.len() {
             format!("self.if{func_idx}({args})")
         } else {
-            format!("self._f{func_idx}({args})")
+            format!("self.{}({args})", self.func_name(func_idx))
         }
     }
 
@@ -1064,20 +1082,21 @@ impl<'a> Gen<'a> {
                 .map(|i| format!("l{i}"))
                 .collect::<Vec<_>>()
                 .join(", ");
-            w.line(format!("def _f{idx}(self{params}):"));
+            w.line(format!("def {}(self{params}):", self.func_name(idx)));
             w.indent();
             self.use_unit("rt/tail_call");
             w.line(format!(
-                "return {}.trampoline(self, self._f{idx}_body({args}))",
-                self.rt_name
+                "return {}.trampoline(self, self.{}({args}))",
+                self.rt_name,
+                self.func_body_name(idx)
             ));
             w.dedent();
             w.line("");
         }
         let name = if is_tail_caller {
-            format!("_f{idx}_body")
+            self.func_body_name(idx)
         } else {
-            format!("_f{idx}")
+            self.func_name(idx)
         };
         w.line(format!("def {name}(self{params}):"));
         w.indent();
@@ -1677,7 +1696,7 @@ impl<'a> Gen<'a> {
             // It does not enter a fresh one per hop.
             Stmt::ReturnCall { func, args } => {
                 let target = if self.tail_callers.contains(func) {
-                    format!("self._f{func}_body")
+                    format!("self.{}", self.func_body_name(*func))
                 } else {
                     self.func_ref(*func)
                 };

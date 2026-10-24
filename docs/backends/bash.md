@@ -14,6 +14,8 @@ Results come back in `R0, R1, ...`.
 A trap sets `TRAP_MSG`, and `proc_exit` sets `EXIT_CODE`.
 Imports resolve from the caller's `IMPORTS` associative array (`[module.name]=function`).
 Control flow maps onto `while :; do ...; break; done` wrappers with `break N` / `continue N`.
+A function is a shell function named `<p>f<index>`.
+With `--function-names`, the module's `name` section joins it: `<p>f289_sqlite3VdbeExec`.
 
 In **library** mode `--module-name` is required, and the prefix is that name **in lower case** plus `_`.
 `Sqlite3Shell` gives `sqlite3shell_`, and `add` gives `add_`.

@@ -174,6 +174,7 @@ macro_rules! module_name_policy_suite {
                     runtime: dewasm_backend::RuntimeLinkage::Embedded,
                     default_wasi: $default_wasi,
                     data_file: None,
+                    function_names: false,
                 },
             )?;
             Ok(String::from_utf8(files.remove(0).contents)?)

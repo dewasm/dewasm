@@ -1,6 +1,6 @@
 //! Checks the AGENTS.md writing style rules that a program can check.
 //! The text is every tracked Markdown file and every comment line in a tracked source file.
-//! Each line of text holds one sentence.
+//! Each line of text holds one sentence, and ends where the sentence ends.
 //! A Markdown sentence has at most 100 read characters: the text and code a reader sees.
 //! A comment line has at most 100 columns, counting its indentation and comment marker.
 //! Table rows, code blocks, and HTML are not text in this sense.
@@ -15,13 +15,29 @@ use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
 
 const MAX_LENGTH: usize = 100;
 
-/// One line of text: the length the bound applies to, and the text the sentence check reads.
+/// One line of text: the length the bound applies to, and the text the sentence checks read.
 /// That text masks each code span to `` `x` ``, so a period inside code never ends a sentence.
+/// A `fragment` is a line that is no sentence by form: a heading, a metadata line, `[!NOTE]`.
+/// An `item` line starts a list item, so the line before it was not wrapped into it.
 #[derive(Debug, Default, PartialEq)]
 struct TextLine {
     number: usize,
     length: usize,
     text: String,
+    fragment: bool,
+    item: bool,
+}
+
+impl TextLine {
+    /// Whether this line is the rest of a sentence the line before it did not finish.
+    fn continues(&self, previous: &TextLine) -> bool {
+        self.number == previous.number + 1
+            && !self.item
+            && self
+                .text
+                .trim_start()
+                .starts_with(|c: char| c.is_ascii_lowercase() || c == '(' || c == '`')
+    }
 }
 
 /// The comment markers of a source file, by extension; `None` for a file the check does not read.
@@ -29,7 +45,8 @@ pub(crate) fn comment_markers(path: &str) -> Option<&'static [&'static str]> {
     let ext = path.rsplit_once('.')?.1;
     Some(match ext {
         "rs" | "go" => &["//"],
-        "java" | "c" | "h" => &["//", "/*", "*"],
+        "java" | "c" | "h" | "js" => &["//", "/*", "*"],
+        "css" => &["/*", "*"],
         "rb" | "py" | "sh" | "pl" | "codon" | "toml" | "yml" => &["#"],
         "wat" => &[";;"],
         _ => return None,
@@ -54,12 +71,17 @@ pub(crate) fn markdown_lines(text: &str, read_tables: bool) -> Vec<TextLine> {
         | Options::ENABLE_STRIKETHROUGH
         | Options::ENABLE_YAML_STYLE_METADATA_BLOCKS;
     let mut skipped_depth = 0;
+    // A heading and the text of an image are no sentence by form.
+    let mut in_heading = false;
     for (event, range) in Parser::new_ext(text, options).into_offset_iter() {
         match event {
             Event::Start(Tag::CodeBlock(_)) => skipped_depth += 1,
             Event::End(TagEnd::CodeBlock | TagEnd::MetadataBlock(_)) => skipped_depth -= 1,
             Event::Start(Tag::Table(_)) if !read_tables => skipped_depth += 1,
             Event::End(TagEnd::Table) if !read_tables => skipped_depth -= 1,
+            Event::Start(Tag::Heading { .. } | Tag::Image { .. }) => in_heading = true,
+            Event::End(TagEnd::Heading(_) | TagEnd::Image) => in_heading = false,
+            Event::Start(Tag::Item) => lines[line_of(range.start)].item = true,
             _ if skipped_depth > 0 => {}
             // Cells are separate, so a word never runs across a cell border.
             Event::End(TagEnd::TableCell) => append(&mut lines[line_of(range.start)], "", " "),
@@ -73,6 +95,7 @@ pub(crate) fn markdown_lines(text: &str, read_tables: bool) -> Vec<TextLine> {
                         let line = &mut lines[first + index];
                         line.length = raw.chars().count();
                         line.text = raw.to_owned();
+                        line.fragment = true;
                     }
                 }
                 skipped_depth += 1;
@@ -80,24 +103,54 @@ pub(crate) fn markdown_lines(text: &str, read_tables: bool) -> Vec<TextLine> {
             Event::Text(read) => {
                 let mut start = range.start;
                 for piece in read.split('\n') {
-                    append(&mut lines[line_of(start)], piece, piece);
+                    let line = &mut lines[line_of(start)];
+                    append(line, piece, piece);
+                    line.fragment |= in_heading;
                     start = text[start..].find('\n').map_or(start, |i| start + i + 1);
                 }
             }
             Event::Code(code) => {
                 let masked = format!("`{}`", "x".repeat(code.chars().count()));
-                append(&mut lines[line_of(range.start)], &code, &masked);
+                let line = &mut lines[line_of(range.start)];
+                append(line, &code, &masked);
+                line.fragment |= in_heading;
             }
             _ => {}
         }
     }
     lines.retain(|line| !line.text.is_empty());
+    for line in &mut lines {
+        line.fragment |= is_alert_mark(line.text.trim()) || is_no_sentence(&line.text);
+    }
     lines
+}
+
+/// Whether `text` is no sentence by its form.
+/// That is a line with no letter, with columns two spaces apart, or with a `---` rule.
+fn is_no_sentence(text: &str) -> bool {
+    let text = text.trim();
+    !text.contains(char::is_alphabetic)
+        || text.contains("  ")
+        || text.starts_with("---")
+        || text.ends_with("---")
 }
 
 fn append(line: &mut TextLine, read: &str, masked: &str) {
     line.length += read.chars().count();
     line.text.push_str(masked);
+}
+
+/// Whether `text` is a GitHub note mark such as `[!NOTE]`.
+fn is_alert_mark(text: &str) -> bool {
+    text.starts_with("[!") && text.ends_with(']')
+}
+
+/// Whether `text` ends where a sentence does, or where an item of a list does (`;`).
+/// A closing mark after it is allowed.
+fn ends_sentence(text: &str) -> bool {
+    text.trim_end()
+        .trim_end_matches([')', ']', '"', '\'', '*', '_'])
+        .ends_with(['.', ':', '?', '!', ';'])
 }
 
 /// Whether `content` is a Markdown link definition, as in "[`Backend`]: dewasm_backend::Backend".
@@ -124,8 +177,15 @@ fn without_link_targets(text: &str) -> String {
 
 /// Directives are comments a program reads, not a person, so they are not text.
 /// A unit's `# requires:` header is one, as are the lint, encoding, and build directives.
+/// A C `#define` line inside a Ruby string starts with `#` too.
 fn is_directive(content: &str) -> bool {
     const DIRECTIVES: &[&str] = &[
+        "define ",
+        "include ",
+        "ifdef ",
+        "ifndef ",
+        "endif",
+        "undef ",
         "requires:",
         "shellcheck ",
         "SPDX-",
@@ -172,6 +232,11 @@ pub(crate) fn comment_lines(markers: &[&str], text: &str) -> Vec<TextLine> {
         let Some(rest) = rest else {
             continue;
         };
+        // A doc comment is Markdown, so `# Examples` after the marker is a heading.
+        let doc_heading = rest
+            .trim_start_matches(['/', '!', '*', ';'])
+            .trim_start()
+            .starts_with("# ");
         let content = rest
             .trim_start_matches(['/', '!', '*', '#', ';'])
             .trim_start();
@@ -194,6 +259,8 @@ pub(crate) fn comment_lines(markers: &[&str], text: &str) -> Vec<TextLine> {
             number: index + 1,
             length: line.chars().count(),
             text: without_link_targets(&mask_code_spans(content)),
+            fragment: doc_heading || is_no_sentence(content),
+            item: starts_list_item(content),
         });
     }
     out
@@ -251,6 +318,11 @@ fn ends_with_abbreviation(prefix: &[char]) -> bool {
     })
 }
 
+/// Whether a comment line starts a Markdown list item: `- `, `* `, or `1. `.
+fn starts_list_item(content: &str) -> bool {
+    content.starts_with("- ") || content.starts_with("* ") || strip_list_number(content) != content
+}
+
 fn strip_list_number(text: &str) -> &str {
     let unmarked = text.trim_start_matches(['*', '#', ' ']);
     let digits = unmarked.len()
@@ -279,9 +351,14 @@ fn tracked_files(root: &Path) -> Vec<String> {
         .collect()
 }
 
+/// Tracked files another program writes, text included.
+/// Active Record rewrites this one with its own header on every schema dump.
+const WRITTEN_BY_A_PROGRAM: &[&str] = &["examples/rails/db/schema.rb"];
+
 /// Whether the checks read `path`.
 fn is_checked_text(path: &str) -> bool {
-    path.ends_with(".md") || comment_markers(path).is_some()
+    !WRITTEN_BY_A_PROGRAM.contains(&path)
+        && (path.ends_with(".md") || comment_markers(path).is_some())
 }
 
 /// Each defect of the text file `path` under `root`, as `path:line: what`.
@@ -293,12 +370,20 @@ fn file_defects(root: &Path, path: &str) -> Vec<String> {
         None => (markdown_lines(&text, false), "read characters"),
     };
     let mut report = Vec::new();
-    for line in lines {
+    for (index, line) in lines.iter().enumerate() {
         if line.length > MAX_LENGTH {
             report.push(format!("{path}:{}: {} {unit}", line.number, line.length));
         }
         if holds_two_sentences(&line.text) {
             report.push(format!("{path}:{}: two sentences", line.number));
+        }
+        let wrapped = !line.fragment
+            && !ends_sentence(&line.text)
+            && lines
+                .get(index + 1)
+                .is_some_and(|next| next.continues(line));
+        if wrapped {
+            report.push(format!("{path}:{}: wrapped sentence", line.number));
         }
     }
     report
@@ -386,6 +471,39 @@ mod tests {
         assert!(!holds_two_sentences("Ruby vs. Python."));
         assert!(!holds_two_sentences("2. A library-mode name is kept."));
         assert!(!holds_two_sentences("## 3. Library mode: call the exports"));
+    }
+
+    #[test]
+    fn a_line_ends_where_its_sentence_does() {
+        assert!(ends_sentence("One sentence."));
+        assert!(ends_sentence("Two parts (decision 98)."));
+        assert!(ends_sentence("The commands are:"));
+        assert!(!ends_sentence("A sentence wrapped after a"));
+        assert!(!ends_sentence("A sentence ending in `xxxx`"));
+        let md = "# A heading\n\nA line\nwrapped.\n\n> [!NOTE]\n> One note.\n- Tab\n- `q`: exit\n";
+        let lines = markdown_lines(md, false);
+        let shape: Vec<(usize, bool, bool)> = lines
+            .iter()
+            .map(|l| (l.number, l.fragment, l.item))
+            .collect();
+        let expected = [
+            (1, true, false),
+            (3, false, false),
+            (4, false, false),
+            (6, true, false),
+            (7, false, false),
+            (8, false, true),
+            (9, false, true),
+        ];
+        assert_eq!(shape, expected);
+        assert!(lines[2].continues(&lines[1]));
+        assert!(!lines[6].continues(&lines[5]));
+        let rust = "/// # Examples\n/// A doc line.\n/// - an item\n";
+        let shape: Vec<(bool, bool)> = comment_lines(&["//"], rust)
+            .iter()
+            .map(|l| (l.fragment, l.item))
+            .collect();
+        assert_eq!(shape, [(true, false), (false, false), (false, true)]);
     }
 
     fn texts(lines: Vec<TextLine>) -> Vec<(usize, usize, String)> {

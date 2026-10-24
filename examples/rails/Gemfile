@@ -1,0 +1,32 @@
+source "https://rubygems.org"
+
+require_relative "dewasm_cext/lib/dewasm_cext/gemfile"
+
+gem "rails", "~> 8.1.4"
+gem "propshaft"
+gem "sqlite3", ">= 2.1"
+# WEBrick serves in place of Puma, which is a C extension.
+gem "webrick"
+gem "rackup"
+gem "importmap-rails"
+gem "turbo-rails"
+gem "stimulus-rails"
+
+gem "bcrypt", "~> 3.1.7"
+gem "herb"
+gem "reactionview", "~> 0.6"
+gem "pygments.rb", "~> 5.0"
+
+gem "tzinfo-data", platforms: %i[ windows jruby ]
+
+group :dewasm do
+  dewasm_gem "sqlite3", "2.10.1"
+  dewasm_gem "bcrypt", "3.1.22"
+  dewasm_gem "herb", "0.11.1"
+  dewasm_gem "nokogiri", "1.19.4"
+  dewasm_gem "pygments.rb", "5.0.0"
+end
+
+group :development, :test do
+  gem "vernier", require: false
+end

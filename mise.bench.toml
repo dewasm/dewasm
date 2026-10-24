@@ -6,7 +6,6 @@ wabt = "github:WebAssembly/wabt"
 [tools]
 tinygo = "0.42.0"
 wabt = "1.0.42"
-wasmtime = "49.0.2"
 
 [tools.graalpy]
 version = "25.0.3"

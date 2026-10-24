@@ -1,0 +1,40 @@
+<% content_for :title, "Profiles" %>
+
+<div class="page-head">
+  <h1>Request profiles</h1>
+  <%= render "shared/search", url: profiles_path, query: @query, placeholder: "Search by path or mode" %>
+</div>
+<p class="meta">
+  Each entry is one request recorded by Vernier while profiling was on.
+  Turn it on with the button in the header, browse, then come back here.
+  A query of <code>?profile=1</code> records a single request.
+</p>
+
+<% if @profiles.empty? %>
+  <p class="empty">No profile<%= " matches" if @query.present? %> yet.</p>
+<% else %>
+  <table>
+    <thead>
+      <tr><th>#</th><th>Request</th><th>Gems</th><th>Status</th><th class="num">Duration</th><th class="num">Samples</th><th>Recorded</th></tr>
+    </thead>
+    <tbody>
+      <% @profiles.each do |profile| %>
+        <tr>
+          <td class="nowrap"><%= link_to profile.id, profile_path(profile) %></td>
+          <td>
+            <%= link_to profile_path(profile), title: profile.path do %>
+              <code><%= profile.http_method %> <%= truncate(profile.path, length: 60) %></code>
+            <% end %>
+          </td>
+          <td class="nowrap"><span class="badge <%= profile.mode %>"><%= profile.mode || "?" %></span></td>
+          <td class="nowrap"><%= profile.status %></td>
+          <td class="num nowrap"><%= profile.duration_ms && "#{profile.duration_ms.round} ms" %></td>
+          <td class="num nowrap"><%= profile.sample_count %></td>
+          <td class="nowrap"><%= profile.created_at.to_fs(:short) %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% end %>
+
+<%= render "shared/pagination", page: @page %>

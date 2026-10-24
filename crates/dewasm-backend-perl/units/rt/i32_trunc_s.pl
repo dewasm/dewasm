@@ -1,6 +1,6 @@
 # requires: rt/trap
-# The range check runs on the double itself: every NV strictly inside
-# (-2^31 - 1, 2^31) truncates in range, and the bounds are exact NVs.
+# The range check runs on the double itself.
+# Every NV strictly inside (-2^31 - 1, 2^31) truncates in range, and both bounds are exact NVs.
 use POSIX ();
 sub i32_trunc_s {
     my $x = $_[0];

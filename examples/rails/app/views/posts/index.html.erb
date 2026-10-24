@@ -1,0 +1,25 @@
+<% content_for :title, "Posts" %>
+
+<div class="page-head">
+  <h1>Posts</h1>
+  <div class="actions">
+    <%= render "shared/search", url: posts_path, query: @query, placeholder: "Search posts" %>
+    <% if authenticated? %>
+      <%= link_to "New post", new_post_path, class: "button primary" %>
+    <% end %>
+  </div>
+</div>
+
+<% if @query.present? %>
+  <p class="meta"><%= pluralize(@page.total, "post") %> matching <q><%= @query %></q>.</p>
+<% end %>
+
+<div id="posts">
+  <% if @posts.empty? %>
+    <p class="empty">No post<%= " matches" if @query.present? %>.</p>
+  <% else %>
+    <%= render @posts %>
+  <% end %>
+</div>
+
+<%= render "shared/pagination", page: @page %>

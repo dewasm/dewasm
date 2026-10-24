@@ -423,3 +423,37 @@ JRuby's `cowsay` time tracks whether its script compiles at all.
   The phase split and the 60/70 kB literal probe are in the PR that adds this entry.
   The split-literal reversal is in that PR too.
   Related: #206 (the largest generated methods never JIT).
+
+## `cext-vs-ruby-fallback` (2026-10-22)
+
+A gem's own Ruby fallback beats its C extension converted by dewasm.
+
+- **Tried**: `websocket_mask` of `websocket-driver` (a 32-line XOR loop) against the dewasm `ruby.h`.
+  The comparison is the gem's pure Ruby `WebSocket::Mask`; the `ruby.h` is decision 102's.
+- **Verdict**: rejected; the converted loop is 3 to 6 times slower (YJIT: 22 µs against 3.5 µs for
+  128 bytes, 5.6 ms against 1.6 ms for 64 KiB).
+  A C byte loop becomes masked Ruby arithmetic, and each string crosses the boundary as a copy.
+  `racc`'s `cparse` calls back into Ruby per reduction, so its Ruby runtime wins the same way.
+- **Invalidated when**: the Ruby backend's memory access or masking gets several times cheaper.
+  Or a fallback is itself slow, such as a parser written against a C API.
+- **Details**: the build was a `websocket-driver` recipe of `examples/rails/dewasm_cext`.
+  The measurement was a script beside its tests.
+  Both are removed, since the application does not use them.
+  The pull request that rewrites `examples/rails` carries them and the discussion.
+
+## `ruby-sampling-profiler` (2026-10-23)
+
+A profiler in Ruby alone cannot sample one request finely enough.
+
+- **Tried**: a second thread calling `backtrace_locations` on the request thread every 0.5 ms.
+  Also a child process sending a signal every 1 ms, with the trap handler taking the sample.
+  The aim was a profile page with no native extension, Vernier's included.
+- **Verdict**: rejected; the sampling thread runs about 8 times a second.
+  The computing thread yields the interpreter lock only when its time slice ends (100 ms).
+  `RUBY_THREAD_TIMESLICE=1` raises that to 84 a second, about one sample per 12 ms.
+  A trap handler runs in the main thread, which waits for the lock the same way.
+  Its 900 signals a second were all handled after the request thread had finished.
+  A request of 100 ms would give under 10 samples, so the profile pages use Vernier.
+- **Invalidated when**: CRuby lets a thread read another thread's stack without the lock.
+  The same holds when the time slice can go below 10 ms.
+- **Details**: the pull request that rewrites `examples/rails`; the probes are in its discussion.

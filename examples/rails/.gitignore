@@ -1,4 +1,23 @@
-sqlite3/lib/sqlite3/sqlite3_wasm.rb
-app/
-tmp/
-Gemfile.lock
+# The converted gems, their downloads, and the libraries built for them (`dewasm_gem`).
+/vendor/dewasm/
+/dewasm_cext/test/cache/
+
+# The lock differs by mode: `BUNDLE_WITHOUT=dewasm` leaves the `path:` gems out of it.
+/Gemfile.lock
+
+# A standard Rails application's ignores.
+/.bundle
+/log/*
+/tmp/*
+/storage/*
+!/log/.keep
+!/tmp/.keep
+!/storage/.keep
+/tmp/pids/*
+!/tmp/pids/
+!/tmp/pids/.keep
+/public/assets
+/config/master.key
+/config/credentials/*.key
+/app/assets/builds/*
+!/app/assets/builds/.keep

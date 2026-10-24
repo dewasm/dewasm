@@ -217,3 +217,57 @@ url_api = "https://api.github.com/repos/kateinoigakukun/wasi-vfs/releases/assets
 checksum = "sha256:b3d86d63350ae48fda9b5877647cca4d9c1ff2f637db5e4eb40852aa5361c340"
 url = "https://github.com/kateinoigakukun/wasi-vfs/releases/download/v0.6.3/wasi-vfs-cli-x86_64-apple-darwin.zip"
 url_api = "https://api.github.com/repos/kateinoigakukun/wasi-vfs/releases/assets/394907751"
+
+[[tools.wasmtime]]
+version = "49.0.2"
+backend = "aqua:bytecodealliance/wasmtime"
+specifiers = ["49.0.2"]
+
+[tools.wasmtime."platforms.linux-arm64"]
+checksum = "sha256:ca14988c6da3d92512bd9c3bad6cbd06b1f5743b6911a9e709f1a6fa30637d7f"
+url = "https://github.com/bytecodealliance/wasmtime/releases/download/v49.0.2/wasmtime-v49.0.2-aarch64-linux.tar.xz"
+url_api = "https://api.github.com/repos/bytecodealliance/wasmtime/releases/assets/606056495"
+provenance = "github-attestations"
+
+[tools.wasmtime."platforms.linux-x64"]
+checksum = "sha256:a4d6e9e3a5a60f527cf7793d674c48930c80c2e8977995b8a275cad3254b9322"
+url = "https://github.com/bytecodealliance/wasmtime/releases/download/v49.0.2/wasmtime-v49.0.2-x86_64-linux.tar.xz"
+url_api = "https://api.github.com/repos/bytecodealliance/wasmtime/releases/assets/606056679"
+provenance = "github-attestations"
+
+[tools.wasmtime."platforms.macos-arm64"]
+checksum = "sha256:ea5a79261caa39819b863fd850879428cf90548353e1e5cf9bcbcc4e7addf2c1"
+url = "https://github.com/bytecodealliance/wasmtime/releases/download/v49.0.2/wasmtime-v49.0.2-aarch64-macos.tar.xz"
+url_api = "https://api.github.com/repos/bytecodealliance/wasmtime/releases/assets/606056519"
+provenance = "github-attestations"
+
+[tools.wasmtime."platforms.macos-x64"]
+checksum = "sha256:b24513efff6a5dbeb196e2a01097ba632a8b0ea1563ba297ada26ceb3aa067d9"
+url = "https://github.com/bytecodealliance/wasmtime/releases/download/v49.0.2/wasmtime-v49.0.2-x86_64-macos.tar.xz"
+url_api = "https://api.github.com/repos/bytecodealliance/wasmtime/releases/assets/606056715"
+provenance = "github-attestations"
+
+[[tools.wizer]]
+version = "11.0.3"
+backend = "github:bytecodealliance/wizer"
+specifiers = ["11.0.3"]
+
+[tools.wizer."platforms.linux-arm64"]
+checksum = "sha256:73bffcbaf736ef24109a48cac431d070c43cb2ee8a14a840576f7aec0133d8d6"
+url = "https://github.com/bytecodealliance/wizer/releases/download/v11.0.3/wizer-v11.0.3-aarch64-linux.tar.xz"
+url_api = "https://api.github.com/repos/bytecodealliance/wizer/releases/assets/370881984"
+
+[tools.wizer."platforms.linux-x64"]
+checksum = "sha256:36016e7f846f38ad09f22eb4bafb99068f038c431eb9613ddf59e31ad8a21414"
+url = "https://github.com/bytecodealliance/wizer/releases/download/v11.0.3/wizer-v11.0.3-x86_64-linux.tar.xz"
+url_api = "https://api.github.com/repos/bytecodealliance/wizer/releases/assets/370882002"
+
+[tools.wizer."platforms.macos-arm64"]
+checksum = "sha256:7c54896b456b6ca024af6005ebc5538282dee7cd9f0c9c1155855d29b9c461b1"
+url = "https://github.com/bytecodealliance/wizer/releases/download/v11.0.3/wizer-v11.0.3-aarch64-macos.tar.xz"
+url_api = "https://api.github.com/repos/bytecodealliance/wizer/releases/assets/370881989"
+
+[tools.wizer."platforms.macos-x64"]
+checksum = "sha256:325bcd4758e9509dd81849d7f4ab8cf69cbe084795e138a996c70f471b6f8b83"
+url = "https://github.com/bytecodealliance/wizer/releases/download/v11.0.3/wizer-v11.0.3-x86_64-macos.tar.xz"
+url_api = "https://api.github.com/repos/bytecodealliance/wizer/releases/assets/370882008"
