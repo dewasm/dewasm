@@ -163,6 +163,8 @@ input[type=submit], .button.primary {
 input[type=submit]:hover { filter: brightness(0.92); }
 .actions { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 1rem 0; }
 .actions form { margin: 0; }
+.actions .check { display: inline-flex; align-items: center; gap: 0.4rem; margin: 0; font-weight: 500; }
+.actions .check input { margin: 0; accent-color: var(--accent); }
 .page-head .actions { margin: 0; }
 .button.disabled { color: var(--muted); border-color: var(--soft); cursor: default; }
 

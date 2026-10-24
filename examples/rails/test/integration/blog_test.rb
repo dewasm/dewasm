@@ -97,7 +97,7 @@ class BlogTest < ActionDispatch::IntegrationTest
   test "the post page's View HTML state shows the served HTML, highlighted by Pygments" do
     post = Post.find_by!(title: "Hello from pure Ruby")
     get post_path(post)
-    assert_select "button[data-herb-toggle=code]", text: /View HTML/
+    assert_select "label.check input[type=checkbox]:not([checked])"
     assert_select "article .body pre.highlight", 0
     assert_select "head style", /\.highlight \.nt/
 
@@ -106,8 +106,6 @@ class BlogTest < ActionDispatch::IntegrationTest
     slots = slot_text(response.body)
     assert_includes slots, %(<span class="nt">b</span>), "the source is not highlighted"
     assert_not_includes slots, "nt\">script", "sanitize left the script tag in"
-    assert_includes slots, "View rendered"
-    assert_includes slots, "Pygments #{Pygments.pygments_version} through pygments.rb"
   end
 
   test "a profiled request records a flame graph" do

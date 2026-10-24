@@ -141,11 +141,11 @@ for one request.
 
 ## Pygments on a converted CPython
 
-A post page has a `View HTML` button: the body is then shown as the HTML it is served as,
+A post page has a `View HTML` check box: the body is then shown as the HTML it is served as,
 highlighted, in place of the rendering.
 The seeded post's HTML has no `<script>` tag, since `sanitize` removed the one its author wrote.
-The button is a ReActionView state (`herb:state` in `app/views/posts/show.html.erb`): the browser
-flips it and asks the server for the branches that read it, as a `slots` request.
+The check box is bound to a ReActionView state (`herb:state` in `app/views/posts/show.html.erb`):
+the browser flips it and asks the server for the branch that reads it, as a `slots` request.
 That request renders the HTML branch, so it is what a profile of the switch shows; with profiling
 on, it is recorded like any other request.
 The highlighting is `pygments.rb`, used as any Rails application would (`Pygments.highlight`,
@@ -231,6 +231,4 @@ Ten rounds of index, post page, comment, and sign-in on an M-series laptop:
   (`journal_mode: delete`), since a database left in WAL mode by a native SQLite does not open.
 - Rails 8.1: the Herb template handler comes from ReActionView, which carries the class Rails 8.2
   ships, and its reactive templates drive the `View HTML` switch.
-  Its developer tools are off, since their element outlines keep the slot client from placing a
-  fetched branch (ReActionView 0.6.0, with the native Herb too).
   Its development server is off, since the file watcher it uses (`cruise`) is a native extension.

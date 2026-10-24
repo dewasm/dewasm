@@ -87,5 +87,6 @@ Two conditions hold the snapshot together, and both are checked by use:
   stamp catches.
   `Pygments.engine` is one `Popen` per thread in the gem; the loader shares one interpreter
   under a lock.
-- Watch: ReActionView's developer tools are off, since with them the slot client did not place
-  the fetched branch (0.6.0, native Herb included); a later version may lift that.
+- Watch: the two branches of the switch must differ in shape.
+  Herb merges an `if`/`else` whose branches are both one output alone into one slot, and that
+  slot no longer reads the state, so the page would not switch back (Herb 0.11.1).

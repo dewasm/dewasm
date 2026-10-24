@@ -10,10 +10,8 @@ ReActionView.configure do |config|
   # The post page's `View HTML` switch is one; the request it makes runs Pygments.
   config.slots = true
 
-  # The developer tools' element outlines wrap each ERB output in a `<span>`, and the slot client
-  # then cannot put a branch it fetched in place (ReActionView 0.6.0, the native Herb included).
-  # So the developer tools stay off, and with them the per-tag diagnostics they show.
-  config.debug_mode = false
+  # The developer tools (`debug_mode`) are on in development by default: element outlines,
+  # per-tag diagnostics, and the ERB behind an element.
 
   # The parse limit the converted Herb needs is in `.herb.yml`, which every `Herb::Engine` reads.
 
