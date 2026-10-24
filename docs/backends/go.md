@@ -11,6 +11,8 @@ Integers are native `uint32`/`uint64`, whose wrapping arithmetic makes masking f
 Floats are native `float32`/`float64`, so f32 re-rounding and trap-free division need no helper.
 Control flow maps onto Go's labeled loops.
 Because unused labels and locals are Go compile errors, the backend emits them only when referenced.
+A function is a method named `f<index>`.
+With `--function-names`, the module's `name` section joins it: `f289_sqlite3VdbeExec`.
 
 The package clause follows the mode:
 

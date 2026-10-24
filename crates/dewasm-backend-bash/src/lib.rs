@@ -190,7 +190,7 @@ pub fn generate_module_with_units(
     prefix: &str,
     default_wasi: bool,
 ) -> Result<(String, BTreeSet<String>)> {
-    generate_module_inner(module, prefix, "", default_wasi, &BTreeSet::new())
+    generate_module_inner(module, prefix, "", default_wasi, false, &BTreeSet::new())
 }
 
 /// `rt_prefix` is what every runtime call site is spelled with.
@@ -201,6 +201,7 @@ fn generate_module_inner(
     prefix: &str,
     rt_prefix: &str,
     default_wasi: bool,
+    function_names: bool,
     extra_seeds: &BTreeSet<String>,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&BashBackend, module)?;
@@ -209,6 +210,7 @@ fn generate_module_inner(
         default_wasi,
         prefix,
         rt_prefix,
+        function_names,
         uses: RefCell::new(extra_seeds.clone()),
         scratch: Cell::new(0),
         scratch_max: Cell::new(0),
@@ -302,8 +304,14 @@ impl Backend for BashBackend {
             dewasm_backend::RuntimeLinkage::Embedded => prefix.as_str(),
             dewasm_backend::RuntimeLinkage::Alias(_) => "",
         };
-        let (src, units) =
-            generate_module_inner(module, &prefix, rt_prefix, opts.default_wasi, &extra_seeds)?;
+        let (src, units) = generate_module_inner(
+            module,
+            &prefix,
+            rt_prefix,
+            opts.default_wasi,
+            opts.function_names,
+            &extra_seeds,
+        )?;
 
         let mut out = String::new();
         if opts.mode == Mode::Standalone {
@@ -442,6 +450,7 @@ struct Gen<'a> {
     prefix: &'a str,
     /// Prefix every runtime function name carries (see [`generate_module_inner`]).
     rt_prefix: &'a str,
+    function_names: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
     /// Per-statement scratch variable counter and its per-function peak.
@@ -892,12 +901,25 @@ impl<'a> Gen<'a> {
         type_key(&self.module.types[type_idx as usize], val_name)
     }
 
+    /// The command name of defined function `func_idx`: `<p>f<i>`.
+    /// With `function_names` it also carries the module's own name, as `<p>f12_sqlite3VdbeExec`.
+    fn func_name(&self, func_idx: u32) -> String {
+        let suffix =
+            dewasm_backend::function_name_suffix(self.module, func_idx, self.function_names);
+        format!("{}f{func_idx}{suffix}", self.prefix)
+    }
+
+    /// The command holding a tail-calling function's body, behind its trampoline.
+    fn body_name(&self, func_idx: u32) -> String {
+        format!("{}_body", self.func_name(func_idx))
+    }
+
     /// The command name for the function (used in tables and exports).
     fn func_ref(&self, func_idx: u32) -> String {
         if (func_idx as usize) < self.module.imported_funcs.len() {
             format!("${}if{func_idx}", self.prefix)
         } else {
-            format!("{}f{func_idx}", self.prefix)
+            self.func_name(func_idx)
         }
     }
 
@@ -907,7 +929,7 @@ impl<'a> Gen<'a> {
     /// So its ordinary command is what the criterion asks for.
     fn tail_ref(&self, func_idx: u32) -> String {
         if self.tail_callers.contains(&func_idx) {
-            format!("{}f{func_idx}_body", self.prefix)
+            self.body_name(func_idx)
         } else {
             self.func_ref(func_idx)
         }
@@ -918,7 +940,7 @@ impl<'a> Gen<'a> {
     /// That makes `${...tl[i]:-$__fn}` fall back to the ordinary command.
     fn tail_elem(&self, func_idx: u32) -> String {
         if self.tail_callers.contains(&func_idx) {
-            format!("{}f{func_idx}_body", self.prefix)
+            self.body_name(func_idx)
         } else {
             "''".to_string()
         }
@@ -928,7 +950,7 @@ impl<'a> Gen<'a> {
         let target = if (func_idx as usize) < self.module.imported_funcs.len() {
             format!("\"${{{}if{func_idx}}}\"", self.prefix)
         } else {
-            format!("{}f{func_idx}", self.prefix)
+            self.func_name(func_idx)
         };
         if args.is_empty() {
             target
@@ -956,9 +978,9 @@ impl<'a> Gen<'a> {
         // Its name, arity, `R<i>` results and exit status are all unchanged.
         // So no call site changes.
         if self.tail_callers.contains(&idx) {
-            w.line(format!("{p}f{idx}() {{"));
+            w.line(format!("{}() {{", self.func_name(idx)));
             w.indent();
-            w.line(format!(r#"{p}f{idx}_body "$@" || return $?"#));
+            w.line(format!(r#"{} "$@" || return $?"#, self.body_name(idx)));
             w.line("local __tf __ta");
             w.line(format!("while [[ -n ${p}tlfn ]]; do"));
             w.indent();
@@ -975,9 +997,9 @@ impl<'a> Gen<'a> {
             w.line("");
         }
         let name = if self.tail_callers.contains(&idx) {
-            format!("{p}f{idx}_body")
+            self.body_name(idx)
         } else {
-            format!("{p}f{idx}")
+            self.func_name(idx)
         };
         w.line(format!("{name}() {{"));
         w.indent();

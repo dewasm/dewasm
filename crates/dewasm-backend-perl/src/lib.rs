@@ -153,6 +153,7 @@ pub fn generate_package_with_units(
         default_wasi,
         &BTreeSet::new(),
         None,
+        false,
     )
 }
 
@@ -163,6 +164,7 @@ fn generate_package_inner(
     default_wasi: bool,
     extra_seeds: &BTreeSet<String>,
     data_file: Option<&str>,
+    function_names: bool,
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&PerlBackend, module)?;
     // Prefix sums: `data_offsets[i]` is where segment `i` begins.
@@ -188,6 +190,7 @@ fn generate_package_inner(
     let gen = Gen {
         module,
         default_wasi,
+        function_names,
         uses: RefCell::new(extra_seeds.clone()),
         tail_callers,
         data_file: data_file.map(str::to_string),
@@ -296,6 +299,7 @@ impl Backend for PerlBackend {
             opts.default_wasi,
             &extra_seeds,
             opts.data_file.as_ref().map(|c| c.data_file_name.as_str()),
+            opts.function_names,
         )?;
 
         let mut w = CodeWriter::new("\t");
@@ -519,6 +523,8 @@ impl Escape {
 struct Gen<'a> {
     module: &'a Module,
     default_wasi: bool,
+    /// `GenOptions::function_names`: a generated sub carries the module's own name after its index.
+    function_names: bool,
     /// Runtime units the generated code references.
     uses: RefCell<BTreeSet<String>>,
     /// Defined functions (function index space) containing a tail call.
@@ -571,6 +577,14 @@ impl<'a> Gen<'a> {
 
     fn use_unit(&self, id: &str) {
         self.uses.borrow_mut().insert(id.to_string());
+    }
+
+    /// The sub name of defined function `func_idx`: `_f{idx}`.
+    /// With `function_names` it also carries the module's own name, as `_f12_sqlite3VdbeExec`.
+    fn func_name(&self, func_idx: u32) -> String {
+        let suffix =
+            dewasm_backend::function_name_suffix(self.module, func_idx, self.function_names);
+        format!("_f{func_idx}{suffix}")
     }
 
     /// Reference a runtime helper, recording its unit.
@@ -683,7 +697,7 @@ impl<'a> Gen<'a> {
             let bodies: Vec<String> = self
                 .tail_callers
                 .iter()
-                .map(|f| format!("sub {{ return $self->_f{f}_body(@_); }}"))
+                .map(|f| format!("sub {{ return $self->{}_body(@_); }}", self.func_name(*f)))
                 .collect();
             w.line(format!("$self->{{__tm}} = [{}];", bodies.join(", ")));
             w.line("$self->{__ta} = [];");
@@ -985,7 +999,7 @@ impl<'a> Gen<'a> {
         if (func_idx as usize) < self.module.imported_funcs.len() {
             format!("$self->{{if{func_idx}}}")
         } else {
-            format!("sub {{ return $self->_f{func_idx}(@_); }}")
+            format!("sub {{ return $self->{}(@_); }}", self.func_name(func_idx))
         }
     }
 
@@ -1009,7 +1023,7 @@ impl<'a> Gen<'a> {
         if (func_idx as usize) < self.module.imported_funcs.len() {
             format!("$self->{{if{func_idx}}}->({args})")
         } else {
-            format!("$self->_f{func_idx}({args})")
+            format!("$self->{}({args})", self.func_name(func_idx))
         }
     }
 
@@ -1026,20 +1040,21 @@ impl<'a> Gen<'a> {
         let is_tail_caller = self.tail_callers.contains(&idx);
         if is_tail_caller {
             self.use_unit("rt/tail_call");
-            w.line(format!("sub _f{idx} {{"));
+            w.line(format!("sub {} {{", self.func_name(idx)));
             w.indent();
             w.line(format!(
-                "return {}::trampoline($_[0], $_[0]->_f{idx}_body(@_[1 .. $#_]));",
-                self.rt_name
+                "return {}::trampoline($_[0], $_[0]->{}_body(@_[1 .. $#_]));",
+                self.rt_name,
+                self.func_name(idx)
             ));
             w.dedent();
             w.line("}");
             w.line("");
         }
         let name = if is_tail_caller {
-            format!("_f{idx}_body")
+            format!("{}_body", self.func_name(idx))
         } else {
-            format!("_f{idx}")
+            self.func_name(idx)
         };
         w.line(format!("sub {name} {{"));
         w.indent();

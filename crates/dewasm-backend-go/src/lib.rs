@@ -239,6 +239,7 @@ pub fn generate_program_with_units(
         tail_callers: tail_callers(module),
         cur_tail: RefCell::new(None),
         spec: true,
+        function_names: false,
         data_file: None,
         data_offsets: data_offsets(module),
     };
@@ -274,6 +275,7 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
         tail_callers: tail_callers(module),
         cur_tail: RefCell::new(None),
         spec: false,
+        function_names: opts.function_names,
         data_file: opts.data_file.as_ref().map(|c| c.data_file_name.clone()),
         data_offsets: data_offsets(module),
     };
@@ -760,6 +762,7 @@ struct Gen<'a> {
     /// Off for the shipped standalone/library output.
     /// Its deep-but-valid recursions must not falsely trap.
     spec: bool,
+    function_names: bool,
     /// When `Some`, data segments go into a separate binary data file of this filename.
     /// The file is `//go:embed`ed, and the segments are not embedded as `Rt.unhex` literals.
     /// `data_offsets[i]` locates segment `i` in the blob.
@@ -1116,7 +1119,7 @@ impl<'a> Gen<'a> {
                         .enumerate()
                         .map(|(i, t)| format!("p.{}", Self::arg_slot(i, *t)))
                         .collect();
-                    let call = format!("p.f{f}Body({})", args.join(", "));
+                    let call = format!("p.{}({})", self.body_name(*f), args.join(", "));
                     if sig.is_empty() {
                         format!("func() {{ {call} }}")
                     } else {
@@ -1523,11 +1526,24 @@ impl<'a> Gen<'a> {
         }
     }
 
+    /// The method name of defined function `func_idx`: `f{idx}`.
+    /// With `function_names` it also carries the module's own name, as `f12_sqlite3VdbeExec`.
+    fn func_name(&self, func_idx: u32) -> String {
+        let suffix =
+            dewasm_backend::function_name_suffix(self.module, func_idx, self.function_names);
+        format!("f{func_idx}{suffix}")
+    }
+
+    /// The method holding a tail-calling function's body, behind its trampoline.
+    fn body_name(&self, func_idx: u32) -> String {
+        format!("{}Body", self.func_name(func_idx))
+    }
+
     fn func_ref(&self, func_idx: u32) -> String {
         if (func_idx as usize) < self.module.imported_funcs.len() {
             format!("p.if{func_idx}")
         } else {
-            format!("p.f{func_idx}")
+            format!("p.{}", self.func_name(func_idx))
         }
     }
 
@@ -1575,16 +1591,18 @@ impl<'a> Gen<'a> {
                 .join(", ");
             let field = self.tail_field(&ty.results);
             w.line(format!(
-                "func (p *{}) f{idx}({params_str}){} {{",
+                "func (p *{}) {}({params_str}){} {{",
                 self.type_name,
+                self.func_name(idx),
                 go_results(&ty.results)
             ));
             w.indent();
             let rs: Vec<String> = (0..ty.results.len()).map(|i| format!("r{i}")).collect();
+            let body_call = format!("p.{}({args})", self.body_name(idx));
             if rs.is_empty() {
-                w.line(format!("p.f{idx}Body({args})"));
+                w.line(body_call);
             } else {
-                w.line(format!("{} := p.f{idx}Body({args})", rs.join(", ")));
+                w.line(format!("{} := {body_call}", rs.join(", ")));
             }
             w.line(format!("for p.{field} != nil {{"));
             w.indent();
@@ -1606,9 +1624,9 @@ impl<'a> Gen<'a> {
         }
         *self.cur_tail.borrow_mut() = is_tail_caller.then(|| ty.results.clone());
         let name = if is_tail_caller {
-            format!("f{idx}Body")
+            self.body_name(idx)
         } else {
-            format!("f{idx}")
+            self.func_name(idx)
         };
         let results_str = go_results(&ty.results);
         w.line(format!(

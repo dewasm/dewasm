@@ -54,7 +54,6 @@ struct Cli {
 
     /// Name generated functions after the module's name section as well as their index.
     /// A profile or a stack trace then reads like the C source: `_f12_sqlite3VdbeExec`.
-    /// Ruby backend only; the others ignore it.
     #[arg(long)]
     function_names: bool,
 }

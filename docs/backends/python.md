@@ -13,6 +13,8 @@ Naming it after the class is what lets two artifacts share one namespace.
 Only wasm loops become real `while True`.
 Forward branches use a per-function branch register `_br`.
 That keeps them within Python's static-nesting limits.
+A function is a method named `_f<index>`.
+With `--function-names`, the module's `name` section joins it: `_f289_sqlite3VdbeExec`.
 
 In **library** mode, `--module-name` is required and is taken unchanged as the class name.
 It is one identifier matching `[A-Za-z_][A-Za-z0-9_]*`.

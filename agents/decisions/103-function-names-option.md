@@ -3,7 +3,8 @@
 Status: **Accepted, 2026-10-23.**
 `--function-names` (`GenOptions::function_names`) names a generated method after the `name` section.
 The index stays in front: `_f289_sqlite3VdbeExec`.
-`dewasm_core::ir::Module::func_names` carries the section; the Ruby backend's `func_name` reads it.
+`dewasm_core::ir::Module::func_names` carries the section.
+Each backend's `func_name` composes the name through `dewasm_backend::function_name_suffix`.
 Off, the output is unchanged.
 
 ## Context
@@ -23,8 +24,9 @@ The backend ignored the section and named every function `_f{index}`.
 - Index first, because the name section is not checked by validation.
   Two functions may share a name, and a name may hold characters Ruby cannot spell.
   `_f{index}_` keeps every method name unique and valid; the rest is reduced to `[A-Za-z0-9_]`.
-- The core parses the section for every backend; today only the Ruby backend uses it.
-  Another backend adopts it by routing its function names through one function, as Ruby does.
+- The core parses the section once, and one shared function reduces a name to `[A-Za-z0-9_]`.
+  Each backend routes its function names through one method of its own, which adds that suffix.
+  So every backend honors the option, each in its own spelling (`_f12_name`, `f12_name`).
 
 ## Rejected alternatives
 

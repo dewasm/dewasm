@@ -323,7 +323,7 @@ pub fn generate_program_with_units(
 ) -> Result<(String, BTreeSet<String>)> {
     check_module_support(&JavaBackend, module)?;
     // The specification harness's generation path never writes a data file: pass None.
-    let gen = new_gen(module, type_name.to_string(), false, None);
+    let gen = new_gen(module, type_name.to_string(), false, None, false);
     let mut body = CodeWriter::new("\t");
     gen.constructor(&mut body);
     for (i, func) in module.funcs.iter().enumerate() {
@@ -347,6 +347,7 @@ fn new_gen(
     type_name: String,
     default_wasi: bool,
     data_file: Option<String>,
+    function_names: bool,
 ) -> Gen<'_> {
     // Prefix sums: segment `i` begins at `data_offsets[i]` in the concatenated data-file blob.
     // Only consulted when data goes to a separate file.
@@ -359,6 +360,7 @@ fn new_gen(
     Gen {
         module,
         default_wasi,
+        function_names,
         type_name,
         tail_callers: module
             .funcs
@@ -398,6 +400,7 @@ fn generate_source(module: &Module, opts: &GenOptions) -> Result<String> {
         type_name.clone(),
         opts.default_wasi,
         opts.data_file.as_ref().map(|c| c.data_file_name.clone()),
+        opts.function_names,
     );
     // A module whose function count crosses the threshold is split across nested `P{k}` classes.
     // Each class has its own constant pool.
@@ -741,6 +744,7 @@ struct Gen<'a> {
     tail_callers: BTreeSet<u32>,
     module: &'a Module,
     default_wasi: bool,
+    function_names: bool,
     type_name: String,
     uses: RefCell<BTreeSet<String>>,
     /// Whether the function currently being emitted is split into part methods.
@@ -902,7 +906,20 @@ impl<'a> Gen<'a> {
     /// The `inst.` form serves the non-partitioned `Elem` class.
     /// `args_joined` is the already-formatted argument list.
     fn defined_call(&self, func_idx: u32, args_joined: &str) -> String {
-        self.defined_call_named(func_idx, &format!("f{func_idx}"), args_joined)
+        self.defined_call_named(func_idx, &self.func_name(func_idx), args_joined)
+    }
+
+    /// The method name of defined function `func_idx`: `f{idx}`.
+    /// With `function_names` it also carries the module's own name, as `f12_sqlite3VdbeExec`.
+    fn func_name(&self, func_idx: u32) -> String {
+        let suffix =
+            dewasm_backend::function_name_suffix(self.module, func_idx, self.function_names);
+        format!("f{func_idx}{suffix}")
+    }
+
+    /// The split body of tail-calling function `func_idx`: its name with `Body` after it.
+    fn func_body_name(&self, func_idx: u32) -> String {
+        format!("{}Body", self.func_name(func_idx))
     }
 
     /// The same call, naming the method explicitly.
@@ -1017,7 +1034,7 @@ impl<'a> Gen<'a> {
                             .enumerate()
                             .map(|(i, t)| Self::arg_slot(i, *t))
                             .collect();
-                        format!("() -> f{f}Body({})", args.join(", "))
+                        format!("() -> {}({})", self.func_body_name(*f), args.join(", "))
                     })
                     .collect();
                 w.line(format!(
@@ -1803,10 +1820,10 @@ impl<'a> Gen<'a> {
                 .map(|i| format!("l{i}"))
                 .collect::<Vec<_>>()
                 .join(", ");
-            w.line(self.method_head(&ret_slot_ty(results), &format!("f{idx}"), &params_str));
+            w.line(self.method_head(&ret_slot_ty(results), &self.func_name(idx), &params_str));
             w.indent();
             let field = self.iref(&self.tail_field(results));
-            let call = self.defined_call_named(idx, &format!("f{idx}Body"), &args);
+            let call = self.defined_call_named(idx, &self.func_body_name(idx), &args);
             if results.is_empty() {
                 w.line(format!("{call};"));
             } else {
@@ -1831,9 +1848,9 @@ impl<'a> Gen<'a> {
             w.line("");
         }
         let method_name = if is_tail_caller {
-            format!("f{idx}Body")
+            self.func_body_name(idx)
         } else {
-            format!("f{idx}")
+            self.func_name(idx)
         };
 
         let mut local_types = ty.params.clone();
@@ -1847,7 +1864,7 @@ impl<'a> Gen<'a> {
         let split = self.costs.seq(&func.body) > SPLIT_THRESHOLD;
         self.split.set(split);
         self.next_part.set(0);
-        *self.cur_base.borrow_mut() = format!("f{idx}");
+        *self.cur_base.borrow_mut() = self.func_name(idx);
         *self.cur_frame_ty.borrow_mut() = format!("Frame{idx}");
         self.part_defs.borrow_mut().clear();
 

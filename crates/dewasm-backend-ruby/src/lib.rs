@@ -1174,22 +1174,10 @@ impl<'a> Gen<'a> {
 
     /// The Ruby method name of defined function `func_idx`: `_f{idx}`.
     /// With `function_names` it also carries the module's own name, as `_f12_sqlite3VdbeExec`.
-    /// The index stays first, so names are unique and valid whatever the name section holds.
     fn func_name(&self, func_idx: u32) -> String {
-        if !self.function_names {
-            return format!("_f{func_idx}");
-        }
-        match self.module.func_names.get(&func_idx) {
-            Some(name) => {
-                let sanitized: String = name
-                    .chars()
-                    .take(64)
-                    .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-                    .collect();
-                format!("_f{func_idx}_{sanitized}")
-            }
-            None => format!("_f{func_idx}"),
-        }
+        let suffix =
+            dewasm_backend::function_name_suffix(self.module, func_idx, self.function_names);
+        format!("_f{func_idx}{suffix}")
     }
 
     /// Park a tail call for the entry's trampoline, and return.

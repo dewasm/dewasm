@@ -16,6 +16,8 @@ So name the output `Main.java`.
 The module class is always `Program`, and `--module-name` is rejected.
 In **library** mode the module class is package-private.
 So put your own `public class Main` (or other public entry) in the *same* file.
+A function is a method named `f<index>`.
+With `--function-names`, the module's `name` section joins it: `f289_sqlite3VdbeExec`.
 
 Library mode requires `--module-name` and takes it unchanged as a dot-separated name.
 The last segment is the class name.

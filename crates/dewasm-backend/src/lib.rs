@@ -68,8 +68,29 @@ pub struct GenOptions {
     /// Name each generated function after the module's `name` section as well as its index.
     /// A function then reads as `_f12_sqlite3VdbeExec` in a stack trace or a profile.
     /// Off by default: the index alone keeps the output independent of a build's debug names.
-    /// Backends other than Ruby ignore it.
+    /// A backend composes the name with [`function_name_suffix`].
     pub function_names: bool,
+}
+
+/// What `function_names` adds after a generated function's index.
+/// That is `_` and the module's name for `func_idx`, reduced to `[A-Za-z0-9_]`, at most 64 long.
+/// Empty when the option is off or the `name` section does not name the function.
+/// The index stays in front, so names are unique and valid whatever the section holds.
+pub fn function_name_suffix(module: &ir::Module, func_idx: u32, function_names: bool) -> String {
+    if !function_names {
+        return String::new();
+    }
+    match module.func_names.get(&func_idx) {
+        Some(name) => {
+            let sanitized: String = name
+                .chars()
+                .take(64)
+                .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+                .collect();
+            format!("_{sanitized}")
+        }
+        None => String::new(),
+    }
 }
 
 #[derive(Clone, Debug)]
