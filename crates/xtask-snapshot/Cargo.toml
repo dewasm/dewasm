@@ -24,8 +24,8 @@ png = "0.18.1"
 # Wasmtime implements `exnref` on its GC machinery.
 # `gc-drc` is the collector Wasmtime defaults to.
 # mruby's snapshots need both, and without `gc` `Config::wasm_exceptions` does not exist.
-wasmtime = { version = "47.0.2", default-features = false, features = ["cranelift", "gc", "gc-drc", "runtime", "std", "parallel-compilation"] }
+wasmtime = { version = "50.0.3", default-features = false, features = ["cranelift", "gc", "gc-drc", "runtime", "std", "parallel-compilation"] }
 # WASI p1 for the `test-wasmtime-wasi` runner.
 # The version tracks `wasmtime` exactly: every snapshot is captured through this crate.
 # So the fixed version is what makes regeneration reproducible across hosts.
-wasmtime-wasi = { version = "47.0.2", default-features = false, features = ["p1"] }
+wasmtime-wasi = { version = "50.0.3", default-features = false, features = ["p1"] }

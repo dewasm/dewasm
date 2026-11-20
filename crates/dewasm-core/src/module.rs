@@ -75,8 +75,10 @@ fn collect_line_table(bytes: &[u8]) -> Result<Option<LineTable>> {
             Payload::CustomSection(reader) if reader.name().starts_with(".debug_") => {
                 debug_sections.insert(reader.name().to_string(), reader.data().to_vec());
             }
-            Payload::CodeSectionStart { range, .. } => {
-                code_section_start = range.start as u64;
+            Payload::CodeSectionStart {
+                unchecked_range, ..
+            } => {
+                code_section_start = unchecked_range.start;
             }
             _ => {}
         }
@@ -87,7 +89,7 @@ fn collect_line_table(bytes: &[u8]) -> Result<Option<LineTable>> {
 /// The function names of a `name` custom section.
 /// `Validator` does not check custom sections, so a malformed one ends the reading.
 /// The names read so far are kept: they are a debugging aid, not part of the module's meaning.
-fn function_names(data: &[u8], offset: usize) -> HashMap<u32, String> {
+fn function_names(data: &[u8], offset: u64) -> HashMap<u32, String> {
     let mut names = HashMap::new();
     for subsection in NameSectionReader::new(BinaryReader::new(data, offset)) {
         let Ok(Name::Function(map)) = subsection else {
