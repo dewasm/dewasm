@@ -28,20 +28,20 @@ The entry then records that evidence so the investigation is not repeated.
 | App | Source | Wasm features beyond baseline | Verdict |
 | --- | --- | --- | --- |
 | `cowsay.wasm` 0.3.0 (`cowsay` 3.8.4 in C) | our own release, at a fixed version in `setup.sh` | none | ✅ in scope (shipping) |
-| `quickjs-ng` v0.15.1 | fixed version in `setup.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **deepened**³) |
+| `quickjs-ng` v0.18.0 | fixed version in `setup.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **deepened**³) |
 | sqlite3 3.53.3 (three shapes) | fixed version in `setup.sh` | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, **deepened**⁴) |
-| CPython 3.14.6 | fixed version in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |
-| CPython 3.14.6 as a library (`cpython-sdk`) | `wasi-sdk` build in `setup.sh` from the source release at a fixed version | none in the reactor the `pygments.rb` recipe links from it (it carries the features `wasi-sdk` 34 emits by default: bulk memory, sign extension, nontrapping conversions, mutable globals, multi-value, reference-types *encoding only*¹) | ✅ in scope (a build input, not a module: the Rails example's `pygments.rb` reactor¹⁷) |
-| CRuby 3.4 (ruby.wasm 2.9.4) | fixed version in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |
+| CPython 3.14.9 | fixed version in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |
+| CPython 3.14.9 as a library (`cpython-sdk`) | `wasi-sdk` build in `setup.sh` from the source release at a fixed version | none in the reactor the `pygments.rb` recipe links from it (it carries the features `wasi-sdk` 34 emits by default: bulk memory, sign extension, nontrapping conversions, mutable globals, multi-value, reference-types *encoding only*¹) | ✅ in scope (a build input, not a module: the Rails example's `pygments.rb` reactor¹⁷) |
+| CRuby 3.4 (ruby.wasm 2.10.1) | fixed version in `setup.sh` | none | ✅ in scope (shipping, **executes on every backend**⁵) |
 | CRuby 3.4 packed with `wasi-vfs` | derived in-cache by `setup.sh`¹³ | none (audited 2026-08-04) | ✅ in scope (shipping, **executes on every backend**¹³) |
 | `mruby` 3.4.0 | `wasi-sdk` build in `setup.sh` from a source release at a fixed version | **exception-handling** (accepted input¹⁴), reference-types *encoding only*¹ | ✅ in scope (shipping, **executes on every backend but Bash**¹⁴) |
 | Pandoc | see below | **`simd`** | ⛔ deferred |
 | `zeroperl` (Perl 5.42) | [`6over3/zeroperl`](https://github.com/6over3/zeroperl) via the `@6over3/zeroperl-ts` `npm` package at a fixed version in `scripts/zeroperl.sh` | none | ✅ in scope (shipping, **executes on every backend**¹²) |
 | LightningCSS | see below | unaudited (unverified fork build) | ⛔ deferred |
-| `ripgrep` 14.1.1 | Cargo build in `setup.sh` from a source release at a fixed version | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, file access on every backend⁶) |
-| `minigzip` (`zlib` 1.3.1) | `wasi-sdk` build in `setup.sh` from a source release at a fixed version | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, **every backend**⁷) |
-| `libpcap` 1.10.6 (BPF filter compiler) | `wasi-sdk` reactor build in `setup.sh` from a source release at a fixed version | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, C-API on every backend⁸) |
-| tree-sitter 0.26.11 + `tree-sitter-json` 0.24.8 | `wasi-sdk` reactor build in `setup.sh` from a source release at a fixed version | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, C-API on every backend¹⁰) |
+| `ripgrep` 15.2.0 | Cargo build in `setup.sh` from a source release at a fixed version | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, file access on every backend⁶) |
+| `minigzip` (`zlib` 1.4) | `wasi-sdk` build in `setup.sh` from a source release at a fixed version | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, **every backend**⁷) |
+| `libpcap` 1.11.0 (BPF filter compiler) | `wasi-sdk` reactor build in `setup.sh` from a source release at a fixed version | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, C-API on every backend⁸) |
+| tree-sitter 0.27.2 + `tree-sitter-json` 0.24.8 | `wasi-sdk` reactor build in `setup.sh` from a source release at a fixed version | none (baseline after the `wasm-opt` pass)¹¹ | ✅ in scope (shipping, C-API on every backend¹⁰) |
 | Lua 5.4.7 | see below | no artifact to audit (SjLj build crashes `wasm-ld`, prebuilts broken) | ⛔ deferred |
 | PHP | see below | no artifact to audit (no maintained wasm32-wasip1 build) | ⛔ deferred |
 | `toywasm` 76.0.0 | fixed version in `setup.sh` | reference-types *encoding only*¹ | ✅ in scope (shipping, **executes on every backend**¹⁵) |
@@ -177,7 +177,7 @@ So CPython's boot otherwise exhausts the 8 MB process stack and dies of SIGSEGV.
 The generated standalone entry point raises it already; a library-mode embedder has to do it itself.
 
 ⁶ **`ripgrep`.**
-`ripgrep` built from the source release of version 14.1.1.
+`ripgrep` built from the source release of version 15.2.0.
 The build uses `cargo build --release --target wasm32-wasip1`.
 It uses default features, which already exclude pcre2.
 So it needs no changes.
@@ -196,7 +196,7 @@ So its functions are partitioned across five nested `P{k}` classes, each with it
 The table is built in a nested `Elem` class, which also has its own pool.
 
 ⁷ **`minigzip` / `zlib` (`gzip` CLI).**
-`minigzip` built from the source release of `zlib` 1.3.1.
+`minigzip` built from the source release of `zlib` 1.4.
 The build uses `wasi-sdk clang --target=wasm32-wasip1`.
 The build compiles the `zlib` translation units + `test/minigzip.c`.
 `-DZ_HAVE_UNISTD_H` makes the shipped `zconf.h` declare `lseek`.
@@ -218,7 +218,7 @@ So these live in a dedicated `run_gzip_cases` that each backend calls.
 It uses the bytes-capable `run_bytes`/`run_command_bytes` helpers.
 
 ⁸ **`libpcap` (Track A).**
-`libpcap` built from the upstream release of version 1.10.6 as a C-API library.
+`libpcap` built from the upstream release of version 1.11.0 as a C-API library.
 The build uses `wasi-sdk clang --target=wasm32-wasip1 -mexec-model=reactor`.
 It compiles only the platform-independent BPF-filter-compilation translation units.
 It has no capture backend.
@@ -258,7 +258,7 @@ Name-based filters (`host example.com`) are likewise out of scope.
 Each stub reports "not found".
 
 ¹⁰ **tree-sitter (Track A).**
-The tree-sitter incremental parsing runtime 0.26.11, as the one-file amalgamation `lib/src/lib.c`.
+The tree-sitter incremental parsing runtime 0.27.2, as the one-file amalgamation `lib/src/lib.c`.
 It comes with the pre-generated `tree-sitter-json` 0.24.8 grammar (`src/parser.c`).
 Both are built from upstream releases at fixed versions as a C-API library.
 The build uses `wasi-sdk clang -mexec-model=reactor`.
@@ -444,7 +444,7 @@ It competes with the wasm interpreters hand-written in the target languages (`wa
 The speed benchmark suite measures that comparison.
 
 ¹⁷ **CPython as a library (`cpython-sdk`, audited 2026-10-23).**
-CPython 3.14.6 built from its source release with `wasi-sdk`, by its own `Tools/wasm/wasi`.
+CPython 3.14.9 built from its source release with `wasi-sdk`, by its own `Tools/wasm/wasi`.
 The cache holds `libpython3.14.a` and the static libraries of its built-in modules.
 It also holds the headers, this build's `pyconfig.h`, and the standard library without its tests.
 It is a build input: no e2e case converts it, and nothing runs it as is.

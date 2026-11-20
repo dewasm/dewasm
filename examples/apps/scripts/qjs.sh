@@ -7,5 +7,5 @@
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 fetch_app qjs \
-  "https://github.com/quickjs-ng/quickjs/releases/download/v0.15.1/qjs-wasi.wasm" \
-  b4071ef2fbb2bb693c0bbcfc07cb9d28639fd9cea2fd986824a57aeac929817b
+  "https://github.com/quickjs-ng/quickjs/releases/download/v0.18.0/qjs-wasi.wasm" \
+  2c218412cb8b17e46ee91bea7556ec38f5b9b6bd6312fddd3ceeed14aa71eaaa

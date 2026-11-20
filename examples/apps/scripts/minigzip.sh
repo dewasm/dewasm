@@ -12,9 +12,9 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-ZLIB_URL="https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz"
-ZLIB_SHA256="9a93b2b7dfdac77ceba5a558a580e74667dd6fede4585b91eefb60f03b72df23"
-ZLIB_DIR="zlib-1.3.1"
+ZLIB_URL="https://github.com/madler/zlib/releases/download/v1.4/zlib-1.4.tar.gz"
+ZLIB_SHA256="02dd159783677a749c04adbdd02b55b8a2bcc7e054f51b76b549199a916ad584"
+ZLIB_DIR="zlib-1.4"
 # The `zlib` translation units minigzip.c needs.
 # Z_HAVE_UNISTD_H makes the shipped zconf.h include <unistd.h>, so `lseek` is declared.
 # `wasi-libc` has it; without the define, `clang` errors on the implicit declaration.

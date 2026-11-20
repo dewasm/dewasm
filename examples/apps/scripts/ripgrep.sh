@@ -4,14 +4,14 @@
 
 # `ripgrep`: built from the source release at a fixed version with `cargo` for wasm32-wasip1.
 # Default features, which already exclude pcre2.
-# No changes are needed: `ripgrep` 14.1.1 builds clean for wasip1 as-is.
+# No changes are needed: `ripgrep` 15.2.0 builds clean for wasip1 as-is.
 # A Ruby-only file system example (recursive directory search over a preopened tree).
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-RG_URL="https://github.com/BurntSushi/ripgrep/archive/refs/tags/14.1.1.tar.gz"
-RG_SHA256="4dad02a2f9c8c3c8d89434e47337aa654cb0e2aa50e806589132f186bf5c2b66"
-RG_DIR="ripgrep-14.1.1"
+RG_URL="https://github.com/BurntSushi/ripgrep/archive/refs/tags/15.2.0.tar.gz"
+RG_SHA256="7605249d3eb0d5f170e3414498e3344e26b1e7a147aec518b57090b80036a562"
+RG_DIR="ripgrep-15.2.0"
 
 rg_stamp="cache/rg.src-sha256"
 rg_want="$(printf '%s\n%s' "$RG_SHA256" "$(wasm_opt_version)")"

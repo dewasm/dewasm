@@ -28,8 +28,8 @@
 
 /* 1. Feature macros the BPF compiler reads. */
 #define PACKAGE_NAME "libpcap"
-#define PACKAGE_STRING "libpcap 1.10.6"
-#define PACKAGE_VERSION "1.10.6"
+#define PACKAGE_STRING "libpcap 1.11.0"
+#define PACKAGE_VERSION "1.11.0"
 #define HAVE_SNPRINTF 1
 #define HAVE_VSNPRINTF 1
 #define HAVE_STRERROR 1

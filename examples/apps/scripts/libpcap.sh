@@ -14,9 +14,9 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-PCAP_URL="https://www.tcpdump.org/release/libpcap-1.10.6.tar.gz"
-PCAP_SHA256="872dd11337fe1ab02ad9d4fee047c9da244d695c6ddf34e2ebb733efd4ed8aa9"
-PCAP_DIR="libpcap-1.10.6"
+PCAP_URL="https://www.tcpdump.org/release/libpcap-1.11.0.tar.gz"
+PCAP_SHA256="596389bc8560ea027dff9db8aaf6c173d992366d9aef4baf5d7c6d180b4d49ad"
+PCAP_DIR="libpcap-1.11.0"
 # The filter-compiler TUs, the `libpcap` internals the linker demands, and the generated parser.
 # The internals are `fmtutils`/`etherent`/`strlcpy`, and the parser is `grammar`/`scanner`.
 PCAP_SRCS=(

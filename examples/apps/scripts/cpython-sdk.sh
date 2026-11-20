@@ -2,7 +2,7 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# CPython 3.14.6 as a library for wasm32-wasip1, built from the source release with `wasi-sdk`.
+# CPython 3.14.9 as a library for wasm32-wasip1, built from the source release with `wasi-sdk`.
 # The prebuilt `cpython` app is a command.
 # A program that embeds the interpreter needs the static library instead, which no release ships.
 # `examples/rails/pygments` links its reactor against it.
@@ -18,9 +18,9 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-PY_URL="https://www.python.org/ftp/python/3.14.6/Python-3.14.6.tar.xz"
-PY_SHA256="143b1dddefaec3bd2e21e3b839b34a2b7fb9842272883c576420d605e9f30c63"
-PY_DIR="Python-3.14.6"
+PY_URL="https://www.python.org/ftp/python/3.14.9/Python-3.14.9.tar.xz"
+PY_SHA256="e02d9ac21cebda6e46435369744a92c65cc7cd8669697694122cf97ffacd1e53"
+PY_DIR="Python-3.14.9"
 
 sdk=cache/cpython-sdk
 sdk_stamp="cache/cpython-sdk.src-sha256"

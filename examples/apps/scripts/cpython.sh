@@ -2,7 +2,7 @@
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=common.sh
 
-# CPython 3.14.6: an unofficial wasm32-wasip1 build (`brettcannon/cpython-wasi-build`).
+# CPython 3.14.9: an unofficial wasm32-wasip1 build (`brettcannon/cpython-wasi-build`).
 # The PSF distributes no WASI binaries; this is the build of a CPython core developer.
 # Beyond python.wasm we also extract the standard library tree (`lib/python3.14`).
 # The interpreter reads it at start from a preopened directory.
@@ -15,6 +15,6 @@
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
 fetch_runtime_with_stdlib cpython \
-  "https://github.com/brettcannon/cpython-wasi-build/releases/download/v3.14.6/python-3.14.6-wasi_sdk-24.zip" \
-  73bf2e9774c4d8820d0877ec5db0b963df3a9611fc2a63838aeaee29dfd034e6 \
+  "https://github.com/brettcannon/cpython-wasi-build/releases/download/v3.14.9/python-3.14.9-wasi_sdk-24.zip" \
+  8de7834105edef8db8a13299e2587cf8945021dd8764f2691d83bbc25129dfa2 \
   python.wasm lib/python3.14

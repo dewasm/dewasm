@@ -12,6 +12,7 @@
 #include <sys/socket.h>
 
 #define IFNAMSIZ 16
+#define IF_NAMESIZE IFNAMSIZ
 
 struct ifreq {
 	char ifr_name[IFNAMSIZ];

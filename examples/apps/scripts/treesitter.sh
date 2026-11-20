@@ -12,9 +12,9 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
 
-TS_URL="https://github.com/tree-sitter/tree-sitter/archive/refs/tags/v0.26.11.tar.gz"
-TS_SHA256="1bab01ed21464f3272665b9c60e39ee79f68da1333e80b23f2c9356569d06971"
-TS_DIR="tree-sitter-0.26.11"
+TS_URL="https://github.com/tree-sitter/tree-sitter/archive/refs/tags/v0.27.2.tar.gz"
+TS_SHA256="356528363bf7fbad12a2cfeb5a2678c0118ef886a4d69ad9a379db5fdef0735f"
+TS_DIR="tree-sitter-0.27.2"
 TSJSON_URL="https://github.com/tree-sitter/tree-sitter-json/archive/refs/tags/v0.24.8.tar.gz"
 TSJSON_SHA256="acf6e8362457e819ed8b613f2ad9a0e1b621a77556c296f3abea58f7880a9213"
 TSJSON_DIR="tree-sitter-json-0.24.8"
