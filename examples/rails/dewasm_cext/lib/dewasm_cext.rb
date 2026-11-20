@@ -906,6 +906,7 @@ module DewasmCExt
     def i_rb_ary_concat(a, b) = (from_v(a).concat(from_v(b)); a)
     def i_rb_ary_includes(a, v) = from_v(a).include?(from_v(v)) ? Qtrue : Qfalse
     def i_rb_ary_delete(a, v) = to_v(from_v(a).delete(from_v(v)))
+    def i_rb_ary_delete_at(a, i) = to_v(from_v(a).delete_at(s32(i)))
     def i_rb_ary_reverse(a) = (from_v(a).reverse!; a)
     def i_rb_ary_to_ary(v) = to_v(Array(from_v(v)))
     def i_rb_check_array_type(v)
@@ -1007,6 +1008,9 @@ module DewasmCExt
     def i_rb_require(p) = (require(read_cstr(p)) ? Qtrue : Qfalse)
     def i_rb_eval_string(p) = to_v(TOPLEVEL_BINDING.eval(read_cstr(p)))
     def i_rb_thread_schedule = Thread.pass
+    def i_rb_thread_current = to_v(Thread.current)
+    def i_rb_thread_local_aref(t, id) = to_v(from_v(t)[from_v(id)])
+    def i_rb_thread_local_aset(t, id, v) = (from_v(t)[from_v(id)] = from_v(v); v)
     def i_rb_range_new(a, b, excl) = to_v(Range.new(from_v(a), from_v(b), excl != 0))
 
     def i_rb_range_beg_len(v, beg_ptr, len_ptr, len, err)

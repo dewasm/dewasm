@@ -88,7 +88,7 @@ The Gemfile asks for a converted gem in one line each:
 
 ```ruby
 group :dewasm do
-  dewasm_gem "sqlite3", "2.10.1"
+  dewasm_gem "sqlite3", "2.10.2"
 end
 ```
 

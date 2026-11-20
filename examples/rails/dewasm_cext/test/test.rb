@@ -136,6 +136,16 @@ check("subclass of a C class works through Class#new") do
   k.new(7).incr == 1
 end
 
+check("rb_ary_delete_at removes one element, and rb_assoc_new pairs two values") do
+  Demo.take([1, 2, 3], 1) == [2, [1, 3]] && Demo.take([1, 2, 3], -1) == [3, [1, 2]] && Demo.take([1], 5) == [nil, [1]]
+end
+check("rb_thread_local_aset and rb_thread_local_aref reach the current fiber's locals") do
+  first = Demo.fiber_local(:a)
+  second = Demo.fiber_local(:b)
+  other = Fiber.new { Demo.fiber_local(:c) }.resume
+  [first, second, Thread.current[:demo_fiber_local], other] == [nil, :a, :b, nil]
+end
+
 threads = 4.times.map do |t|
   Thread.new { 200.times.sum { |i| Demo.add(i, t) } }
 end

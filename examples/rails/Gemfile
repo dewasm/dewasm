@@ -15,17 +15,17 @@ gem "stimulus-rails"
 gem "bcrypt", "~> 3.1.7"
 gem "herb"
 # Herb writes a syntax tree with the Prism it carries, and `prism` reads only its own version.
-gem "prism", "1.9.0"
+gem "prism", "2.1.0"
 gem "reactionview", "~> 0.6"
 gem "pygments.rb", "~> 5.0"
 
 gem "tzinfo-data", platforms: %i[ windows jruby ]
 
 group :dewasm do
-  dewasm_gem "sqlite3", "2.10.1"
+  dewasm_gem "sqlite3", "2.10.2"
   dewasm_gem "bcrypt", "3.1.22"
-  dewasm_gem "herb", "0.11.1"
-  dewasm_gem "nokogiri", "1.19.4"
+  dewasm_gem "herb", "0.11.2"
+  dewasm_gem "nokogiri", "1.19.7"
   dewasm_gem "pygments.rb", "5.0.0"
 end
 

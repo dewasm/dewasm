@@ -38,6 +38,7 @@ typedef unsigned long ID;
 #define FIX2LONG(v) ((long)(v) >> 1)
 #define FIX2INT(v) ((int)FIX2LONG(v))
 #define FIX2ULONG(v) ((unsigned long)FIX2LONG(v))
+#define RB_FIX2LONG(v) FIX2LONG(v)
 #define FIXNUM_MAX (0x3fffffffL)
 #define FIXNUM_MIN (-0x40000000L)
 #define FIXABLE(i) ((long long)(i) <= FIXNUM_MAX && (long long)(i) >= FIXNUM_MIN)
@@ -124,6 +125,7 @@ static inline unsigned long NUM2ULONG(VALUE v) { return FIXNUM_P(v) ? (unsigned 
 static inline long long NUM2LL(VALUE v) { return FIXNUM_P(v) ? (long long)FIX2LONG(v) : rb_num2ll(v); }
 static inline unsigned long long NUM2ULL(VALUE v) { return FIXNUM_P(v) ? (unsigned long long)FIX2LONG(v) : rb_num2ull(v); }
 #define NUM2INT(v) ((int)NUM2LONG(v))
+#define RB_NUM2LONG(v) NUM2LONG(v)
 #define NUM2UINT(v) ((unsigned int)NUM2ULONG(v))
 #define NUM2SIZET(v) ((size_t)NUM2ULONG(v))
 #define NUM2DBL(v) rb_num2dbl(v)
@@ -264,6 +266,7 @@ RB_IMPORT(rb_dw_warn_str) void rb_dw_warn_str(VALUE);
 RB_IMPORT(rb_dw_bug_str) RB_NORETURN void rb_dw_bug_str(VALUE);
 #define PRIsVALUE "li\v"
 RB_NORETURN void rb_raise(VALUE, const char *, ...);
+static inline RB_NORETURN void rb_memerror(void) { rb_raise(rb_eNoMemError, "failed to allocate memory"); }
 void rb_warn(const char *, ...);
 #define rb_warning rb_warn
 #define rb_category_warning(category, ...) rb_warn(__VA_ARGS__)
@@ -406,6 +409,7 @@ static inline VALUE rb_ary_new_from_args(long n, ...) {
 #define rb_ary_new2 rb_ary_new_capa
 #define rb_ary_new3 rb_ary_new_from_args
 #define rb_ary_new4 rb_ary_new_from_values
+#define rb_assoc_new(a, b) rb_ary_new_from_args(2, (a), (b))
 RB_IMPORT(rb_ary_push) VALUE rb_ary_push(VALUE, VALUE);
 RB_IMPORT(rb_ary_pop) VALUE rb_ary_pop(VALUE);
 RB_IMPORT(rb_ary_shift) VALUE rb_ary_shift(VALUE);
@@ -418,6 +422,7 @@ RB_IMPORT(rb_ary_join) VALUE rb_ary_join(VALUE, VALUE);
 RB_IMPORT(rb_ary_concat) VALUE rb_ary_concat(VALUE, VALUE);
 RB_IMPORT(rb_ary_includes) VALUE rb_ary_includes(VALUE, VALUE);
 RB_IMPORT(rb_ary_delete) VALUE rb_ary_delete(VALUE, VALUE);
+RB_IMPORT(rb_ary_delete_at) VALUE rb_ary_delete_at(VALUE, long);
 RB_IMPORT(rb_ary_reverse) VALUE rb_ary_reverse(VALUE);
 RB_IMPORT(rb_ary_to_ary) VALUE rb_ary_to_ary(VALUE);
 RB_IMPORT(rb_check_array_type) VALUE rb_check_array_type(VALUE);
@@ -514,7 +519,7 @@ RB_IMPORT(rb_gc) void rb_gc(void);
 #define REALLOC_N(p, T, n) ((p) = (T *)realloc((p), sizeof(T) * (n)))
 #define ALLOCA_N(T, n) ((T *)alloca(sizeof(T) * (n)))
 #define ALLOCV_N(T, v, n) ((T *)((v) = (VALUE)malloc(sizeof(T) * (n) + 1)))
-#define ALLOCV(v, n) ALLOCV_N(char, v, n)
+#define ALLOCV(v, n) ((void *)ALLOCV_N(char, v, n))
 #define ALLOCV_END(v) free((void *)(v))
 #define MEMCPY(d, s, T, n) memcpy((d), (s), sizeof(T) * (n))
 #define MEMZERO(p, T, n) memset((p), 0, sizeof(T) * (n))
@@ -524,6 +529,9 @@ RB_IMPORT(rb_io_write) VALUE rb_io_write(VALUE, VALUE);
 RB_IMPORT(rb_require) VALUE rb_require(const char *);
 RB_IMPORT(rb_eval_string) VALUE rb_eval_string(const char *);
 RB_IMPORT(rb_thread_schedule) void rb_thread_schedule(void);
+RB_IMPORT(rb_thread_current) VALUE rb_thread_current(void);
+RB_IMPORT(rb_thread_local_aref) VALUE rb_thread_local_aref(VALUE, ID);
+RB_IMPORT(rb_thread_local_aset) VALUE rb_thread_local_aset(VALUE, ID, VALUE);
 RB_IMPORT(rb_range_new) VALUE rb_range_new(VALUE, VALUE, int);
 RB_IMPORT(rb_range_beg_len) VALUE rb_range_beg_len(VALUE, long *, long *, long, int);
 RB_IMPORT(rb_time_new) VALUE rb_time_new(long, long);

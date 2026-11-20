@@ -25,7 +25,7 @@ require_relative "dewasm_cext/lib/dewasm_cext/gemfile"
 gem "sqlite3", ">= 2.1"
 
 group :dewasm do
-  dewasm_gem "sqlite3", "2.10.1"
+  dewasm_gem "sqlite3", "2.10.2"
 end
 ```
 
