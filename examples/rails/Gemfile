@@ -14,6 +14,8 @@ gem "stimulus-rails"
 
 gem "bcrypt", "~> 3.1.7"
 gem "herb"
+# Herb writes a syntax tree with the Prism it carries, and `prism` reads only its own version.
+gem "prism", "1.9.0"
 gem "reactionview", "~> 0.6"
 gem "pygments.rb", "~> 5.0"
 

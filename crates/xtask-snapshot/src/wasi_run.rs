@@ -16,7 +16,7 @@ use anyhow::{bail, Context, Result};
 use wasmtime::{Engine, Linker, Module, Store};
 use wasmtime_wasi::p1::{self, WasiP1Ctx};
 use wasmtime_wasi::p2::pipe::{MemoryInputPipe, MemoryOutputPipe};
-use wasmtime_wasi::{DirPerms, FilePerms, I32Exit, WasiCtxBuilder};
+use wasmtime_wasi::{FsPerms, I32Exit, WasiCtxBuilder};
 
 /// A cap on what one captured run may write.
 /// `MemoryOutputPipe` allocates nothing up front.
@@ -133,7 +133,7 @@ impl WasiRun {
         }
         for (host, guest) in &self.dirs {
             builder
-                .preopened_dir(host, guest, DirPerms::all(), FilePerms::all())
+                .preopened_dir(host, guest, FsPerms::ReadWrite)
                 .map_err(from_wasmtime)
                 .with_context(|| format!("test-wasmtime-wasi: preopen {}", host.display()))?;
         }

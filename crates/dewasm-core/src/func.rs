@@ -241,11 +241,11 @@ impl<'a> FuncBuilder<'a> {
     /// Such an offset is a line-table gap or an `end_sequence` boundary.
     /// It does not clear it.
     /// A no-op without a line table.
-    fn track_source_pos(&mut self, offset: usize) {
+    fn track_source_pos(&mut self, offset: u64) {
         let Some(table) = self.line_table else {
             return;
         };
-        if let Some(pos) = table.lookup(offset as u64) {
+        if let Some(pos) = table.lookup(offset) {
             self.cur_pos = Some(pos);
         }
     }

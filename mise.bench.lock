@@ -3,70 +3,76 @@
 lockfile_version = 3
 
 [[tools.graalpy]]
-version = "25.0.3"
+version = "25.5.5"
 backend = "github:oracle/graalpython"
-specifiers = ["25.0.3"]
+specifiers = ["25.5.5"]
 
 [tools.graalpy.options]
 version_prefix = "graal-"
 
 [tools.graalpy."platforms.linux-arm64"]
-checksum = "sha256:f889a02425b0b55a0f070d63324f3d08e0975ea0b33aa69041c14418cf6cdeec"
-url = "https://github.com/oracle/graalpython/releases/download/graal-25.0.3/graalpy-25.0.3-linux-aarch64.tar.gz"
-url_api = "https://api.github.com/repos/oracle/graalpython/releases/assets/426333339"
+checksum = "sha256:f9a7b3a572c8a907cf517647f1f58f02e241f08a66da73bb1174493b15f91233"
+checksum_source = "mise-versions"
+url = "https://github.com/oracle/graalpython/releases/download/graal-25.5.5/graalpy3.13-25.5.5-linux-aarch64.tar.gz"
+url_api = "https://api.github.com/repos/oracle/graalpython/releases/assets/705195663"
 
 [tools.graalpy."platforms.linux-x64"]
-checksum = "sha256:c351b503d212519ad5e7e835fd9eb56b557ca9d5b6ef59e32b40435603f90bf8"
-url = "https://github.com/oracle/graalpython/releases/download/graal-25.0.3/graalpy-25.0.3-linux-amd64.tar.gz"
-url_api = "https://api.github.com/repos/oracle/graalpython/releases/assets/426333715"
+checksum = "sha256:b4ff1358c47d832f48e334bdabff2d632fcf9670519cee50694ffc38bc01dab6"
+checksum_source = "mise-versions"
+url = "https://github.com/oracle/graalpython/releases/download/graal-25.5.5/graalpy3.13-25.5.5-linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/oracle/graalpython/releases/assets/705195289"
 
 [tools.graalpy."platforms.macos-arm64"]
-checksum = "sha256:387d9f5b376860842bea4d55aae5820974f3f3b68fc36c77ae863a061a888857"
-url = "https://github.com/oracle/graalpython/releases/download/graal-25.0.3/graalpy-25.0.3-macos-aarch64.tar.gz"
-url_api = "https://api.github.com/repos/oracle/graalpython/releases/assets/426333195"
+checksum = "sha256:3228f2075a02d1a614f5584b53707565c37d7c24dc9bcd8b4812e413db377da6"
+url = "https://github.com/oracle/graalpython/releases/download/graal-25.5.5/graalpy3.13-25.5.5-macos-aarch64.tar.gz"
+url_api = "https://api.github.com/repos/oracle/graalpython/releases/assets/705195456"
 
 [[tools.jruby]]
-version = "10.1.2.0"
+version = "10.1.3.0"
 backend = "github:jruby/jruby"
-specifiers = ["10.1.2.0"]
+specifiers = ["10.1.3.0"]
 
 [tools.jruby.options]
 asset_pattern = "jruby-bin-*.zip"
 
 [tools.jruby."platforms.linux-arm64"]
-checksum = "sha256:dbc35ec9aa35d9ccc8354bae3ee16661a2dd747e52155b5413da021da715abed"
-url = "https://github.com/jruby/jruby/releases/download/10.1.2.0/jruby-bin-10.1.2.0.zip"
-url_api = "https://api.github.com/repos/jruby/jruby/releases/assets/600348717"
+checksum = "sha256:4a50155cf251fa175b75dee0ac379961492075095627ab837649c050ce52f41b"
+checksum_source = "mise-versions"
+url = "https://github.com/jruby/jruby/releases/download/10.1.3.0/jruby-bin-10.1.3.0.zip"
+url_api = "https://api.github.com/repos/jruby/jruby/releases/assets/714088383"
 
 [tools.jruby."platforms.linux-x64"]
-checksum = "sha256:dbc35ec9aa35d9ccc8354bae3ee16661a2dd747e52155b5413da021da715abed"
-url = "https://github.com/jruby/jruby/releases/download/10.1.2.0/jruby-bin-10.1.2.0.zip"
-url_api = "https://api.github.com/repos/jruby/jruby/releases/assets/600348717"
+checksum = "sha256:4a50155cf251fa175b75dee0ac379961492075095627ab837649c050ce52f41b"
+checksum_source = "mise-versions"
+url = "https://github.com/jruby/jruby/releases/download/10.1.3.0/jruby-bin-10.1.3.0.zip"
+url_api = "https://api.github.com/repos/jruby/jruby/releases/assets/714088383"
 
 [tools.jruby."platforms.macos-arm64"]
-checksum = "sha256:dbc35ec9aa35d9ccc8354bae3ee16661a2dd747e52155b5413da021da715abed"
-url = "https://github.com/jruby/jruby/releases/download/10.1.2.0/jruby-bin-10.1.2.0.zip"
-url_api = "https://api.github.com/repos/jruby/jruby/releases/assets/600348717"
+checksum = "sha256:4a50155cf251fa175b75dee0ac379961492075095627ab837649c050ce52f41b"
+url = "https://github.com/jruby/jruby/releases/download/10.1.3.0/jruby-bin-10.1.3.0.zip"
+url_api = "https://api.github.com/repos/jruby/jruby/releases/assets/714088383"
 
 [[tools.tinygo]]
-version = "0.42.0"
+version = "0.44.0"
 backend = "aqua:tinygo-org/tinygo"
-specifiers = ["0.42.0"]
+specifiers = ["0.44.0"]
 
 [tools.tinygo."platforms.linux-arm64"]
-checksum = "sha256:f2f3f863e63728b87772e7306bd6030df6e6c89773a7082eb0122113cf9e453d"
-url = "https://github.com/tinygo-org/tinygo/releases/download/v0.42.0/tinygo0.42.0.linux-arm64.tar.gz"
-url_api = "https://api.github.com/repos/tinygo-org/tinygo/releases/assets/539147845"
+checksum = "sha256:48cece9e1e886a176caad0918182d90f8348ad3084774e6239f42e5e11e40990"
+checksum_source = "mise-versions"
+url = "https://github.com/tinygo-org/tinygo/releases/download/v0.44.0/tinygo0.44.0.linux-arm64.tar.gz"
+url_api = "https://api.github.com/repos/tinygo-org/tinygo/releases/assets/684237489"
 
 [tools.tinygo."platforms.linux-x64"]
-checksum = "sha256:b87688fa2e19cee7d813cad7fd7dadb71dff3198e47125aba66ba4af5e490438"
-url = "https://github.com/tinygo-org/tinygo/releases/download/v0.42.0/tinygo0.42.0.linux-amd64.tar.gz"
-url_api = "https://api.github.com/repos/tinygo-org/tinygo/releases/assets/539147842"
+checksum = "sha256:ed0f45543a49ff2a99120a5a1b8814a0750e1fda1a66f8e2a0a172576134aaf9"
+checksum_source = "mise-versions"
+url = "https://github.com/tinygo-org/tinygo/releases/download/v0.44.0/tinygo0.44.0.linux-amd64.tar.gz"
+url_api = "https://api.github.com/repos/tinygo-org/tinygo/releases/assets/684237488"
 
 [tools.tinygo."platforms.macos-arm64"]
-checksum = "sha256:493da3585e66c5da677a4be39402faf2041b4e45a61eb456e4547eca753a544e"
-url = "https://github.com/tinygo-org/tinygo/releases/download/v0.42.0/tinygo0.42.0.darwin-arm64.tar.gz"
-url_api = "https://api.github.com/repos/tinygo-org/tinygo/releases/assets/539147844"
+checksum = "sha256:696a37db149c2c37ed0da96cc1f2cca2630fca0c4dd19823a2a481c9b4a6a748"
+url = "https://github.com/tinygo-org/tinygo/releases/download/v0.44.0/tinygo0.44.0.darwin-arm64.tar.gz"
+url_api = "https://api.github.com/repos/tinygo-org/tinygo/releases/assets/684237500"
 
 [[tools.wabt]]
 version = "1.0.42"
