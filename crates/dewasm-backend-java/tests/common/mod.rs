@@ -6,7 +6,7 @@
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Output;
 
 use dewasm_backend_java::javac_command;
@@ -20,7 +20,8 @@ static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new
 /// A caller that treats a compile failure as a bug panics on it.
 /// A missing `javac` is a loud failure (from `javac_command`).
 ///
-/// The cache is keyed on the source alone and shared by every suite in the crate.
+/// The cache is keyed on the source, in a directory of the `javac` version that built it.
+/// Every suite in the crate shares it.
 /// These all land in the same namespace:
 ///
 /// - the specification harness's `Main.java` for a `.wast` file;
@@ -33,8 +34,7 @@ pub fn build_java(source: &str) -> Result<PathBuf, Output> {
     source.hash(&mut hasher);
     let hash = hasher.finish();
 
-    let cache = std::env::temp_dir().join("dewasm-java-cache");
-    std::fs::create_dir_all(&cache).unwrap();
+    let cache = cache_dir();
     let classdir = cache.join(format!("cls-{hash:016x}"));
 
     if !classdir.join("Main.class").exists() {
@@ -68,4 +68,12 @@ pub fn build_java(source: &str) -> Result<PathBuf, Output> {
     }
 
     Ok(classdir)
+}
+
+/// The cache directory of the `javac` in use, found once per test binary.
+fn cache_dir() -> &'static Path {
+    static DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        dewasm_test_helper::build_cache_dir("dewasm-java-cache", javac_command().arg("-version"))
+    })
 }

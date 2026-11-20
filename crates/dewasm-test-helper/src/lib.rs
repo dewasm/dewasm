@@ -10,6 +10,7 @@ mod apps_capi;
 mod apps_convert;
 mod apps_fs;
 mod backend;
+mod build_cache;
 mod doom;
 mod fixtures;
 mod folding;
@@ -42,6 +43,7 @@ pub use backend::{
     derive_module_name, module_name_style, run_command, run_command_bytes, run_script,
     run_script_bytes, write_temp_script, BackendUnderTest, ModuleNameStyle,
 };
+pub use build_cache::build_cache_dir;
 pub use doom::{
     doom_frame_snapshot_path, doom_wasm_path, frame_to_ppm, run_doom_frame_case,
     DOOM_CLOCK_STEP_MS, DOOM_FRAME_H, DOOM_FRAME_W, DOOM_TICKS,

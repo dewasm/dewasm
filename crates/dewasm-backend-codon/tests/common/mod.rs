@@ -1,7 +1,8 @@
 //! The `codon build` step the Codon crate's test binaries share.
 //! It compiles generated source to a content-addressed cache binary and hands back the path.
 //! Identical programs build once.
-//! The cache is keyed on the source alone and shared by every suite in the crate.
+//! The cache is keyed on the source, in a directory of the Codon version that built it.
+//! Every suite in the crate shares it.
 //!
 //! A built binary links Codon's runtime dylibs (`libcodonrt`, `libomp`) by `@rpath`/`@loader_path`.
 //! So [`run_codon_binary`] puts the toolchain's `lib` directory on every spawned run's loader path.
@@ -11,7 +12,7 @@
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use dewasm_backend_codon::{codon_lib_dir, find_codon};
@@ -45,8 +46,7 @@ pub fn build_codon(source: &str) -> Result<PathBuf, Output> {
     source.hash(&mut hasher);
     let hash = hasher.finish();
 
-    let cache = std::env::temp_dir().join("dewasm-codon-cache");
-    std::fs::create_dir_all(&cache).unwrap();
+    let cache = cache_dir(&codon);
     let bin = cache.join(format!("prog-dbg-{hash:016x}"));
     if bin.exists() {
         return Ok(bin);
@@ -76,9 +76,21 @@ pub fn build_codon(source: &str) -> Result<PathBuf, Output> {
         return Err(build);
     }
     let _ = std::fs::remove_file(&src);
-    ensure_runtime_dylibs(&cache);
+    ensure_runtime_dylibs(cache);
     std::fs::rename(&tmp_bin, &bin).expect("move built binary into cache");
     Ok(bin)
+}
+
+/// The cache directory of the `codon` in use, found once per test binary.
+/// The runtime libraries copied beside the binaries belong to that one version too.
+fn cache_dir(codon: &Path) -> &'static Path {
+    static DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        dewasm_test_helper::build_cache_dir(
+            "dewasm-codon-cache",
+            Command::new(codon).arg("--version"),
+        )
+    })
 }
 
 /// Copy Codon's runtime shared libraries next to the cache binaries once.

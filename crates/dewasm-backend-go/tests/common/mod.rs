@@ -1,7 +1,7 @@
 //! The `go build` step the Go crate's test binaries share.
 //! It compiles generated source to a content-addressed cache binary and hands back the path.
 //! Identical sources (for example, `cowsay_args_e2e!` and `cowsay_stdin_e2e!`) then build once.
-//! The cache is keyed on the source alone.
+//! The cache is keyed on the source, in a directory of the Go version that built it.
 //! Every suite in the crate shares it (`e2e`, `spec`, `wasi_testsuite`, `module_name`).
 //! So a program two of them happen to agree on is built once.
 //!
@@ -26,12 +26,20 @@
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
 use dewasm_backend_go::find_go;
 
 static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// The cache directory of the `go` in use, found once per test binary.
+fn cache_dir(go: &Path) -> &'static Path {
+    static DIR: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    DIR.get_or_init(|| {
+        dewasm_test_helper::build_cache_dir("dewasm-go-cache", Command::new(go).arg("version"))
+    })
+}
 
 /// Compile `source` to a content-addressed cache binary and return its path.
 /// `Err(Output)` carries the `go build` failure.
@@ -45,8 +53,7 @@ pub fn build_go(source: &str) -> Result<PathBuf, Output> {
     source.hash(&mut hasher);
     let hash = hasher.finish();
 
-    let cache = std::env::temp_dir().join("dewasm-go-cache");
-    std::fs::create_dir_all(&cache).unwrap();
+    let cache = cache_dir(&go);
     let bin = cache.join(format!("prog-{hash:016x}"));
     if bin.exists() {
         return Ok(bin);
