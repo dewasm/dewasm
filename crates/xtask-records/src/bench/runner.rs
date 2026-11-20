@@ -390,6 +390,22 @@ impl Target {
         }
     }
 
+    /// Whether a compiler turns this target's generated source into the artifact that runs.
+    fn is_compiled(&self) -> bool {
+        match self {
+            Target::Go | Target::TinyGo | Target::Java | Target::Codon | Target::Spinel => true,
+            Target::Ruby(_)
+            | Target::Monoruby
+            | Target::JRuby
+            | Target::Python
+            | Target::PythonJit
+            | Target::PyPy
+            | Target::GraalPy
+            | Target::Perl
+            | Target::Bash => false,
+        }
+    }
+
     /// What the artifact cache keys this target's built artifact under.
     /// Script targets share their backend's one generated file.
     /// Compiled targets that share a backend but not a compiler must not share a binary.
@@ -720,7 +736,11 @@ fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
     let cache = bench_tmp_dir()?;
     let limit = build_timeout()?;
     let source = convert(backend, bytes)?;
-    let stem = format!("{}-{:016x}", backend.name(), hash_bytes(source.as_bytes()));
+    let stem = artifact_stem(
+        backend.name(),
+        &source,
+        target.is_compiled().then(|| target.version()).flatten(),
+    );
 
     match target {
         Target::Go => {
@@ -841,6 +861,19 @@ fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
             Ok(Artifact::Script(path))
         }
     }
+}
+
+/// The file stem an artifact is cached under: the backend, then a hash of what decides its bytes.
+/// For a script that is the source alone.
+/// A compiled artifact also depends on its compiler, so `compiler_version` joins the hash.
+/// Without it a record names one compiler version and measures the binary another one built.
+fn artifact_stem(backend: &str, source: &str, compiler_version: Option<String>) -> String {
+    let mut hasher = DefaultHasher::new();
+    source.as_bytes().hash(&mut hasher);
+    if let Some(version) = compiler_version {
+        version.hash(&mut hasher);
+    }
+    format!("{backend}-{:016x}", hasher.finish())
 }
 
 /// Convert `bytes` to standalone source with `backend`, on a 64 MiB stack.
@@ -1204,6 +1237,14 @@ fn path_arg(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_compiled_artifact_is_cached_per_compiler_version() {
+        let stem = |version: Option<&str>| artifact_stem("go", "source", version.map(String::from));
+        assert_ne!(stem(Some("go1.27.1")), stem(Some("go1.27.4")));
+        assert_eq!(stem(Some("go1.27.4")), stem(Some("go1.27.4")));
+        assert_ne!(stem(None), stem(Some("go1.27.4")));
+    }
 
     #[test]
     fn the_build_limit_is_the_default_unless_the_variable_gives_seconds() {
