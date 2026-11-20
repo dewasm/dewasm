@@ -26,7 +26,7 @@ cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p cache
 
 PYWASM_VERSION=2.2.3
-WARDITE_VERSION=0.9.0
+WARDITE_VERSION=1.3.1
 
 # Fail loudly with an actionable message rather than half-installing.
 require_tool() {

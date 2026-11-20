@@ -42,4 +42,5 @@ elapsed_ms = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000.
 warn format("load_ms=%.3f", elapsed_ms)
 
 instance.runtime._start
-$stdout.flush
+# A guest may close `stdout` itself, as `minigzip` does; `wardite` then closes the real one.
+$stdout.flush unless $stdout.closed?
