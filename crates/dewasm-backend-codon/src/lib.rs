@@ -267,7 +267,7 @@ impl Backend for CodonBackend {
     }
 }
 
-/// The standalone entrypoint: parse the `--dir HOST::GUEST` runtime interface, instantiate.
+/// The standalone entrypoint: parse the `--dir` and `--env` flags, instantiate.
 /// Then run `_start`, and map Exit/Trap to the process exit status.
 fn standalone_main(
     w: &mut CodeWriter,
@@ -281,6 +281,7 @@ fn standalone_main(
     w.indent();
     if wasi {
         w.line("_pre = Dict[str, str]()");
+        w.line("_env = Dict[str, str]()");
         w.line("_argv = sys.argv[1:]");
         w.line("_i = 0");
         w.line("while _i < len(_argv):");
@@ -299,7 +300,9 @@ fn standalone_main(
         w.line("_i += 1");
         w.line("if _i >= len(_argv):");
         w.indent();
+        // Codon 0.20.1 does not write out `stderr` on `sys.exit`, so each message is flushed first.
         w.line("sys.stderr.write(\"--dir requires a HOST::GUEST argument\\n\")");
+        w.line("sys.stderr.flush()");
         w.line("sys.exit(1)");
         w.dedent();
         w.line("_spec = _argv[_i]");
@@ -319,6 +322,35 @@ fn standalone_main(
         w.dedent();
         w.line("_i += 1");
         w.dedent();
+        w.line("elif _a == \"--env\" or _a.startswith(\"--env=\"):");
+        w.indent();
+        w.line("_var = \"\"");
+        w.line("if _a == \"--env\":");
+        w.indent();
+        w.line("_i += 1");
+        w.line("if _i >= len(_argv):");
+        w.indent();
+        w.line("sys.stderr.write(\"--env requires a NAME[=VAL] argument\\n\")");
+        w.line("sys.stderr.flush()");
+        w.line("sys.exit(1)");
+        w.dedent();
+        w.line("_var = _argv[_i]");
+        w.dedent();
+        w.line("else:");
+        w.indent();
+        w.line("_var = _a[6:]");
+        w.dedent();
+        w.line("_eq = _var.find(\"=\")");
+        w.line("if _eq >= 0:");
+        w.indent();
+        w.line("_env[_var[:_eq]] = _var[_eq + 1:]");
+        w.dedent();
+        w.line("elif _var in os.environ:");
+        w.indent();
+        w.line("_env[_var] = os.environ[_var]");
+        w.dedent();
+        w.line("_i += 1");
+        w.dedent();
         w.line("else:");
         w.indent();
         w.line("break");
@@ -334,20 +366,6 @@ fn standalone_main(
         w.line("for _x in _argv[_i:]:");
         w.indent();
         w.line("_args.append(_x)");
-        w.dedent();
-        // A loop over `os.environ` gives pairs on Codon 0.20.1 and keys on Codon 0.20.7.
-        // Codon decides `isinstance` at compile time, so it checks only the branch that applies.
-        w.line("_env = Dict[str, str]()");
-        w.line("for _e in os.environ:");
-        w.indent();
-        w.line("if isinstance(_e, str):");
-        w.indent();
-        w.line("_env[_e] = os.environ[_e]");
-        w.dedent();
-        w.line("else:");
-        w.indent();
-        w.line("_env[_e[0]] = _e[1]");
-        w.dedent();
         w.dedent();
         w.line(format!(
             "_inst = {class_name}(Dict[str, Dict[str, {rt_name}.Extern]](), _args, _env, _pre)"
@@ -373,6 +391,7 @@ fn standalone_main(
         }
         None => {
             w.line("sys.stderr.write(\"no _start export\\n\")");
+            w.line("sys.stderr.flush()");
             w.line("sys.exit(1)");
         }
     }
@@ -384,6 +403,7 @@ fn standalone_main(
     w.line(format!("except {rt_name}.Trap as _e:"));
     w.indent();
     w.line("sys.stderr.write(\"trap: \" + _e.message + \"\\n\")");
+    w.line("sys.stderr.flush()");
     w.line("sys.exit(134)");
     w.dedent();
     w.dedent();

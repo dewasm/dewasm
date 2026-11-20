@@ -3,7 +3,7 @@
 //! They run through the Codon backend's standalone interface.
 //! Codon is compiled, so it overrides `pty_command` to `codon build` the generated program.
 //! The build goes to a content-addressed cache binary, with the runtime dylibs copied beside it.
-//! So the manifest-only child environment needs no loader-path variable.
+//! So the child needs no loader-path variable.
 //! The generic harness lives in `dewasm-test-helper`.
 
 use dewasm_backend::Backend;
@@ -80,27 +80,6 @@ impl BackendUnderTest for CodonWasi {
 impl dewasm_test_helper::WasiTestsuiteBackend for CodonWasi {
     fn expected_failures(&self) -> &'static [(&'static str, &'static str)] {
         WASI_TESTSUITE_EXPECTED_FAILURES
-    }
-
-    /// macOS CoreFoundation injects `__CF_USER_TEXT_ENCODING` into every process environment.
-    /// So count-exact `environ` assertions cannot hold there.
-    /// A Codon binary on Linux inherits exactly the manifest environment.
-    /// So these pass there and must not be listed.
-    fn expected_failures_macos(&self) -> &'static [(&'static str, &'static str)] {
-        &[
-            (
-                "assemblyscript/environ_get-multiple-variables",
-                "environ: macOS CoreFoundation env injection",
-            ),
-            (
-                "assemblyscript/environ_sizes_get-multiple-variables",
-                "environ: macOS CoreFoundation env injection",
-            ),
-            (
-                "assemblyscript/environ_sizes_get-no-variables",
-                "environ: macOS CoreFoundation env injection",
-            ),
-        ]
     }
 
     /// Every trial is a `codon build`.

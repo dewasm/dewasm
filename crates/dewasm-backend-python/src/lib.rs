@@ -355,10 +355,13 @@ impl Backend for PythonBackend {
             if wasi_kwargs {
                 // Parse the standalone runtime interface.
                 // Leading `--dir HOST::GUEST` flags mount host directories at guest paths.
+                // `--env NAME=VAL` flags in that run give the guest its only variables.
+                // `--env NAME` with no value takes the one this process has, when it has one.
                 // This follows Wasmtime's style.
                 // The run stops at `--` or the first non-flag token.
                 // The rest is the guest's `argv[1..]`.
                 w.line("_pre = {}");
+                w.line("_env = {}");
                 w.line("_argv = sys.argv[1:]");
                 w.line("_i = 0");
                 w.line("while _i < len(_argv):");
@@ -389,13 +392,40 @@ impl Backend for PythonBackend {
                 w.line("_pre[_g if _sep else _h] = _h");
                 w.line("_i += 1");
                 w.dedent();
+                w.line("elif _a == \"--env\" or _a.startswith(\"--env=\"):");
+                w.indent();
+                w.line("if _a == \"--env\":");
+                w.indent();
+                w.line("_i += 1");
+                w.line("if _i >= len(_argv):");
+                w.indent();
+                w.line("sys.stderr.write(\"--env requires a NAME[=VAL] argument\\n\")");
+                w.line("sys.exit(1)");
+                w.dedent();
+                w.line("_spec = _argv[_i]");
+                w.dedent();
+                w.line("else:");
+                w.indent();
+                w.line("_spec = _a[6:]");
+                w.dedent();
+                w.line("_n, _sep, _v = _spec.partition(\"=\")");
+                w.line("if _sep:");
+                w.indent();
+                w.line("_env[_n] = _v");
+                w.dedent();
+                w.line("elif _n in os.environ:");
+                w.indent();
+                w.line("_env[_n] = os.environ[_n]");
+                w.dedent();
+                w.line("_i += 1");
+                w.dedent();
                 w.line("else:");
                 w.indent();
                 w.line("break");
                 w.dedent();
                 w.dedent();
                 w.line(format!(
-                    "_inst = {class_name}({{}}, args=[os.path.basename(sys.argv[0])] + _argv[_i:], env=dict(os.environ), preopens=_pre)"
+                    "_inst = {class_name}({{}}, args=[os.path.basename(sys.argv[0])] + _argv[_i:], env=_env, preopens=_pre)"
                 ));
             } else {
                 w.line(format!("_inst = {class_name}()"));

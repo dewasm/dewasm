@@ -687,6 +687,7 @@ dewasm_test_helper::wasi_suite!(Python, Poll);
 dewasm_test_helper::wasi_suite!(Python, Fs, PYTHON_FS_GLUE);
 dewasm_test_helper::wasi_root_containment_e2e!(Python, PYTHON_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Python);
+dewasm_test_helper::standalone_env_e2e!(Python);
 // The standalone entrypoint's handling of deep recursion (issue #31).
 dewasm_test_helper::deep_recursion_e2e!(Python);
 dewasm_test_helper::folded_temp_reuse_e2e!(Python);

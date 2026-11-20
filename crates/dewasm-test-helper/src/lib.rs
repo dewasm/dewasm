@@ -71,8 +71,8 @@ pub use spec::{
     SpecBackend, CURATED_SPEC_FILES, EXCEPTION_HANDLING_SPEC_FILES, TAIL_CALL_SPEC_FILES,
 };
 pub use wasi::{
-    run_deep_recursion, run_standalone_dir, run_wasi_containment, run_wasi_fs, run_wasi_standalone,
-    WasiCase, WasiCheck, WasiKind, WASI_CASES,
+    run_deep_recursion, run_standalone_dir, run_standalone_env, run_wasi_containment, run_wasi_fs,
+    run_wasi_standalone, WasiCase, WasiCheck, WasiKind, WASI_CASES,
 };
 pub use wasi_testsuite::{wasi_testsuite_main, wasi_testsuite_trials, WasiTestsuiteBackend};
 pub use wasmtime_backend::{wasi_runner_argv, wasi_runner_bin, Wasmtime};
@@ -387,6 +387,21 @@ macro_rules! standalone_dir_e2e {
         #[test]
         fn standalone_dir() {
             $crate::run_standalone_dir(&$lang);
+        }
+    };
+}
+
+/// One `#[test]` exercising the standalone `--env` interface for `$lang`.
+/// Convert `wasi_standalone_env.wat` standalone, and run it with each form of the flag.
+/// See [`run_standalone_env`].
+/// No glue: standalone needs none.
+/// Every backend with WASI support calls it.
+#[macro_export]
+macro_rules! standalone_env_e2e {
+    ($lang:expr) => {
+        #[test]
+        fn standalone_env() {
+            $crate::run_standalone_env(&$lang);
         }
     };
 }

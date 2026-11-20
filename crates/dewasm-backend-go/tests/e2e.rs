@@ -1037,6 +1037,7 @@ dewasm_test_helper::wasi_suite!(Go, Poll);
 dewasm_test_helper::wasi_suite!(Go, Fs, GO_FS_GLUE);
 dewasm_test_helper::wasi_root_containment_e2e!(Go, GO_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Go);
+dewasm_test_helper::standalone_env_e2e!(Go);
 // Goroutine stacks start small and grow dynamically.
 // So 5000 guest frames need no special handling at the entrypoint.
 dewasm_test_helper::deep_recursion_e2e!(Go);

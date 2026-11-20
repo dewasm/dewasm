@@ -622,6 +622,7 @@ dewasm_test_helper::wasi_suite!(Perl, Poll);
 dewasm_test_helper::wasi_suite!(Perl, Fs, PERL_FS_GLUE);
 dewasm_test_helper::wasi_root_containment_e2e!(Perl, PERL_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Perl);
+dewasm_test_helper::standalone_env_e2e!(Perl);
 // Perl recursion is heap-allocated (no host stack to overflow).
 // The case checks that the entrypoint still surfaces `proc_exit(42)` through deep guest recursion.
 dewasm_test_helper::deep_recursion_e2e!(Perl);

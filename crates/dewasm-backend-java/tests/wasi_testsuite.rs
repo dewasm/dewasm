@@ -3,7 +3,7 @@
 //! Java is compiled, so it overrides `pty_command`.
 //! The override `javac`s the generated `Main.java` to a content-addressed class directory cache.
 //! That is the launch recipe the shared `run_standalone_wasi` runs.
-//! It runs it with the manifest's environment, arguments, and directories applied.
+//! It runs it with the manifest's environment, arguments, and directories as flags.
 //! The generic harness lives in `dewasm-test-helper`.
 
 use dewasm_backend::Backend;
@@ -15,30 +15,10 @@ mod common;
 use common::build_java;
 
 /// Known trial failures with their attribution: `(trial, tag)`.
-/// Host-specific ones live in the constant below.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared ENOSYS / out-of-scope system calls (`docs/support.md`).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
     ("c/sock_shutdown-not_sock", "sock_shutdown (out of scope)"),
-];
-
-/// Host-scoped failures on a macOS host: the JVM host injects `environ` entries of its own.
-/// One is macOS CoreFoundation's `__CF_USER_TEXT_ENCODING`.
-/// So count-exact `environ` assertions cannot hold even under the harness's cleared environment.
-/// A plain Linux JVM injects nothing, so these pass there.
-const WASI_TESTSUITE_EXPECTED_FAILURES_MACOS: &[(&str, &str)] = &[
-    (
-        "assemblyscript/environ_get-multiple-variables",
-        "environ: host-interpreter env injection",
-    ),
-    (
-        "assemblyscript/environ_sizes_get-multiple-variables",
-        "environ: host-interpreter env injection",
-    ),
-    (
-        "assemblyscript/environ_sizes_get-no-variables",
-        "environ: host-interpreter env injection",
-    ),
 ];
 
 struct JavaWasi;
@@ -80,10 +60,6 @@ impl BackendUnderTest for JavaWasi {
 impl dewasm_test_helper::WasiTestsuiteBackend for JavaWasi {
     fn expected_failures(&self) -> &'static [(&'static str, &'static str)] {
         WASI_TESTSUITE_EXPECTED_FAILURES
-    }
-
-    fn expected_failures_macos(&self) -> &'static [(&'static str, &'static str)] {
-        WASI_TESTSUITE_EXPECTED_FAILURES_MACOS
     }
 }
 

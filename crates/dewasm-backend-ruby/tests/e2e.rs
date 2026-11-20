@@ -648,6 +648,7 @@ dewasm_test_helper::wasi_suite!(Ruby, Poll);
 dewasm_test_helper::wasi_suite!(Ruby, Fs, RUBY_FS_GLUE);
 dewasm_test_helper::wasi_root_containment_e2e!(Ruby, RUBY_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Ruby);
+dewasm_test_helper::standalone_env_e2e!(Ruby);
 // 5000 guest frames fit the host stack Ruby's entrypoint already runs on.
 // Nothing more is needed (measured).
 dewasm_test_helper::deep_recursion_e2e!(Ruby);
