@@ -32,6 +32,7 @@ A run adds its line with a `TODO`; fill it in when committing the record.
 - `2026-09-19T04-41-52Z-speed.json`: `cowsay.wasm` v0.2.0, which measures columns (#326).
 - `2026-09-25T05-34-26Z-speed.json`: the Spinel runner joins, making 29 (#335).
 - `2026-10-04T17-43-54Z-speed.json`: `cowsay.wasm` 0.3.0 and the `mise` tools; Spinel builds time out.
+- `2026-11-20T14-58-01Z-speed.json`: re-baseline after the tool and app updates (#375 to #385).
 
 ## Size records
 
@@ -44,3 +45,4 @@ A run adds its line with a `TODO`; fill it in when committing the record.
 - `2026-09-17T18-31-02Z-size.json`: re-baseline beside the `cowsay` replacement (#322).
 - `2026-09-19T02-25-54Z-size.json`: re-baseline beside the `cowsay.wasm` v0.2.0 speed record.
 - `2026-10-04T17-48-10Z-size.json`: re-baseline beside the `cowsay.wasm` 0.3.0 speed record.
+- `2026-11-20T13-42-07Z-size.json`: after the app updates (#385).
