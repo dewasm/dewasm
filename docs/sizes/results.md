@@ -9,12 +9,12 @@ How to run and read these measurements is [README.md](README.md).
 
 ## Environment
 
-Measured 2026-10-04T17:48:10Z.
+Measured 2026-11-20T13:42:07Z.
 
 | | |
 | --- | --- |
-| OS | macOS 27.0.1 |
-| Kernel | Darwin 27.0.0 |
+| OS | macOS 27.2.1 |
+| Kernel | Darwin 27.2.0 |
 | CPU | Apple M1 Pro |
 | Architecture | aarch64 |
 
@@ -23,9 +23,9 @@ A runtime missing from this table was not installed on this host; it appears und
 
 | Runtime | Version |
 | --- | --- |
-| `wasmtime` | `wasmtime 49.0.2 (3c8a3e79a 2026-10-02)` |
+| `wasmtime` | `wasmtime 50.0.2 (f9a93b049 2026-11-16)` |
 | `wasmer` | `wasmer 7.5.0` |
-| `wasmedge` | `wasmedge version 0.17.2` |
+| `wasmedge` | `wasmedge version 0.18.1` |
 | `wazero` | `1.12.0` |
 | `wasm3` | `Wasm3 v0.9.1-beta.1 on arm64-v8a` |
 
@@ -38,14 +38,14 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/runtimes-dark.svg">
-  <img alt="Installed size of the native wasm runtimes on this host, 5 rows on a log scale, smallest first. wasm3 is smallest at 248 kB, then wasmedge at 2.45 MB; wasmer is largest at 62.0 MB, a span of 250x. The table below carries every number." src="figs/runtimes.svg">
+  <img alt="Installed size of the native wasm runtimes on this host, 5 rows on a log scale, smallest first. wasm3 is smallest at 248 kB, then wasmedge at 2.80 MB; wasmer is largest at 62.0 MB, a span of 250x. The table below carries every number." src="figs/runtimes.svg">
 </picture>
 
 | Runtime | Size |
 | --- | --- |
-| `wasmtime` | 60.0 MB |
+| `wasmtime` | 56.8 MB |
 | `wasmer` | 62.0 MB |
-| `wasmedge` | 2.45 MB |
+| `wasmedge` | 2.80 MB |
 | `wazero` | 5.50 MB |
 | `wasm3` | 248 kB |
 
@@ -53,16 +53,16 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-cowsay-dark.svg">
-  <img alt="cowsay.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 38.4 kB, then python at 206 kB; bash is largest at 538 kB, a span of 14x. The table below carries every number." src="figs/app-cowsay.svg">
+  <img alt="cowsay.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 38.4 kB, then python at 207 kB; bash is largest at 539 kB, a span of 14x. The table below carries every number." src="figs/app-cowsay.svg">
 </picture>
 
 | Target | Size |
 | --- | --- |
 | wasm binary | 38.4 kB |
-| `ruby` | 230 kB |
-| `python` | 206 kB |
+| `ruby` | 231 kB |
+| `python` | 207 kB |
 | `perl` | 350 kB |
-| `bash` | 538 kB |
+| `bash` | 539 kB |
 | `go` | 262 kB |
 | `java` | 314 kB |
 
@@ -87,34 +87,34 @@ Each figure is a log axis in bytes, smallest first, with its full numbers in the
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-qjs-dark.svg">
-  <img alt="qjs.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 1.54 MB, then ruby at 6.54 MB; bash is largest at 27.0 MB, a span of 18x. The table below carries every number." src="figs/app-qjs.svg">
+  <img alt="qjs.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 1.57 MB, then ruby at 6.79 MB; bash is largest at 27.0 MB, a span of 17x. The table below carries every number." src="figs/app-qjs.svg">
 </picture>
 
 | Target | Size |
 | --- | --- |
-| wasm binary | 1.54 MB |
-| `ruby` | 6.54 MB |
-| `python` | 6.56 MB |
-| `perl` | 15.7 MB |
+| wasm binary | 1.57 MB |
+| `ruby` | 6.79 MB |
+| `python` | 6.85 MB |
+| `perl` | 16.0 MB |
 | `bash` | 27.0 MB |
-| `go` | 10.4 MB |
-| `java` | 10.7 MB |
+| `go` | 10.6 MB |
+| `java` | 10.9 MB |
 
 ### `ruby.wasm`
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figs/app-ruby-dark.svg">
-  <img alt="ruby.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 35.0 MB, then ruby at 66.9 MB; bash is largest at 311 MB, a span of 8.87x. The table below carries every number." src="figs/app-ruby.svg">
+  <img alt="ruby.wasm: the wasm binary against the source each backend converts it into, 7 rows on a log scale, smallest first. wasm binary is smallest at 34.7 MB, then ruby at 66.9 MB; bash is largest at 313 MB, a span of 9.01x. The table below carries every number." src="figs/app-ruby.svg">
 </picture>
 
 | Target | Size |
 | --- | --- |
-| wasm binary | 35.0 MB |
+| wasm binary | 34.7 MB |
 | `ruby` | 66.9 MB |
-| `python` | 77.1 MB |
-| `perl` | 198 MB |
-| `bash` | 311 MB |
-| `go` | 131 MB |
+| `python` | 77.0 MB |
+| `perl` | 200 MB |
+| `bash` | 313 MB |
+| `go` | 132 MB |
 | `java` | 143 MB |
 
 ## Not measured
