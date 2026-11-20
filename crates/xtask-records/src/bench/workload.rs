@@ -57,8 +57,6 @@ const MICRO_EXCLUDES: &[(&str, &[(&str, Exclusion)])] = &[
     ("wat/eh_throw", EH_EXCLUDES),
     ("wat/eh_try", EH_EXCLUDES),
     ("wat/tail_call", TAIL_CALL_EXCLUDES),
-    ("wat/f32_alu", F32_ALU_EXCLUDES),
-    ("wat/i64_div", I64_DIV_EXCLUDES),
 ];
 
 /// One declared exclusion.
@@ -83,7 +81,7 @@ pub enum ExclusionKind {
 
 /// Runners excluded from both exception-handling microbenchmarks.
 /// The reason is the same axis on both.
-/// None of these five decode or accept the tag section that `try_table`/`throw` needs.
+/// None of these four decode or accept the tag section that `try_table`/`throw` needs.
 const EH_EXCLUDES: &[(&str, Exclusion)] = &[
     (
         "dewasm-bash",
@@ -112,8 +110,6 @@ const EH_EXCLUDES: &[(&str, Exclusion)] = &[
     ("wasm3-pypy", CONVERTED_WASM3_EH_EXCLUSION),
     ("pywasm-cpython", PYWASM_EH_EXCLUSION),
     ("pywasm-pypy", PYWASM_EH_EXCLUSION),
-    ("wardite", WARDITE_EH_EXCLUSION),
-    ("wardite-yjit", WARDITE_EH_EXCLUSION),
 ];
 
 /// Runners excluded from the tail-call microbenchmark: none of these accepts `return_call`.
@@ -150,7 +146,7 @@ const PYWASM_TAIL_CALL_EXCLUSION: Exclusion = Exclusion {
 
 const WARDITE_TAIL_CALL_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Capability,
-    reason: "`wardite` decodes `return_call` but has no implementation for it",
+    reason: "`wardite` rejects `return_call` as an unsupported instruction",
 };
 
 const CONVERTED_WASM3_EH_EXCLUSION: Exclusion = Exclusion {
@@ -161,36 +157,6 @@ const CONVERTED_WASM3_EH_EXCLUSION: Exclusion = Exclusion {
 const PYWASM_EH_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Capability,
     reason: "`pywasm` has no exception-handling opcodes and fails decoding the module",
-};
-
-const WARDITE_EH_EXCLUSION: Exclusion = Exclusion {
-    kind: ExclusionKind::Capability,
-    reason: "`wardite` fails to load the tag section",
-};
-
-/// `wardite` does not re-round f32 arithmetic to single precision between operations.
-/// So a chain of dependent f32 operations accumulates double-precision bits.
-/// Its result then differs from `wasmtime`'s, and the verification would fail the whole run.
-const F32_ALU_EXCLUDES: &[(&str, Exclusion)] = &[
-    ("wardite", WARDITE_F32_ALU_EXCLUSION),
-    ("wardite-yjit", WARDITE_F32_ALU_EXCLUSION),
-];
-
-const WARDITE_F32_ALU_EXCLUSION: Exclusion = Exclusion {
-    kind: ExclusionKind::Capability,
-    reason: "`wardite` does not re-round f32 arithmetic to single precision, so a chain of dependent operations gives a result other than Wasmtime's, and the output comparison would fail the whole run",
-};
-
-/// `wardite` computes `i64.div_s` at `f64` precision.
-/// That loses bits for operands beyond 2^53 and gives a wrong quotient.
-const I64_DIV_EXCLUDES: &[(&str, Exclusion)] = &[
-    ("wardite", WARDITE_I64_DIV_EXCLUSION),
-    ("wardite-yjit", WARDITE_I64_DIV_EXCLUSION),
-];
-
-const WARDITE_I64_DIV_EXCLUSION: Exclusion = Exclusion {
-    kind: ExclusionKind::Capability,
-    reason: "`wardite` computes `i64.div_s` at `f64` precision, wrong for operands beyond 2^53",
 };
 
 /// The `sqlite3_query` script.
@@ -441,7 +407,8 @@ fn app_workloads() -> Vec<Workload> {
 /// Those run the same script on two builds of the same engine.
 /// Every reason below is measured, not guessed.
 /// An earlier draft guessed "do not finish in a practical time" for all four interpreter entries.
-/// It was wrong on both counts: `wardite` fails outright, and `pywasm` runs it fine, just slowly.
+/// It was wrong for `wardite` 0.9.0, which failed outright, and right for `pywasm`.
+/// `wardite` 1.3.1 runs the script, at about 260 s for one run under YJIT.
 /// The measurements were taken on `sqlite3-shell.wasm`.
 /// Each names the engine rather than the file, because the opcode-split build is the same program.
 const SQLITE_QUERY_EXCLUDES: &[(&str, Exclusion)] = &[
@@ -495,9 +462,8 @@ const CONVERTED_WASM3_SQLITE_EXCLUSION: Exclusion = Exclusion {
 };
 
 const WARDITE_SQLITE_EXCLUSION: Exclusion = Exclusion {
-    kind: ExclusionKind::Capability,
-    reason:
-        "`wardite` loads the sqlite3 shell but fails with an evaluation error as soon as any SQL runs",
+    kind: ExclusionKind::Cost,
+    reason: "`wardite` runs this program correctly but too slowly for the query script",
 };
 
 const PYWASM_SQLITE_EXCLUSION: Exclusion = Exclusion {
@@ -523,8 +489,6 @@ const MINIGZIP_EXCLUDES: &[(&str, Exclusion)] = &[
     ("wasm3-python", CONVERTED_WASM3_MINIGZIP_EXCLUSION),
     ("wasm3-pypy", CONVERTED_WASM3_MINIGZIP_EXCLUSION),
     ("pywasm-cpython", PYWASM_MINIGZIP_EXCLUSION),
-    ("wardite", WARDITE_MINIGZIP_EXCLUSION),
-    ("wardite-yjit", WARDITE_MINIGZIP_EXCLUSION),
 ];
 
 const CONVERTED_WASM3_MINIGZIP_EXCLUSION: Exclusion = Exclusion {
@@ -540,9 +504,4 @@ const BASH_MINIGZIP_EXCLUSION: Exclusion = Exclusion {
 const PYWASM_MINIGZIP_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Cost,
     reason: "`pywasm` under CPython compresses this workload's input too slowly to finish in a practical time",
-};
-
-const WARDITE_MINIGZIP_EXCLUSION: Exclusion = Exclusion {
-    kind: ExclusionKind::Capability,
-    reason: "`wardite` computes the correct compressed output but its driver crashes on exit: `minigzip` closes `stdout` itself, and `wardite`'s `fd_close` closes the real file descriptor under it",
 };
