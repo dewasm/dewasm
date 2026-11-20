@@ -335,8 +335,22 @@ fn standalone_main(
         w.indent();
         w.line("_args.append(_x)");
         w.dedent();
+        // A loop over `os.environ` gives pairs on Codon 0.20.1 and keys on Codon 0.20.7.
+        // Codon decides `isinstance` at compile time, so it checks only the branch that applies.
+        w.line("_env = Dict[str, str]()");
+        w.line("for _e in os.environ:");
+        w.indent();
+        w.line("if isinstance(_e, str):");
+        w.indent();
+        w.line("_env[_e] = os.environ[_e]");
+        w.dedent();
+        w.line("else:");
+        w.indent();
+        w.line("_env[_e[0]] = _e[1]");
+        w.dedent();
+        w.dedent();
         w.line(format!(
-            "_inst = {class_name}(Dict[str, Dict[str, {rt_name}.Extern]](), _args, dict(os.environ), _pre)"
+            "_inst = {class_name}(Dict[str, Dict[str, {rt_name}.Extern]](), _args, _env, _pre)"
         ));
     } else {
         w.line(format!(
