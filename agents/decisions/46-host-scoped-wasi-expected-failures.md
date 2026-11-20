@@ -6,6 +6,8 @@ The trait methods are `expected_failures_macos`/`expected_failures_linux`.
 The first scoped entries (Java, Ruby) landed with them.
 The Java `path_link` entry was fixed instead of scoped.
 The Java Linux entry went away when CI moved to JDK 25, which passes `rust/symlink_filestat`.
+The macOS `environ_*` entries went away with [decision 105](105-standalone-environment-from-env-flags.md).
+No backend has a scoped entry now, and the trait methods stay for the next one.
 
 ## Context
 

@@ -50,7 +50,7 @@ $ # or compile once:
 $ codon build -release -o prog prog.codon
 ```
 
-Standalone programs share one runtime interface: `argv`, `--dir` preopens, environment, exit/trap.
+Standalone programs share one runtime interface: `argv`, `--dir` preopens, `--env` variables, exit/trap.
 It is described in [`docs/standalone-interface.md`](../standalone-interface.md).
 
 ## Embedding a library artifact

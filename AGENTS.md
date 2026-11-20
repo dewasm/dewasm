@@ -161,6 +161,8 @@ Each rule is stated here in full; the cited decision holds its reasons and rejec
   A Ruby `Errno` class is named in a `rescue` clause, never as a hash key or a `case/when` operand.
   A `--mode standalone` artifact runs on load in every backend, behind no main guard.
   `--mode library` is the mode for output other code loads.
+- A standalone program gives its guest only the variables its `--env` flags name (decision 105).
+  A test that needs a guest variable passes the flag; it never sets or clears the child environment.
 - Runtime code is per-method units under `crates/dewasm-backend-<lang>/units/` (decisions 6/85).
   A unit carries a `# requires:` header, and the runtime is referenced as `Rt`.
   Keep the headers up to date when editing a unit.

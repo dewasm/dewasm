@@ -131,6 +131,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 102 | [Rails Example Runs Gem C Extensions Through a dewasm `ruby.h`](102-rails-c-extensions-through-a-dewasm-ruby-h.md) | Accepted |
 | 103 | [Function Names From the Name Section Are an Option, After the Index](103-function-names-option.md) | Accepted |
 | 104 | [Pygments Runs on a CPython Reactor That Wizer Pre-Initializes](104-pygments-on-a-pre-initialized-cpython.md) | Accepted |
+| 105 | [A Standalone Program Takes Its Environment From `--env` Flags](105-standalone-environment-from-env-flags.md) | Accepted |
 
 ## Adding a new decision
 

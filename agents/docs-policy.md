@@ -28,7 +28,7 @@ It belongs under `agents/` even when it describes user-facing behavior.
 | [`agents/vocabulary.md`](vocabulary.md) | The sources of allowed words, the project's terms, and the excluded words with what to write in their place | Agents writing text | By hand |
 | [`docs/getting-started.md`](../docs/getting-started.md) | Tutorial: verified end-to-end steps | New users | By hand (verify every command) |
 | [`docs/backends/`](../docs/backends/) | Per-target reference: output shape, requirements, limits, provider usage | Users of a specific target | By hand |
-| [`docs/standalone-interface.md`](../docs/standalone-interface.md) | The standalone runtime interface (`argv`, `--dir`, environment, exit/trap), uniform across backends | Users running standalone output | By hand |
+| [`docs/standalone-interface.md`](../docs/standalone-interface.md) | The standalone runtime interface (`argv`, `--dir`, `--env`, exit/trap), uniform across backends | Users running standalone output | By hand |
 | [`docs/support.md`](../docs/support.md) | The feature / WASI matrix per backend | Everyone | **Generated: never hand-edit** |
 | [`docs/testing.md`](../docs/testing.md) | How to run the test suites: what each one needs installed, and why it fails loud | Developers | By hand |
 | [`docs/related-work.md`](../docs/related-work.md) | Comparison with prior art | Users evaluating the project | By hand |

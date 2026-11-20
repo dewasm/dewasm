@@ -40,7 +40,7 @@ $ python3 prog.py --dir ./data::/data arg1 arg2
 ```
 
 Standalone programs share one runtime interface: [`docs/standalone-interface.md`](../standalone-interface.md).
-It covers `argv`, `--dir` preopens, environment, and exit/trap.
+It covers `argv`, `--dir` preopens, `--env` variables, and exit/trap.
 
 Library mode:
 
