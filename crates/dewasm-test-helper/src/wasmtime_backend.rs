@@ -78,26 +78,27 @@ pub fn wasi_runner_argv(
 }
 
 /// The built `xtask` binary that carries the WASI runner.
-/// Resolved beside the running test binary (`<target>/<profile>/deps/<test>`).
+/// It is the nearest `xtask` above the running test binary, so it sits in `<target>/<profile>/`.
 /// So it honors whatever target directory Cargo used, `$CARGO_TARGET_DIR` included.
 /// It also matches the profile the tests themselves were built with.
+/// How deep a test binary sits under that directory differs between Cargo versions.
 ///
 /// The suite never builds it: a missing binary fails loud with the command that produces it.
 /// A missing interpreter or an unpopulated apps cache fails the same way.
 pub fn wasi_runner_bin() -> PathBuf {
     let exe = std::env::current_exe().expect("current_exe");
-    let profile_dir = exe
-        .parent()
-        .and_then(Path::parent)
-        .expect("a test binary sits in <target>/<profile>/deps/");
-    let bin = profile_dir.join(format!("xtask{}", std::env::consts::EXE_SUFFIX));
-    assert!(
-        bin.is_file(),
-        "the wasmtime engine runs wasm through the xtask runner, and {} does not exist: \
-         build it once with `cargo build -p xtask` (see docs/testing.md)",
-        bin.display()
-    );
-    bin
+    let name = format!("xtask{}", std::env::consts::EXE_SUFFIX);
+    exe.ancestors()
+        .skip(1)
+        .map(|dir| dir.join(&name))
+        .find(|bin| bin.is_file())
+        .unwrap_or_else(|| {
+            panic!(
+                "the wasmtime engine runs wasm through the xtask runner, and no directory above \
+                 {} holds it: build it once with `cargo build -p xtask` (see docs/testing.md)",
+                exe.display()
+            )
+        })
 }
 
 /// The command that runs `argv` (from [`wasi_runner_argv`]) through the runner.
