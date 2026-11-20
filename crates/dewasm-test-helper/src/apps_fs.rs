@@ -196,7 +196,7 @@ pub const RG_SEARCH: FsAppCase = FsAppCase {
     }],
 };
 
-/// CPython 3.14.6 executing a one-liner.
+/// CPython 3.14.9 executing a one-liner.
 /// It reads its standard library from guest `/lib`.
 /// That is the cache-preopened `cache/cpython-lib/lib` tree.
 /// The heaviest interpreter case: a ~30 MB wasm.
