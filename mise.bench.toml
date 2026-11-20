@@ -4,17 +4,17 @@ jruby = "github:jruby/jruby"
 wabt = "github:WebAssembly/wabt"
 
 [tools]
-tinygo = "0.42.0"
+tinygo = "0.44.0"
 wabt = "1.0.42"
 
 [tools.graalpy]
-version = "25.0.3"
+version = "25.5.5"
 version_prefix = "graal-"
 # GraalPy also ships a `python3`, which on `PATH` could hide CPython's.
 filter_bins = ["graalpy"]
 
 [tools.jruby]
-version = "10.1.2.0"
+version = "10.1.3.0"
 # `mise` cannot extract the release's `.tar.gz`, so the `.zip` is named.
 asset_pattern = "jruby-bin-*.zip"
 # JRuby also ships a `gem` and a `rake`, which on `PATH` could hide CRuby's.

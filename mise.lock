@@ -23,101 +23,98 @@ url = "https://github.com/WebAssembly/binaryen/releases/download/version_133/bin
 url_api = "https://api.github.com/repos/WebAssembly/binaryen/releases/assets/580039734"
 
 [[tools.codon]]
-version = "0.20.1"
+version = "0.20.7"
 backend = "github:exaloop/codon"
-specifiers = ["0.20.1"]
+specifiers = ["0.20.7"]
 
 [tools.codon."platforms.linux-arm64"]
-checksum = "sha256:2a301557e311756da665ff25c9d0c072d25536a6d760baf1a0b2dba2cf6f5703"
-url = "https://github.com/exaloop/codon/releases/download/v0.20.1/codon-manylinux2014-aarch64.tar.gz"
-url_api = "https://api.github.com/repos/exaloop/codon/releases/assets/556070165"
+checksum = "sha256:2ecbd910fc86dca29181510e47263fa5f0c0f45bdeeb76fc462dc8c720267af9"
+checksum_source = "mise-versions"
+url = "https://github.com/exaloop/codon/releases/download/v0.20.7/codon-manylinux2014-aarch64.tar.gz"
+url_api = "https://api.github.com/repos/exaloop/codon/releases/assets/762194589"
 
 [tools.codon."platforms.linux-x64"]
-checksum = "sha256:776d770153105a2e3d6ebb1e09189d5c9bb31bfc9b6a7adecda5919a83899f57"
-url = "https://github.com/exaloop/codon/releases/download/v0.20.1/codon-manylinux2014-x86_64.tar.gz"
-url_api = "https://api.github.com/repos/exaloop/codon/releases/assets/556104685"
+checksum = "sha256:ae558168bb495c392f9a18625518342eb38fc2debe72308aaeba9ad8d56db399"
+checksum_source = "mise-versions"
+url = "https://github.com/exaloop/codon/releases/download/v0.20.7/codon-manylinux2014-x86_64.tar.gz"
+url_api = "https://api.github.com/repos/exaloop/codon/releases/assets/762194506"
 
 [tools.codon."platforms.macos-arm64"]
-checksum = "sha256:bc254a0e40b9afbda1bee00b5df9e0d186f63a28e506eaf056246c57e17e6dcc"
-url = "https://github.com/exaloop/codon/releases/download/v0.20.1/codon-darwin-arm64.tar.gz"
-url_api = "https://api.github.com/repos/exaloop/codon/releases/assets/556055864"
-
-[tools.codon."platforms.macos-x64"]
-checksum = "sha256:c842d4db6694a3f53fba38a905d58a2f2824d4cda3e1a79eb00c34a23df330dc"
-url = "https://github.com/exaloop/codon/releases/download/v0.20.1/codon-darwin-x86_64.tar.gz"
-url_api = "https://api.github.com/repos/exaloop/codon/releases/assets/556125563"
+checksum = "sha256:6fa905d5308a4ac765779691e41f47cb621e2731a0e7dbe756e7da685f7e32fd"
+url = "https://github.com/exaloop/codon/releases/download/v0.20.7/codon-darwin-arm64.tar.gz"
+url_api = "https://api.github.com/repos/exaloop/codon/releases/assets/762194998"
 
 [[tools.go]]
-version = "1.27.1"
+version = "1.27.4"
 backend = "core:go"
-specifiers = ["1.27.1"]
+specifiers = ["1.27.4"]
 
 [tools.go."platforms.linux-arm64"]
-checksum = "sha256:3450b45a3f9ee8568792736a5c5e70a1f2e9b36c35a8f74958c03e51d7d92bec"
-url = "https://dl.google.com/go/go1.27.1.linux-arm64.tar.gz"
+checksum = "sha256:3392582988a273a87ab5043ee1b2c9c17a2c3c00580bf9326c47a2e0aaaeac92"
+url = "https://dl.google.com/go/go1.27.4.linux-arm64.tar.gz"
 
 [tools.go."platforms.linux-x64"]
-checksum = "sha256:63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445"
-url = "https://dl.google.com/go/go1.27.1.linux-amd64.tar.gz"
+checksum = "sha256:7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840"
+url = "https://dl.google.com/go/go1.27.4.linux-amd64.tar.gz"
 
 [tools.go."platforms.macos-arm64"]
-checksum = "sha256:ee215d57e0ec269c60cc9ceca68e6bda321ba9ee5afe24f4b0988703c2d87d12"
-url = "https://dl.google.com/go/go1.27.1.darwin-arm64.tar.gz"
+checksum = "sha256:91a44a2b8a716600ad94a4f143e156116620db8828086a6e3602291be9bd0bb4"
+url = "https://dl.google.com/go/go1.27.4.darwin-arm64.tar.gz"
 
 [tools.go."platforms.macos-x64"]
-checksum = "sha256:8f8f52c6649542cf027bbc9b9c68d1ec042f9f34808a40413f0b8b3f66f3caa4"
-url = "https://dl.google.com/go/go1.27.1.darwin-amd64.tar.gz"
+checksum = "sha256:2b799377704ef12db39bd254995d5c348c9cc8d86562ca817724390e56c38f43"
+url = "https://dl.google.com/go/go1.27.4.darwin-amd64.tar.gz"
 
 [[tools.java]]
-version = "temurin-25.0.4+101.0.LTS"
+version = "temurin-25.0.5+8.0.LTS"
 backend = "core:java"
 specifiers = ["temurin-25"]
 
 [tools.java."platforms.linux-arm64"]
-checksum = "sha256:69df11a02cfa3ef7d7ca645e03edce6778ec090e100f6ae2b42097865730ac52"
-url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.4.1%2B1/OpenJDK25U-jdk_aarch64_linux_hotspot_25.0.4.1_1.tar.gz"
+checksum = "sha256:bb5b2ded252f21c6090cf780b0a408ad0d83bbb557e702955643557f13231880"
+url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_aarch64_linux_hotspot_25.0.5_8.tar.gz"
 
 [tools.java."platforms.linux-x64"]
-checksum = "sha256:dbb698396d478e7fa2b1e50f4103324b2a99b90569ee27c33f2261f9215cf41e"
-url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.4.1%2B1/OpenJDK25U-jdk_x64_linux_hotspot_25.0.4.1_1.tar.gz"
+checksum = "sha256:68982529869257d0ee6b824ec5aa270ff8b118bb438670da0b97ebdab178d7fb"
+url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5_8.tar.gz"
 
 [tools.java."platforms.macos-arm64"]
-checksum = "sha256:61979887f7506a24a57439ff99adb8b3a7fc89977d9cfe3b8984f58a981b7b9d"
-url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.4.1%2B1/OpenJDK25U-jdk_aarch64_mac_hotspot_25.0.4.1_1.tar.gz"
+checksum = "sha256:36dc14d797aaff6d89aab302cd053fdba6207dfdcf772052fa7b023a94b0e857"
+url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_aarch64_mac_hotspot_25.0.5_8.tar.gz"
 
 [tools.java."platforms.macos-x64"]
-checksum = "sha256:e6229d9504f7922053ab31821b9e6bee8761daf7b026a3476d1a027563009880"
-url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.4.1%2B1/OpenJDK25U-jdk_x64_mac_hotspot_25.0.4.1_1.tar.gz"
+checksum = "sha256:32cd4d2151c91aa00d0fc911edfd05245ed40fa6b1aa894d5f35c928cd67a59d"
+url = "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_x64_mac_hotspot_25.0.5_8.tar.gz"
 
 [[tools.python]]
-version = "3.14.8"
+version = "3.15.2"
 backend = "core:python"
-specifiers = ["3.14.8"]
+specifiers = ["3.15.2"]
 
 [tools.python."platforms.linux-arm64"]
-checksum = "sha256:ece2bf3d4b47c80c2403c5f32fa51a9458abaee93c10def8acafb5f45163e77d"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.14.8+20261003-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"
+checksum = "sha256:d1367a6c3cd86a9e35712072841f1376859f3b47a2a54e224421a0f9fd169047"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.15.2+20261110-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [tools.python."platforms.linux-x64"]
-checksum = "sha256:d9ec7a6935ade8b671a57ebaf111083d7314eab8dae5071d167054dadd2b97d6"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.14.8+20261003-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
+checksum = "sha256:ad23d1b73fac26440b0306ae06911031344c49a90ec19716c8362e7fa40cae43"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.15.2+20261110-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [tools.python."platforms.macos-arm64"]
-checksum = "sha256:ed14e9042f36c0aa18383f5d9729bcbf17847e842666a793b5a5a5d8505c0ca1"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.14.8+20261003-aarch64-apple-darwin-install_only_stripped.tar.gz"
+checksum = "sha256:7e58607647b5b4832092a339ff1c55eeeccee128221232509b8fc8d27957065e"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.15.2+20261110-aarch64-apple-darwin-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [tools.python."platforms.macos-x64"]
-checksum = "sha256:08310045a2611bad730d7c1a01e847a1ea729d9dcfe29110ca67cbdf3998bb54"
-url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261003/cpython-3.14.8+20261003-x86_64-apple-darwin-install_only_stripped.tar.gz"
+checksum = "sha256:11143c2a2556b14619e8241d3f74bb43ad97181c0eb4909bab87d7aad1154e49"
+url = "https://github.com/astral-sh/python-build-standalone/releases/download/20261110/cpython-3.15.2+20261110-x86_64-apple-darwin-install_only_stripped.tar.gz"
 provenance = "github-attestations"
 
 [[tools.ruby]]
-version = "4.0.7"
+version = "4.0.10"
 backend = "core:ruby"
-specifiers = ["4.0.7"]
+specifiers = ["4.0.10"]
 
 [tools.ruby.options]
 compile = "true"
@@ -125,20 +122,20 @@ ruby_build_repo = "https://github.com/rbenv/ruby-build.git"
 ruby_install = "false"
 
 [tools.ruby."platforms.linux-arm64"]
-checksum = "sha256:911ace20f90d068ca0e4dda6d0e4f0f81e52e52f2dd4f4004c721e253412e82d"
-url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.7.tar.gz"
+checksum = "sha256:b53eef3371fa5d3e3b74340edcd015f06d5d8853968d4e539a5264fce41ed9f1"
+url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.10.tar.gz"
 
 [tools.ruby."platforms.linux-x64"]
-checksum = "sha256:911ace20f90d068ca0e4dda6d0e4f0f81e52e52f2dd4f4004c721e253412e82d"
-url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.7.tar.gz"
+checksum = "sha256:b53eef3371fa5d3e3b74340edcd015f06d5d8853968d4e539a5264fce41ed9f1"
+url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.10.tar.gz"
 
 [tools.ruby."platforms.macos-arm64"]
-checksum = "sha256:911ace20f90d068ca0e4dda6d0e4f0f81e52e52f2dd4f4004c721e253412e82d"
-url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.7.tar.gz"
+checksum = "sha256:b53eef3371fa5d3e3b74340edcd015f06d5d8853968d4e539a5264fce41ed9f1"
+url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.10.tar.gz"
 
 [tools.ruby."platforms.macos-x64"]
-checksum = "sha256:911ace20f90d068ca0e4dda6d0e4f0f81e52e52f2dd4f4004c721e253412e82d"
-url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.7.tar.gz"
+checksum = "sha256:b53eef3371fa5d3e3b74340edcd015f06d5d8853968d4e539a5264fce41ed9f1"
+url = "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.10.tar.gz"
 
 [[tools.shellcheck]]
 version = "0.11.0"
@@ -219,32 +216,32 @@ url = "https://github.com/kateinoigakukun/wasi-vfs/releases/download/v0.6.3/wasi
 url_api = "https://api.github.com/repos/kateinoigakukun/wasi-vfs/releases/assets/394907751"
 
 [[tools.wasmtime]]
-version = "49.0.2"
+version = "50.0.2"
 backend = "aqua:bytecodealliance/wasmtime"
-specifiers = ["49.0.2"]
+specifiers = ["50.0.2"]
 
 [tools.wasmtime."platforms.linux-arm64"]
-checksum = "sha256:ca14988c6da3d92512bd9c3bad6cbd06b1f5743b6911a9e709f1a6fa30637d7f"
-url = "https://github.com/bytecodealliance/wasmtime/releases/download/v49.0.2/wasmtime-v49.0.2-aarch64-linux.tar.xz"
-url_api = "https://api.github.com/repos/bytecodealliance/wasmtime/releases/assets/606056495"
+checksum = "sha256:c3665e79d97a8d42484f3d0320c2911441ca87c58daab3f360ff1cf8770b9960"
+url = "https://github.com/bytecodealliance/wasmtime/releases/download/v50.0.2/wasmtime-v50.0.2-aarch64-linux.tar.xz"
+url_api = "https://api.github.com/repos/bytecodealliance/wasmtime/releases/assets/756423855"
 provenance = "github-attestations"
 
 [tools.wasmtime."platforms.linux-x64"]
-checksum = "sha256:a4d6e9e3a5a60f527cf7793d674c48930c80c2e8977995b8a275cad3254b9322"
-url = "https://github.com/bytecodealliance/wasmtime/releases/download/v49.0.2/wasmtime-v49.0.2-x86_64-linux.tar.xz"
-url_api = "https://api.github.com/repos/bytecodealliance/wasmtime/releases/assets/606056679"
+checksum = "sha256:5db0ca8e838ab95a51ba9acdf11f42888bcd0092dda45a86129ae540c4fa952c"
+url = "https://github.com/bytecodealliance/wasmtime/releases/download/v50.0.2/wasmtime-v50.0.2-x86_64-linux.tar.xz"
+url_api = "https://api.github.com/repos/bytecodealliance/wasmtime/releases/assets/756424225"
 provenance = "github-attestations"
 
 [tools.wasmtime."platforms.macos-arm64"]
-checksum = "sha256:ea5a79261caa39819b863fd850879428cf90548353e1e5cf9bcbcc4e7addf2c1"
-url = "https://github.com/bytecodealliance/wasmtime/releases/download/v49.0.2/wasmtime-v49.0.2-aarch64-macos.tar.xz"
-url_api = "https://api.github.com/repos/bytecodealliance/wasmtime/releases/assets/606056519"
+checksum = "sha256:42b066764fb5ccd92f4378375202627b457be8ef0e85806784304ce9b07a721a"
+url = "https://github.com/bytecodealliance/wasmtime/releases/download/v50.0.2/wasmtime-v50.0.2-aarch64-macos.tar.xz"
+url_api = "https://api.github.com/repos/bytecodealliance/wasmtime/releases/assets/756423910"
 provenance = "github-attestations"
 
 [tools.wasmtime."platforms.macos-x64"]
-checksum = "sha256:b24513efff6a5dbeb196e2a01097ba632a8b0ea1563ba297ada26ceb3aa067d9"
-url = "https://github.com/bytecodealliance/wasmtime/releases/download/v49.0.2/wasmtime-v49.0.2-x86_64-macos.tar.xz"
-url_api = "https://api.github.com/repos/bytecodealliance/wasmtime/releases/assets/606056715"
+checksum = "sha256:09ef39b5b7f6b6964f1aa718d9319e938b4a242e46155516e780988586bf8ee5"
+url = "https://github.com/bytecodealliance/wasmtime/releases/download/v50.0.2/wasmtime-v50.0.2-x86_64-macos.tar.xz"
+url_api = "https://api.github.com/repos/bytecodealliance/wasmtime/releases/assets/756424271"
 provenance = "github-attestations"
 
 [[tools.wizer]]
