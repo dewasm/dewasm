@@ -44,7 +44,7 @@ $ dewasm prog.wasm --target java --mode standalone -o Main.java
 $ javac Main.java && java Main --dir ./data::/data arg1 arg2
 ```
 
-Standalone programs share one runtime interface: `argv`, `--dir` preopens, environment, exit/trap.
+Standalone programs share one runtime interface: `argv`, `--dir` preopens, `--env` variables, exit/trap.
 It is described in [`docs/standalone-interface.md`](../standalone-interface.md).
 Java is the one deviation on `argv[0]`.
 The JVM does not pass the launched file name to `main`, so Java uses the module class name.

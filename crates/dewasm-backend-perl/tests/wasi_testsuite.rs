@@ -11,8 +11,6 @@ use dewasm_test_helper::BackendUnderTest;
 
 /// Known trial failures with their attribution, `(trial, tag)`.
 /// Like Ruby/Python, one is the out-of-scope `sock_shutdown` system call (`docs/support.md`).
-/// Unlike the Ruby/Python hosts, Perl injects no `environ` entries of its own.
-/// So the `environ_*` trials pass without host-scoped entries.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Declared out-of-scope system call (`docs/support.md`).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),

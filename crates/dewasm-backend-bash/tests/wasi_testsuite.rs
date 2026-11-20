@@ -15,9 +15,7 @@ use dewasm_test_helper::BackendUnderTest;
 /// - out-of-scope system calls (timestamps, sockets);
 /// - the limit on following a file symbolic link (pure Bash has no `readlink` for path resolution);
 /// - gaps in `stat` precision with no `stat` license (`dev`/`ino`);
-/// - the whole-file-buffer difference;
-/// - `environ` entries Bash itself exports (PWD/SHLVL/_).
-///   Count-exact `environ_*` assertions cannot absorb those.
+/// - the whole-file-buffer difference.
 const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     // Sockets: out of scope (`docs/support.md`).
     ("c/sock_shutdown-invalid_fd", "sock_shutdown (out of scope)"),
@@ -58,20 +56,6 @@ const WASI_TESTSUITE_EXPECTED_FAILURES: &[(&str, &str)] = &[
     (
         "rust/file_unbuffered_write",
         "fd_read: unbuffered read-back returns 0",
-    ),
-    // Bash itself exports PWD/SHLVL/_ into every script's environment.
-    // So count-exact `environ` assertions cannot hold even under the harness's cleared environment.
-    (
-        "assemblyscript/environ_get-multiple-variables",
-        "environ: host-interpreter env injection",
-    ),
-    (
-        "assemblyscript/environ_sizes_get-multiple-variables",
-        "environ: host-interpreter env injection",
-    ),
-    (
-        "assemblyscript/environ_sizes_get-no-variables",
-        "environ: host-interpreter env injection",
     ),
 ];
 

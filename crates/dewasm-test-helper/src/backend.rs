@@ -240,19 +240,20 @@ pub trait BackendUnderTest: Sync {
 
     /// Run a *standalone*-mode `program` through the standalone interface.
     /// This works like [`Self::run_standalone_dir`].
-    /// Additionally set `env` on the child process and return the full [`Output`].
+    /// Additionally give the guest exactly `env`, and return the full [`Output`].
     /// That is the surface the WASI-testsuite harness needs ([`crate::wasi_testsuite`]).
-    /// [`Self::run_standalone_dir`] cannot give it: it inherits the parent environment.
-    /// Its callers also drop the exit code.
-    /// `dirs` are `(guest, host)` preopens rendered as the leading `--dir HOST::GUEST` flags.
-    /// The generated `main` parses them; `args` follow as guest `argv[1..]`.
+    /// The callers of [`Self::run_standalone_dir`] drop the exit code.
+    /// `dirs` are `(guest, host)` preopens rendered as leading `--dir HOST::GUEST` flags.
+    /// `env` is rendered as `--env NAME=VAL` flags after them.
+    /// The generated `main` parses both; `args` follow as guest `argv[1..]`.
+    /// A `--` separates them, so a guest argument that starts with `--dir` or `--env` stays one.
     ///
     /// The default reuses the backend's own launch recipe ([`Self::pty_command`]).
     /// That is interpreter + temp script for the interpreted backends.
     /// It is a freshly built binary for the compiled ones.
     /// So no per-backend override is needed.
     /// It drives the recipe through pipes and feeds `stdin`.
-    /// The child environment is exactly `env`.
+    /// The child keeps the parent environment: the guest sees none of it without `--env`.
     fn run_standalone_wasi(
         &self,
         program: &str,
@@ -266,47 +267,21 @@ pub trait BackendUnderTest: Sync {
             argv.push("--dir".to_string());
             argv.push(format!("{}::{}", host.display(), guest));
         }
+        for (name, value) in env {
+            argv.push("--env".to_string());
+            argv.push(format!("{name}={value}"));
+        }
+        argv.push("--".to_string());
         argv.extend(args.iter().map(|a| a.to_string()));
         let argv_refs: Vec<&str> = argv.iter().map(String::as_str).collect();
         let cmd = self.pty_command(program, &argv_refs);
-        // The guest must observe exactly the manifest environment.
-        // Upstream's Wasmtime adapter passes only `--env k=v`.
-        // That isolates the guest from the host environment.
-        // dewasm's standalone programs pass the whole process environment through.
-        // So the isolation has to happen here instead.
-        // With the child `PATH` gone, `exec` would fall back to the OS default path.
-        // It would pick the *system* interpreter (Ruby 2.6 / Bash 3.2 on macOS).
-        // So a program name with no directory part is resolved against the parent `PATH` first.
-        let resolved = resolve_in_parent_path(&cmd.program);
-        let mut command = Command::new(resolved);
+        let mut command = Command::new(&cmd.program);
         command.args(&cmd.args);
         if let Some(cwd) = &cmd.cwd {
             command.current_dir(cwd);
         }
-        command.env_clear();
-        for (k, v) in env {
-            command.env(k, v);
-        }
         run_command_bytes(&mut command, stdin)
     }
-}
-
-/// Resolve a program name with no directory part to an absolute path via the *parent*'s `PATH`.
-/// So an `env_clear`ed child still runs the interpreter the test environment selected.
-/// Names already containing a separator pass through untouched.
-fn resolve_in_parent_path(program: &Path) -> PathBuf {
-    if program.components().count() > 1 {
-        return program.to_path_buf();
-    }
-    if let Some(path) = std::env::var_os("PATH") {
-        for dir in std::env::split_paths(&path) {
-            let candidate = dir.join(program);
-            if candidate.is_file() {
-                return candidate;
-            }
-        }
-    }
-    program.to_path_buf()
 }
 
 pub fn run_command(cmd: &mut Command, stdin: &str) -> Output {

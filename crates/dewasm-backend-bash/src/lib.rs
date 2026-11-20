@@ -356,21 +356,38 @@ impl Backend for BashBackend {
             if wasi_bundled(module, opts.default_wasi, bundler()) {
                 // Standalone runtime interface, mirroring the Ruby standalone parser.
                 // A leading run of `--dir HOST::GUEST` flags goes into WASI_DIRS.
-                // That flag form is the one `wasmtime` takes.
+                // `--env NAME=VAL` flags in that run go into WASI_ENV, the guest's only variables.
+                // `--env NAME` with no value takes the exported variable's, when there is one.
+                // A name given again replaces its entry.
+                // Those flag forms are the ones `wasmtime` takes.
                 // The run stops at `--` or the first non-flag token.
                 // The rest is the guest's `argv[1..]`.
                 w.line("WASI_DIRS=()");
+                w.line("WASI_ENV=()");
+                w.line("__wasi_env() {");
+                w.line("\tlocal __s=$1 __n=${1%%=*} __e __i");
+                w.line("\tif [[ $__s != *=* ]]; then");
+                w.line("\t\tfor __e in $(compgen -e); do [[ $__e == \"$__n\" ]] && __s=\"$__n=${!__n}\"; done");
+                w.line("\t\t[[ $__s == *=* ]] || return 0");
+                w.line("\tfi");
+                w.line("\tfor __i in \"${!WASI_ENV[@]}\"; do");
+                w.line(
+                    "\t\t[[ ${WASI_ENV[__i]} == \"$__n=\"* ]] && { WASI_ENV[__i]=$__s; return 0; }",
+                );
+                w.line("\tdone");
+                w.line("\tWASI_ENV+=(\"$__s\")");
+                w.line("}");
                 w.line("while (( $# )); do");
                 w.line("\tcase \"$1\" in");
                 w.line("\t\t--) shift; break ;;");
                 w.line("\t\t--dir) shift; [[ $# -gt 0 ]] || { echo \"--dir requires a HOST::GUEST argument\" >&2; exit 1; }; WASI_DIRS+=(\"$1\"); shift ;;");
                 w.line("\t\t--dir=*) WASI_DIRS+=(\"${1#--dir=}\"); shift ;;");
+                w.line("\t\t--env) shift; [[ $# -gt 0 ]] || { echo \"--env requires a NAME[=VAL] argument\" >&2; exit 1; }; __wasi_env \"$1\"; shift ;;");
+                w.line("\t\t--env=*) __wasi_env \"${1#--env=}\"; shift ;;");
                 w.line("\t\t*) break ;;");
                 w.line("\tesac");
                 w.line("done");
                 w.line("WASI_ARGS=(\"${0##*/}\" \"$@\")");
-                w.line("WASI_ENV=()");
-                w.line("for __n in $(compgen -e); do WASI_ENV+=(\"$__n=${!__n}\"); done");
             }
             w.line(format!(
                 "{prefix}init || {{ echo \"init failed (status $?): $TRAP_MSG\" >&2; exit 1; }}"

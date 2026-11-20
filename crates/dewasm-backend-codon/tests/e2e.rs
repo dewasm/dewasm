@@ -870,6 +870,7 @@ dewasm_test_helper::wasi_suite!(Codon, Poll);
 dewasm_test_helper::wasi_suite!(Codon, Fs, CODON_FS_GLUE, ultra);
 dewasm_test_helper::wasi_root_containment_e2e!(Codon, CODON_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Codon);
+dewasm_test_helper::standalone_env_e2e!(Codon);
 // The native 8 MB main stack carries the 5000-frame recursion, like Ruby's host stack.
 // So the entrypoint needs no special handling for it.
 dewasm_test_helper::deep_recursion_e2e!(Codon);

@@ -985,6 +985,7 @@ dewasm_test_helper::wasi_suite!(Java, Poll);
 dewasm_test_helper::wasi_suite!(Java, Fs, JAVA_FS_GLUE);
 dewasm_test_helper::wasi_root_containment_e2e!(Java, JAVA_CONTAINMENT_GLUE);
 dewasm_test_helper::standalone_dir_e2e!(Java);
+dewasm_test_helper::standalone_env_e2e!(Java);
 // Linux CI's 1 MiB default main-thread stack is marginal for 5000 guest frames.
 // So the standalone entrypoint runs the guest on a dedicated 64 MiB thread.
 // This mirrors what Python does.

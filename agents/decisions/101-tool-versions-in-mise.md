@@ -1,6 +1,8 @@
 # Decision 101: A Tool Version Is Stated Once, in a `mise` File
 
 Status: **Accepted, 2026-10-04.**
+**Revision, 2026-11-20:** A guest no longer sees `PKG_CONFIG_PATH` ([decision 105](105-standalone-environment-from-env-flags.md)).
+So the missing ZJIT is now the one reason Ruby is built from source.
 Implemented in these places (issue #366):
 - `mise.toml` and `mise.lock`, for the tools the tests need;
 - `mise.bench.toml` and `mise.bench.lock`, for the tools only the speed suite needs;

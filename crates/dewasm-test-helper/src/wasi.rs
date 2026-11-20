@@ -505,6 +505,62 @@ pub fn run_standalone_dir(lang: &dyn BackendUnderTest) {
     );
 }
 
+/// Exercise the standalone runtime interface's `--env` end to end (`standalone_env_e2e!`).
+/// Convert `wasi_standalone_env.wat` in *standalone* mode: it prints its environment.
+/// The test process has variables of its own, so an empty output shows that none pass by default.
+/// Each expected output is what `wasmtime run` prints for the same flags.
+/// The one exception is a name given twice, where Wasmtime gives the guest both entries.
+/// No glue: standalone needs none.
+pub fn run_standalone_env(lang: &dyn BackendUnderTest) {
+    let bytes = wat::parse_file(examples_dir().join("wasi_standalone_env.wat")).expect("parse wat");
+    let program = lang.convert_app(&bytes, Mode::Standalone, "standalone_env");
+    let path = std::env::var("PATH").expect("the test process has a PATH");
+    let inherited = format!("PATH={path}\n");
+    let cases: &[(&[&str], &str)] = &[
+        (&[], ""),
+        (&["--env", "A=1", "--env", "B="], "A=1\nB=\n"),
+        (&["--env=A=x=y"], "A=x=y\n"),
+        (
+            &["--env", "A=1", "--env", "B=2", "--env", "A=3"],
+            "A=3\nB=2\n",
+        ),
+        (
+            &["--env", "PATH", "--env", "DEWASM_NO_SUCH_VARIABLE"],
+            &inherited,
+        ),
+        (&["--env", "A=1", "--", "--env", "B=2"], "A=1\n"),
+    ];
+    for (flags, expected) in cases {
+        let output = lang.run_bytes(&program, flags, b"");
+        assert!(
+            output.status.success(),
+            "standalone {flags:?} under {}: nonzero exit {}\n{}",
+            lang.name(),
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            *expected,
+            "standalone {flags:?} under {}: the guest's environment",
+            lang.name()
+        );
+    }
+    let output = lang.run_bytes(&program, &["--env"], b"");
+    assert_eq!(
+        output.status.code(),
+        Some(1),
+        "standalone --env with no argument under {}: exit code",
+        lang.name()
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stderr),
+        "--env requires a NAME[=VAL] argument\n",
+        "standalone --env with no argument under {}: stderr",
+        lang.name()
+    );
+}
+
 /// Run the deep-recursion standalone case (`deep_recursion_e2e!`).
 /// Convert `deep_recursion.wat` in *standalone* mode and run it with no arguments.
 /// Its `_start` recurses 5000 wasm frames.

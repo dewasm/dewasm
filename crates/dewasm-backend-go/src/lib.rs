@@ -437,6 +437,9 @@ fn import_block(imports: &[String]) -> String {
 fn main_func(type_name: &str, wasi: bool) -> String {
     // Standalone WASI parses the runtime interface.
     // A leading run of `--dir HOST::GUEST` flags mounts host directories at guest paths.
+    // `--env NAME=VAL` flags in that run give the guest its only variables.
+    // `--env NAME` with no value takes the one this process has, when it has one.
+    // A name given again replaces its entry.
     // This follows Wasmtime.
     // The run stops at `--` or the first non-flag token.
     // The rest is the guest's `argv[1..]`, with `argv[0]` the program's base name.
@@ -444,6 +447,7 @@ fn main_func(type_name: &str, wasi: bool) -> String {
     let (arg_setup, args_arg, env_arg, preopen_arg) = if wasi {
         (
             "\tpreopens := map[string]string{}\n\
+             \tenv := []string{}\n\
              \trest := os.Args[1:]\n\
              \ti := 0\n\
              \tfor i < len(rest) {\n\
@@ -462,6 +466,36 @@ fn main_func(type_name: &str, wasi: bool) -> String {
              \t\t} else if strings.HasPrefix(a, \"--dir=\") {\n\
              \t\t\tspec = a[6:]\n\
              \t\t\ti++\n\
+             \t\t} else if a == \"--env\" || strings.HasPrefix(a, \"--env=\") {\n\
+             \t\t\tif a == \"--env\" {\n\
+             \t\t\t\tif i+1 >= len(rest) {\n\
+             \t\t\t\t\tos.Stderr.WriteString(\"--env requires a NAME[=VAL] argument\\n\")\n\
+             \t\t\t\t\tos.Exit(1)\n\
+             \t\t\t\t}\n\
+             \t\t\t\tspec = rest[i+1]\n\
+             \t\t\t\ti += 2\n\
+             \t\t\t} else {\n\
+             \t\t\t\tspec = a[6:]\n\
+             \t\t\t\ti++\n\
+             \t\t\t}\n\
+             \t\t\tname, value, ok := strings.Cut(spec, \"=\")\n\
+             \t\t\tif !ok {\n\
+             \t\t\t\tvalue, ok = os.LookupEnv(name)\n\
+             \t\t\t}\n\
+             \t\t\tif ok {\n\
+             \t\t\t\tentry := name + \"=\" + value\n\
+             \t\t\t\treplaced := false\n\
+             \t\t\t\tfor k, e := range env {\n\
+             \t\t\t\t\tif strings.HasPrefix(e, name+\"=\") {\n\
+             \t\t\t\t\t\tenv[k] = entry\n\
+             \t\t\t\t\t\treplaced = true\n\
+             \t\t\t\t\t}\n\
+             \t\t\t\t}\n\
+             \t\t\t\tif !replaced {\n\
+             \t\t\t\t\tenv = append(env, entry)\n\
+             \t\t\t\t}\n\
+             \t\t\t}\n\
+             \t\t\tcontinue\n\
              \t\t} else {\n\
              \t\t\tbreak\n\
              \t\t}\n\
@@ -477,7 +511,7 @@ fn main_func(type_name: &str, wasi: bool) -> String {
              \t}\n\
              \targv := append([]string{name}, rest[i:]...)\n",
             "argv",
-            "os.Environ()",
+            "env",
             "preopens",
         )
     } else {

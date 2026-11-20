@@ -337,38 +337,49 @@ impl Backend for PerlBackend {
             w.line("package main;");
             w.line("");
             if wasi {
-                // The standalone runtime interface: a leading run of `--dir HOST::GUEST` flags.
-                // Each flag mounts a host directory at a guest path, as `wasmtime` does.
+                // The standalone runtime interface: a leading run of `--dir` and `--env` flags.
+                // `--dir HOST::GUEST` mounts a host directory at a guest path, as `wasmtime` does.
+                // `--env NAME=VAL` flags give the guest its only variables.
+                // `--env NAME` with no value takes the one this process has, when it has one.
                 // The run stops at `--` or the first non-flag token.
                 // The rest is the guest's `argv[1..]`.
                 w.line("use File::Basename ();");
                 w.line("");
                 w.line("my %_preopens;");
+                w.line("my %_env;");
                 w.line("my @_guest_args = @ARGV;");
                 w.line("while (@_guest_args) {");
                 w.indent();
                 w.line("my $_a = $_guest_args[0];");
                 w.line("if ($_a eq '--') { shift @_guest_args; last; }");
-                w.line("if ($_a ne '--dir' && rindex($_a, '--dir=', 0) != 0) { last; }");
+                w.line("my ($_flag, $_spec);");
+                w.line("if ($_a eq '--dir' || $_a eq '--env') { $_flag = $_a; }");
+                w.line("elsif (rindex($_a, '--dir=', 0) == 0 || rindex($_a, '--env=', 0) == 0) { $_flag = substr($_a, 0, 5); $_spec = substr($_a, 6); }");
+                w.line("else { last; }");
                 w.line("shift @_guest_args;");
-                w.line("my $_spec;");
-                w.line("if ($_a eq '--dir') {");
+                w.line("if (!defined $_spec) {");
                 w.indent();
-                w.line("if (!@_guest_args) { print STDERR \"--dir requires a HOST::GUEST argument\\n\"; exit(1); }");
+                w.line("if (!@_guest_args) { print STDERR $_flag eq '--dir' ? \"--dir requires a HOST::GUEST argument\\n\" : \"--env requires a NAME[=VAL] argument\\n\"; exit(1); }");
                 w.line("$_spec = shift @_guest_args;");
                 w.dedent();
-                w.line("} else {");
-                w.indent();
-                w.line("$_spec = substr($_a, 6);");
-                w.dedent();
                 w.line("}");
+                w.line("if ($_flag eq '--dir') {");
+                w.indent();
                 w.line("my $_sep = index($_spec, '::');");
                 w.line("if ($_sep >= 0) { $_preopens{substr($_spec, $_sep + 2)} = substr($_spec, 0, $_sep); }");
                 w.line("else { $_preopens{$_spec} = $_spec; }");
                 w.dedent();
+                w.line("} else {");
+                w.indent();
+                w.line("my $_sep = index($_spec, '=');");
+                w.line("if ($_sep >= 0) { $_env{substr($_spec, 0, $_sep)} = substr($_spec, $_sep + 1); }");
+                w.line("elsif (exists $ENV{$_spec}) { $_env{$_spec} = $ENV{$_spec}; }");
+                w.dedent();
+                w.line("}");
+                w.dedent();
                 w.line("}");
                 w.line(format!(
-                    "my $_inst = {package_name}->new({{}}, args => [File::Basename::basename($0), @_guest_args], env => {{ %ENV }}, preopens => \\%_preopens);"
+                    "my $_inst = {package_name}->new({{}}, args => [File::Basename::basename($0), @_guest_args], env => \\%_env, preopens => \\%_preopens);"
                 ));
             } else {
                 w.line(format!("my $_inst = {package_name}->new({{}});"));

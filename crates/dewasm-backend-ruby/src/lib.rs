@@ -359,9 +359,12 @@ impl Backend for RubyBackend {
                 // Parse the standalone runtime interface.
                 // A leading run of `--dir HOST::GUEST` flags mounts host directories.
                 // Each lands at a guest path.
+                // `--env NAME=VAL` flags in that run give the guest its only variables.
+                // `--env NAME` with no value takes the one this process has, when it has one.
                 // This follows Wasmtime; the run stops at `--` or the first non-flag token.
                 // The rest is the guest's `argv[1..]`.
                 w.line("preopens = {}");
+                w.line("env = {}");
                 w.line("argv = ARGV.dup");
                 w.line("while (a = argv.first)");
                 w.indent();
@@ -382,6 +385,15 @@ impl Backend for RubyBackend {
                 w.line("host, guest = argv.shift.delete_prefix(\"--dir=\").split(\"::\", 2)");
                 w.line("preopens[guest || host] = host");
                 w.dedent();
+                w.line("elsif a == \"--env\" || a.start_with?(\"--env=\")");
+                w.indent();
+                w.line("argv.shift");
+                w.line("spec = a == \"--env\" ? argv.shift : a.delete_prefix(\"--env=\")");
+                w.line("spec or abort(\"--env requires a NAME[=VAL] argument\")");
+                w.line("name, sep, value = spec.partition(\"=\")");
+                w.line("value = ENV[name] if sep.empty?");
+                w.line("env[name] = value if value");
+                w.dedent();
                 w.line("else");
                 w.indent();
                 w.line("break");
@@ -390,7 +402,7 @@ impl Backend for RubyBackend {
                 w.dedent();
                 w.line("end");
                 w.line(format!(
-                    "inst = {class_name}.new({{}}, args: [File.basename($PROGRAM_NAME), *argv], env: ENV.to_h, preopens: preopens)"
+                    "inst = {class_name}.new({{}}, args: [File.basename($PROGRAM_NAME), *argv], env: env, preopens: preopens)"
                 ));
             } else {
                 w.line(format!("inst = {class_name}.new"));

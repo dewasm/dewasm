@@ -10,6 +10,9 @@ Implemented across three places:
 The lists fell from ~30 rows per backend to the honest residue listed under Consequences.
 `docs/support.md` now shows full WASI p1 columns for Ruby/Python/Go/Java and near-full for Bash.
 
+**Revision, 2026-11-20:** Point 4 is replaced by [decision 105](105-standalone-environment-from-env-flags.md).
+The runner passes the environment as `--env` flags and no longer clears the child environment.
+
 ## Context
 
 Decision 36's conformance harness attributed every known failure to a declared gap.

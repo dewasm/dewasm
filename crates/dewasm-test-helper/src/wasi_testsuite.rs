@@ -23,8 +23,7 @@
 //! The Rust suite runs with the host-matched strict `errno` mode injected; see [`evaluate`].
 //!
 //! A list entry may be *host-scoped*: some failures depend on the host `libc` or interpreter.
-//! One example is macOS CoreFoundation injecting `__CF_USER_TEXT_ENCODING`.
-//! Another is a Linux JDK truncating symbolic link times to microseconds.
+//! One example is a Linux JDK truncating symbolic link times to microseconds.
 //! A backend declares those via `expected_failures_macos()`/`expected_failures_linux()`.
 //! The runner merges the host-matching list into the base list.
 //! So an entry that only trips on one host is not flagged as an unexpected pass on the other.
@@ -52,7 +51,6 @@ pub trait WasiTestsuiteBackend: BackendUnderTest {
 
     /// Host-scoped list entries that only fail on a **macOS** host.
     /// The cause is host `libc` or interpreter behaviour.
-    /// An example is CoreFoundation injecting `__CF_USER_TEXT_ENCODING`.
     /// Merged into [`expected_failures`] only when the harness runs on macOS.
     /// Other hosts ignore them.
     /// So the both-ways discipline still flags a genuine unexpected pass there.

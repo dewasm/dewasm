@@ -26,7 +26,7 @@ They list their inputs at runtime as named trials.
   Each trial converts the prebuilt `.wasm` of the upstream testsuite in `--mode standalone`.
   It executes the output through the standalone interface.
   The manifest beside each trial gives its `args`/`env`/`root`.
-  They become guest `argv`, child environment, and a `--dir` preopen.
+  They become guest `argv`, `--env` flags, and a `--dir` preopen.
   The preopen comes from a fresh temporary copy, so no trial affects another.
 - **`crates/dewasm-backend-<lang>/tests/e2e.rs`**: that backend's suites.
   They are declared by calling the shared macros.
@@ -156,11 +156,10 @@ Extending that list in the backend's `tests/spec.rs` is a last resort.
 It requires an attribution tag plus a reason.
 
 Each backend carries its own `WASI_TESTSUITE_EXPECTED_FAILURES` list too.
-Every known failure there is attributed to one of three causes:
+Every known failure there is attributed to one of two causes:
 
 - a declared ENOSYS gap (`docs/support.md`);
-- a semantics-precision gap on a supported system call;
-- the standalone interface passing the whole environment through.
+- a semantics-precision gap on a supported system call.
 
 Both lists are checked both ways: a listed trial that unexpectedly *passes* is a hard failure.
 So filling a gap forces the entry to be removed.

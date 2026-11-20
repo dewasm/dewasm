@@ -4,7 +4,7 @@
 //! Go is compiled, so it overrides `pty_command`.
 //! The override builds the generated program to a content-addressed cache binary with `go build`.
 //! That binary is the launch recipe the shared `run_standalone_wasi` runs.
-//! It runs with the manifest's environment, arguments, and directories applied.
+//! It runs with the manifest's environment, arguments, and directories as flags.
 //! The generic harness lives in `dewasm-test-helper`.
 
 use dewasm_backend::Backend;

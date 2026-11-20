@@ -17,6 +17,9 @@ The reference is [`docs/standalone-interface.md`](../../docs/standalone-interfac
 **Revision, 2026-07-27:** Bash's `--dir` rejection is replaced by [decision 34](34-bash-wasi-file-system.md).
 The Bash backend now honors `--dir` with real file system support.
 
+**Revision, 2026-11-20:** The environment row is replaced by [decision 105](105-standalone-environment-from-env-flags.md).
+The guest gets only the variables that `--env` flags name.
+
 ## Context
 
 A converted `--mode standalone` program is a real CLI: a WASI guest wrapped in a generated `main`.

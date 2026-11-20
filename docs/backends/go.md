@@ -49,7 +49,7 @@ $ dewasm prog.wasm --target go --mode standalone -o prog.go
 $ go build -o prog prog.go && ./prog --dir ./data::/data arg1 arg2
 ```
 
-Standalone programs share one runtime interface: `argv`, `--dir` preopens, environment, exit/trap.
+Standalone programs share one runtime interface: `argv`, `--dir` preopens, `--env` variables, exit/trap.
 It is described in [`docs/standalone-interface.md`](../standalone-interface.md).
 
 ## Embedding a library artifact

@@ -42,7 +42,7 @@ $ dewasm prog.wasm --target bash --mode standalone -o prog.sh
 $ bash prog.sh arg1 arg2      # a bash 5+ on PATH
 ```
 
-Standalone programs share one runtime interface: `argv`, `--dir` preopens, environment, exit/trap.
+Standalone programs share one runtime interface: `argv`, `--dir` preopens, `--env` variables, exit/trap.
 It is described in [`docs/standalone-interface.md`](../standalone-interface.md).
 
 ## Capabilities

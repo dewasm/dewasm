@@ -501,11 +501,13 @@ fn main_class(type_name: &str, wasi: bool) -> String {
     // It stops at `--` or the first non-flag token; the rest is the guest's `argv[1..]`.
     // The JVM does not pass the launched file name to `main`.
     // So `argv[0]` is the module class name.
-    // The whole process environment passes through.
+    // `--env NAME=VAL` flags in that run give the guest its only variables.
+    // `--env NAME` with no value takes the one this process has, when it has one.
     // Without WASI there is nothing to preopen and no `argv` to deliver.
     let arg_setup = if wasi {
         format!(
             "\t\tjava.util.Map<String, String> preopens = new java.util.HashMap<>();\n\
+             {ind}java.util.Map<String, String> envMap = new java.util.LinkedHashMap<>();\n\
              {ind}int i = 0;\n\
              {ind}while (i < argv.length) {{\n\
              {ind}\tString a = argv[i];\n\
@@ -523,6 +525,25 @@ fn main_class(type_name: &str, wasi: bool) -> String {
              {ind}\t}} else if (a.startsWith(\"--dir=\")) {{\n\
              {ind}\t\tspec = a.substring(6);\n\
              {ind}\t\ti++;\n\
+             {ind}\t}} else if (a.equals(\"--env\") || a.startsWith(\"--env=\")) {{\n\
+             {ind}\t\tif (a.equals(\"--env\")) {{\n\
+             {ind}\t\t\tif (i + 1 >= argv.length) {{\n\
+             {ind}\t\t\t\tSystem.err.print(\"--env requires a NAME[=VAL] argument\\n\");\n\
+             {ind}\t\t\t\tSystem.exit(1);\n\
+             {ind}\t\t\t}}\n\
+             {ind}\t\t\tspec = argv[i + 1];\n\
+             {ind}\t\t\ti += 2;\n\
+             {ind}\t\t}} else {{\n\
+             {ind}\t\t\tspec = a.substring(6);\n\
+             {ind}\t\t\ti++;\n\
+             {ind}\t\t}}\n\
+             {ind}\t\tint eq = spec.indexOf('=');\n\
+             {ind}\t\tif (eq >= 0) {{\n\
+             {ind}\t\t\tenvMap.put(spec.substring(0, eq), spec.substring(eq + 1));\n\
+             {ind}\t\t}} else if (System.getenv(spec) != null) {{\n\
+             {ind}\t\t\tenvMap.put(spec, System.getenv(spec));\n\
+             {ind}\t\t}}\n\
+             {ind}\t\tcontinue;\n\
              {ind}\t}} else {{\n\
              {ind}\t\tbreak;\n\
              {ind}\t}}\n\
@@ -536,7 +557,6 @@ fn main_class(type_name: &str, wasi: bool) -> String {
              {ind}String[] wasiArgs = new String[argv.length - i + 1];\n\
              {ind}wasiArgs[0] = {name};\n\
              {ind}System.arraycopy(argv, i, wasiArgs, 1, argv.length - i);\n\
-             {ind}java.util.Map<String, String> envMap = System.getenv();\n\
              {ind}String[] wasiEnv = new String[envMap.size()];\n\
              {ind}int ei = 0;\n\
              {ind}for (java.util.Map.Entry<String, String> e : envMap.entrySet()) {{\n\
