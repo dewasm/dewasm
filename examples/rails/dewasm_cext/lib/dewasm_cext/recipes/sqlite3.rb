@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 DewasmCExt::Recipe.register "sqlite3" do
-  checksum "2.10.1", "7ae52c91f5b766882cf44d2dbd26d2dbbb841606f0ec78df3be019bd07b13ff4"
+  checksum "2.10.2", "f1ea68cd3287f8a49f39a088ac9e4bd0ef4e7f394c3d4a60dd4c7e44b0566964"
 
   SQLITE = {
     url: "https://sqlite.org/2026/sqlite-autoconf-3540100.tar.gz",

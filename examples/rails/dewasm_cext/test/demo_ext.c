@@ -169,6 +169,17 @@ static VALUE demo_same(VALUE self, VALUE a, VALUE b) {
     return a == b ? Qtrue : Qfalse;
 }
 
+static VALUE demo_take(VALUE self, VALUE ary, VALUE index) {
+    return rb_assoc_new(rb_ary_delete_at(ary, RB_NUM2LONG(index)), ary);
+}
+
+static VALUE demo_fiber_local(VALUE self, VALUE v) {
+    ID key = rb_intern("demo_fiber_local");
+    VALUE before = rb_thread_local_aref(rb_thread_current(), key);
+    rb_thread_local_aset(rb_thread_current(), key, v);
+    return before;
+}
+
 static VALUE demo_float(VALUE self, VALUE v) {
     return DBL2NUM(NUM2DBL(v) * 1.5);
 }
@@ -192,6 +203,8 @@ void Init_demo(void) {
     rb_define_module_function(m, "type_name", demo_type_name, 1);
     rb_define_module_function(m, "same?", demo_same, 2);
     rb_define_module_function(m, "float", demo_float, 1);
+    rb_define_module_function(m, "fiber_local", demo_fiber_local, 1);
+    rb_define_module_function(m, "take", demo_take, 2);
 
     cCounter = rb_define_class_under(m, "Counter", rb_cObject);
     rb_define_alloc_func(cCounter, counter_alloc);

@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 DewasmCExt::Recipe.register "nokogiri" do
-  checksum "1.19.4", "50c951611c92bca05c51411aef45f1cbc50f2821c4802758c5c6d34696533ab5"
+  checksum "1.19.7", "abe94507c54cb18f872777b16bdca4aad32b1abdc4c52fe843f1c80fbdf992b8"
 
   LIBXML2 = "2.13.9"
   LIBXSLT = "1.1.43"
@@ -11,7 +11,7 @@ DewasmCExt::Recipe.register "nokogiri" do
     self.include_dirs = %w[ext/nokogiri gumbo-parser/src]
     self.defines = { "NOKOGIRI_PACKAGED_LIBRARIES" => nil, "NOKOGIRI_PRECOMPILED_LIBRARIES" => nil,
                      "HAVE_XMLCTXTSETOPTIONS" => "1", "HAVE_XMLSWITCHENCODINGNAME" => "1",
-                     "HAVE_RB_CATEGORY_WARNING" => "1" }
+                     "HAVE_XMLADDIDSAFE" => "1", "HAVE_RB_CATEGORY_WARNING" => "1" }
     self.cflags = %w[-std=c99 -Wno-declaration-after-statement]
     self.extension = "nokogiri/nokogiri"
   end
