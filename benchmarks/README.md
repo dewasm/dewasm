@@ -8,6 +8,8 @@ How to run it and read the numbers is [`docs/benchmarks/README.md`](../docs/benc
 - `drivers/` scripts that run a module under the two pure-source wasm interpreters.
   These are [`wardite`](https://github.com/udzura/wardite) (Ruby) and [`pywasm`](https://github.com/mohanson/pywasm) (Python).
   A driver takes the same command line every other runner gets.
+  The `wardite-spinel` runner uses no driver.
+  It builds the gem's own command line with a host Spinel, as the gem's `make spinel` does.
 - `cache/` build output, ignored by Git, that `setup.sh` produces.
   It holds the compiled modules and the interpreter installs at fixed versions.
 

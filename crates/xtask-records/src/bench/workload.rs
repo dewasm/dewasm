@@ -106,6 +106,7 @@ const EH_EXCLUDES: &[(&str, Exclusion)] = &[
     ),
     ("wasm3-ruby", CONVERTED_WASM3_EH_EXCLUSION),
     ("wasm3-ruby-yjit", CONVERTED_WASM3_EH_EXCLUSION),
+    ("wasm3-spinel", CONVERTED_WASM3_EH_EXCLUSION),
     ("wasm3-python", CONVERTED_WASM3_EH_EXCLUSION),
     ("wasm3-pypy", CONVERTED_WASM3_EH_EXCLUSION),
     ("pywasm-cpython", PYWASM_EH_EXCLUSION),
@@ -137,6 +138,7 @@ const TAIL_CALL_EXCLUDES: &[(&str, Exclusion)] = &[
     ("pywasm-pypy", PYWASM_TAIL_CALL_EXCLUSION),
     ("wardite", WARDITE_TAIL_CALL_EXCLUSION),
     ("wardite-yjit", WARDITE_TAIL_CALL_EXCLUSION),
+    ("wardite-spinel", WARDITE_TAIL_CALL_EXCLUSION),
 ];
 
 const PYWASM_TAIL_CALL_EXCLUSION: Exclusion = Exclusion {
@@ -458,7 +460,7 @@ const GRAALPY_SQLITE_EXCLUSION: Exclusion = Exclusion {
 
 const CONVERTED_WASM3_SQLITE_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Cost,
-    reason: "the converted wasm3 runs this program correctly but too slowly to keep on any of the four wasm3-* runners",
+    reason: "the converted wasm3 runs this program correctly but too slowly to keep on the Ruby and Python `wasm3-*` runners; `wasm3-spinel` stays measured",
 };
 
 const WARDITE_SQLITE_EXCLUSION: Exclusion = Exclusion {
@@ -493,7 +495,7 @@ const MINIGZIP_EXCLUDES: &[(&str, Exclusion)] = &[
 
 const CONVERTED_WASM3_MINIGZIP_EXCLUSION: Exclusion = Exclusion {
     kind: ExclusionKind::Cost,
-    reason: "the converted Wasm3 compresses the input correctly but too slowly to keep on Ruby, PyPy and CPython; `wasm3-ruby-yjit` stays measured",
+    reason: "the converted Wasm3 compresses the input correctly but too slowly to keep on Ruby, PyPy and CPython; `wasm3-ruby-yjit` and `wasm3-spinel` stay measured",
 };
 
 const BASH_MINIGZIP_EXCLUSION: Exclusion = Exclusion {
