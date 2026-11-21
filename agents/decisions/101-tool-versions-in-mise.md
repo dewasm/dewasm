@@ -5,6 +5,8 @@ Status: **Accepted, 2026-10-04.**
 So the missing ZJIT is now the one reason Ruby is built from source.
 **Revision, 2026-11-21:** Spinel is now a tool of `mise.toml` ([decision 106](106-spinel-backend-signed-word-i64.md)).
 It is one commit's source archive, built by `make` after `mise` unpacks it.
+**Revision, 2026-11-21:** Ruby and Spinel each have a CI cache of their own (issue #391).
+Its key comes from that tool's entry, so a change to another tool builds neither again.
 Implemented in these places (issue #366):
 - `mise.toml` and `mise.lock`, for the tools the tests need;
 - `mise.bench.toml` and `mise.bench.lock`, for the tools only the speed suite needs;

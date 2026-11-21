@@ -5,6 +5,38 @@ description: >
 runs:
   using: composite
   steps:
+    # The cache of every tool has a key made from all of `mise.toml` and `mise.lock`.
+    # So a change to one tool's version installs every tool again.
+    # Ruby and Spinel are builds from source, and they are most of that time.
+    # Each of the two gets a cache of its own, under a key made from its own entry only.
+    # The keys also hold the runner's image: a build links the libraries of the image it ran on.
+    - name: Compute the cache keys of the tools built from source
+      id: source-built
+      shell: bash
+      run: |
+        python3 - <<'PY' >> "$GITHUB_OUTPUT"
+        import hashlib, json, os, tomllib
+
+        with open("mise.toml", "rb") as file:
+            config = tomllib.load(file)
+
+        def key(*parts):
+            image = [os.environ["RUNNER_OS"], os.environ["RUNNER_ARCH"], os.environ.get("ImageOS")]
+            text = json.dumps([image, *parts], sort_keys=True)
+            return hashlib.sha256(text.encode()).hexdigest()[:16]
+
+        print("ruby=" + key(config["tools"]["ruby"], config["settings"].get("ruby")))
+        print("spinel=" + key(config["tools"]["spinel"]))
+        PY
+    # `mise install` skips a tool whose directory is already there.
+    - uses: actions/cache@v6
+      with:
+        path: ~/.local/share/mise/installs/ruby
+        key: mise-ruby-${{ steps.source-built.outputs.ruby }}
+    - uses: actions/cache@v6
+      with:
+        path: ~/.local/share/mise/installs/spinel
+        key: mise-spinel-${{ steps.source-built.outputs.spinel }}
     - uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
       with:
         version: 2026.11.10

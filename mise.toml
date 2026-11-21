@@ -33,6 +33,7 @@ filter_bins = ["none"]
 # Spinel has no prebuilt release, and the Spinel backend needs a commit newer than its last one.
 # So this is the source archive of one commit, built by `make` after it is unpacked.
 # `.spinel-dist` gives the build its revision, which `spinel --version` then prints.
+# The tests and the benchmarks of Spinel itself are half of the tree, and nothing here reads them.
 [tools.spinel]
 version = "b1354828a189b02d900d15f64c05b5b96b0e5dc2"
 url = "https://github.com/matz/spinel/archive/{{version}}.tar.gz"
@@ -43,6 +44,7 @@ cd "$MISE_TOOL_INSTALL_PATH"
 printf '%s\n\n' "$(printf '%s' "$MISE_TOOL_VERSION" | cut -c1-9)" > .spinel-dist
 make deps
 make
+rm -rf test benchmark
 """
 
 [env]
