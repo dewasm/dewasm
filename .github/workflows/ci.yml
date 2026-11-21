@@ -80,7 +80,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        backend: [ruby, bash, python, go, java, perl, codon]
+        backend: [ruby, bash, python, go, java, perl, codon, spinel]
     runs-on: ubuntu-latest
     # The `slow_test` run (full specification suites + slow apps) has unmeasured wall time.
     # Give it a wide margin and tighten later.

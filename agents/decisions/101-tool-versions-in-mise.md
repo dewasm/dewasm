@@ -3,6 +3,8 @@
 Status: **Accepted, 2026-10-04.**
 **Revision, 2026-11-20:** A guest no longer sees `PKG_CONFIG_PATH` ([decision 105](105-standalone-environment-from-env-flags.md)).
 So the missing ZJIT is now the one reason Ruby is built from source.
+**Revision, 2026-11-21:** Spinel is now a tool of `mise.toml` ([decision 106](106-spinel-backend-signed-word-i64.md)).
+It is one commit's source archive, built by `make` after `mise` unpacks it.
 Implemented in these places (issue #366):
 - `mise.toml` and `mise.lock`, for the tools the tests need;
 - `mise.bench.toml` and `mise.bench.lock`, for the tools only the speed suite needs;

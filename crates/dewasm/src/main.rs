@@ -10,6 +10,7 @@ use dewasm_backend_java::JavaBackend;
 use dewasm_backend_perl::PerlBackend;
 use dewasm_backend_python::PythonBackend;
 use dewasm_backend_ruby::RubyBackend;
+use dewasm_backend_spinel::SpinelBackend;
 
 /// Translate a WebAssembly binary into source code of various languages.
 #[derive(Parser)]
@@ -18,7 +19,7 @@ struct Cli {
     /// Input file (.wasm binary or WAT text)
     input: PathBuf,
 
-    /// Target language: "ruby", "bash", "python", "perl", "go", "java", or "codon".
+    /// Target language: "ruby", "bash", "python", "perl", "go", "java", "codon", or "spinel".
     #[arg(short, long)]
     target: String,
 
@@ -66,6 +67,7 @@ fn main() -> Result<()> {
         "bash" => Box::new(BashBackend),
         "python" => Box::new(PythonBackend),
         "codon" => Box::new(CodonBackend),
+        "spinel" => Box::new(SpinelBackend),
         "perl" => Box::new(PerlBackend),
         "go" => Box::new(GoBackend),
         "java" => Box::new(JavaBackend),

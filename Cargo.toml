@@ -19,6 +19,7 @@ dewasm-backend-perl = { path = "crates/dewasm-backend-perl", version = "0.1.0" }
 dewasm-backend-go = { path = "crates/dewasm-backend-go", version = "0.1.0" }
 dewasm-backend-java = { path = "crates/dewasm-backend-java", version = "0.1.0" }
 dewasm-backend-codon = { path = "crates/dewasm-backend-codon", version = "0.1.0" }
+dewasm-backend-spinel = { path = "crates/dewasm-backend-spinel", version = "0.1.0" }
 dewasm-test-helper = { path = "crates/dewasm-test-helper" }
 xtask-feature-audit = { path = "crates/xtask-feature-audit" }
 xtask-records = { path = "crates/xtask-records" }

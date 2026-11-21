@@ -56,51 +56,92 @@ use dewasm_core::ir::{
 
 include!(concat!(env!("OUT_DIR"), "/units.rs"));
 
+/// How generated code holds an i64.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum I64Repr {
+    /// `0..=2**64 - 1` in an arbitrary-precision integer.
+    /// Each wrapping operation masks its result.
+    MaskedUnsigned,
+    /// A signed 64-bit word.
+    /// It is for a host whose integer `+`, `-`, `*` and `<<` wrap at 64 bits.
+    /// A wrapping operation is then the host's own, and no i64 result is masked.
+    SignedWord,
+}
+
+/// What differs between the hosts that run this crate's output.
+/// The control flow, the memory, and the i32 lowering are the same for every host.
+pub struct Dialect<'a> {
+    /// The backend whose support declarations a module is checked against.
+    pub backend: &'a dyn Backend,
+    /// The runtime units of this dialect.
+    /// A unit the emitter names for one [`I64Repr`] only must exist in that dialect's bundler.
+    pub bundler: &'a RuntimeBundler,
+    pub i64: I64Repr,
+    /// Whether the host's compiler folds a float operation with a constant operand.
+    /// `x * 1.0`, `x / 1.0` and `x + -0.0` then become `x`, and `x * -1.0` a sign flip.
+    /// None of those quiets a signaling NaN, which wasm requires of an arithmetic result.
+    /// When set, such an operation quiets its own result.
+    pub folds_float_identities: bool,
+}
+
+fn ruby_dialect() -> Dialect<'static> {
+    Dialect {
+        backend: &RubyBackend,
+        bundler: bundler(),
+        i64: I64Repr::MaskedUnsigned,
+        folds_float_identities: false,
+    }
+}
+
 /// The runtime unit bundler for Ruby (see `crates/dewasm-backend-ruby/units/`).
 pub fn bundler() -> &'static RuntimeBundler {
     static BUNDLER: OnceLock<RuntimeBundler> = OnceLock::new();
-    BUNDLER.get_or_init(|| {
-        RuntimeBundler::new(
-            "#",
-            "\t",
-            2,
-            vec![
-                RuntimeScope {
-                    prefix: "rt",
-                    open: "",
-                    close: "",
-                    prelude: Some("rt/_module"),
-                },
-                RuntimeScope {
-                    prefix: "memory",
-                    open: "class Memory",
-                    close: "end",
-                    prelude: Some("memory/_class"),
-                },
-                RuntimeScope {
-                    prefix: "table",
-                    open: "class Table",
-                    close: "end",
-                    prelude: Some("table/_class"),
-                },
-                RuntimeScope {
-                    prefix: "global",
-                    open: "class Global",
-                    close: "end",
-                    prelude: Some("global/_class"),
-                },
-                RuntimeScope {
-                    prefix: "wasi",
-                    open: "class WASI",
-                    close: "end",
-                    prelude: Some("wasi/_class"),
-                },
-            ],
-            UNIT_SOURCES,
-        )
-        .and_then(|b| b.with_scope_member("wasi", wasi_import_dispatch))
-        .expect("runtime units are well-formed")
-    })
+    BUNDLER.get_or_init(|| bundler_of(UNIT_SOURCES))
+}
+
+/// A bundler with this backend's scopes over `sources`.
+/// Another dialect passes [`UNIT_SOURCES`] with its own units in place of some.
+pub fn bundler_of(sources: &'static [(&'static str, &'static str)]) -> RuntimeBundler {
+    RuntimeBundler::new(
+        "#",
+        "\t",
+        2,
+        vec![
+            RuntimeScope {
+                prefix: "rt",
+                open: "",
+                close: "",
+                prelude: Some("rt/_module"),
+            },
+            RuntimeScope {
+                prefix: "memory",
+                open: "class Memory",
+                close: "end",
+                prelude: Some("memory/_class"),
+            },
+            RuntimeScope {
+                prefix: "table",
+                open: "class Table",
+                close: "end",
+                prelude: Some("table/_class"),
+            },
+            RuntimeScope {
+                prefix: "global",
+                open: "class Global",
+                close: "end",
+                prelude: Some("global/_class"),
+            },
+            RuntimeScope {
+                prefix: "wasi",
+                open: "class WASI",
+                close: "end",
+                prelude: Some("wasi/_class"),
+            },
+        ],
+        sources,
+    )
+    .and_then(|b| b.with_scope_member("wasi", wasi_import_dispatch))
+    .expect("runtime units are well-formed")
 }
 
 /// The WASI import-provider protocol's dispatch (`Rt::WASI#import`).
@@ -130,7 +171,12 @@ fn wasi_import_dispatch(units: &BTreeSet<String>) -> String {
 /// Emit a top-level shared runtime (`module Rt ... end`) for the closure of `seeds`.
 /// Generated classes then use `RuntimeLinkage::Alias("::Rt")`.
 pub fn shared_runtime(seeds: &BTreeSet<String>) -> Result<String> {
-    Ok(format!("module Rt\n{}end\n", bundler().bundle(seeds, 1)?))
+    shared_runtime_in(bundler(), seeds)
+}
+
+/// [`shared_runtime`] from the units of another dialect.
+pub fn shared_runtime_in(bundler: &RuntimeBundler, seeds: &BTreeSet<String>) -> Result<String> {
+    Ok(format!("module Rt\n{}end\n", bundler.bundle(seeds, 1)?))
 }
 
 /// Locate a Ruby interpreter able to run generated scripts: at least 4.0.
@@ -187,27 +233,56 @@ pub fn generate_class_with_units(
     linkage: &RuntimeLinkage,
     default_wasi: bool,
 ) -> Result<(String, BTreeSet<String>)> {
-    generate_class_inner(
-        module,
-        class_name,
-        linkage,
-        default_wasi,
-        &BTreeSet::new(),
-        None,
-        false,
-    )
+    generate_class_with_units_in(&ruby_dialect(), module, class_name, linkage, default_wasi)
 }
 
-fn generate_class_inner(
+/// [`generate_class_with_units`] in another dialect.
+pub fn generate_class_with_units_in(
+    dialect: &Dialect<'_>,
     module: &Module,
     class_name: &str,
     linkage: &RuntimeLinkage,
     default_wasi: bool,
-    extra_seeds: &BTreeSet<String>,
-    data_file: Option<&str>,
-    function_names: bool,
 ) -> Result<(String, BTreeSet<String>)> {
-    check_module_support(&RubyBackend, module)?;
+    generate_class_inner(
+        dialect,
+        module,
+        &ClassRequest {
+            class_name,
+            linkage,
+            default_wasi,
+            extra_seeds: &BTreeSet::new(),
+            data_file: None,
+            function_names: false,
+        },
+    )
+}
+
+/// What one generated class is asked to be, apart from the module and the dialect.
+struct ClassRequest<'a> {
+    class_name: &'a str,
+    linkage: &'a RuntimeLinkage,
+    default_wasi: bool,
+    /// Units to bundle even when the class itself names none of them.
+    extra_seeds: &'a BTreeSet<String>,
+    data_file: Option<&'a str>,
+    function_names: bool,
+}
+
+fn generate_class_inner(
+    dialect: &Dialect<'_>,
+    module: &Module,
+    request: &ClassRequest<'_>,
+) -> Result<(String, BTreeSet<String>)> {
+    let ClassRequest {
+        class_name,
+        linkage,
+        default_wasi,
+        extra_seeds,
+        data_file,
+        function_names,
+    } = *request;
+    check_module_support(dialect.backend, module)?;
     // A global that can cross an instantiation boundary needs a shared mutable cell (`Rt::Global`).
     // No other global needs one.
     // A global crosses that boundary when it is imported or exported.
@@ -236,6 +311,7 @@ fn generate_class_inner(
         .map(|(i, _)| module.num_imported_funcs() + i as u32)
         .collect();
     let gen = Gen {
+        dialect,
         module,
         extracted,
         default_wasi,
@@ -267,7 +343,7 @@ fn generate_class_inner(
         RuntimeLinkage::Embedded => {
             if !uses.is_empty() {
                 out.push_str("\tmodule Rt\n");
-                out.push_str(&bundler().bundle(&uses, 2)?);
+                out.push_str(&dialect.bundler.bundle(&uses, 2)?);
                 out.push_str("\tend\n\n\tinclude Rt\n\n");
             }
         }
@@ -317,135 +393,147 @@ impl Backend for RubyBackend {
     }
 
     fn generate(&self, module: &Module, opts: &GenOptions) -> Result<Vec<OutputFile>> {
-        // Standalone output is a self-contained program: its class name is fixed, not derived.
-        // Library output uses the requested name unchanged, after validating it.
-        let class_name = if opts.mode == Mode::Standalone {
-            STANDALONE_CLASS.to_string()
-        } else {
-            check_module_name(&opts.module_name)?;
-            opts.module_name.clone()
-        };
+        generate(&ruby_dialect(), module, opts)
+    }
+}
 
-        // The Exit/Trap rescue clauses in the standalone main need these.
-        // They do so even when the module itself never references them.
-        let mut extra_seeds = BTreeSet::new();
-        if opts.mode == Mode::Standalone {
-            extra_seeds.insert("rt/trap".to_string());
-            extra_seeds.insert("rt/exit".to_string());
-        }
+/// The output files of `module` in `dialect`: what [`Backend::generate`] returns.
+pub fn generate(
+    dialect: &Dialect<'_>,
+    module: &Module,
+    opts: &GenOptions,
+) -> Result<Vec<OutputFile>> {
+    // Standalone output is a self-contained program: its class name is fixed, not derived.
+    // Library output uses the requested name unchanged, after validating it.
+    let class_name = if opts.mode == Mode::Standalone {
+        STANDALONE_CLASS.to_string()
+    } else {
+        check_module_name(&opts.module_name)?;
+        opts.module_name.clone()
+    };
 
-        let (class_src, _) = generate_class_inner(
-            module,
-            &class_name,
-            &opts.runtime,
-            opts.default_wasi,
-            &extra_seeds,
-            opts.data_file.as_ref().map(|c| c.data_file_name.as_str()),
-            opts.function_names,
-        )?;
+    // The Exit/Trap rescue clauses in the standalone main need these.
+    // They do so even when the module itself never references them.
+    let mut extra_seeds = BTreeSet::new();
+    if opts.mode == Mode::Standalone {
+        extra_seeds.insert("rt/trap".to_string());
+        extra_seeds.insert("rt/exit".to_string());
+    }
 
-        let mut w = CodeWriter::new("\t");
-        w.line("# Generated by dewasm. Do not edit.");
-        w.line("# frozen_string_literal: false");
+    let (class_src, _) = generate_class_inner(
+        dialect,
+        module,
+        &ClassRequest {
+            class_name: &class_name,
+            linkage: &opts.runtime,
+            default_wasi: opts.default_wasi,
+            extra_seeds: &extra_seeds,
+            data_file: opts.data_file.as_ref().map(|c| c.data_file_name.as_str()),
+            function_names: opts.function_names,
+        },
+    )?;
+
+    let mut w = CodeWriter::new("\t");
+    w.line("# Generated by dewasm. Do not edit.");
+    w.line("# frozen_string_literal: false");
+    w.line("");
+    w.raw(&class_src);
+
+    if opts.mode == Mode::Standalone {
+        let wasi_kwargs = wasi_bundled(module, opts.default_wasi, dialect.bundler);
         w.line("");
-        w.raw(&class_src);
-
-        if opts.mode == Mode::Standalone {
-            let wasi_kwargs = wasi_bundled(module, opts.default_wasi, bundler());
-            w.line("");
-            // Standalone output is a program, not a library: it runs on load, behind no main guard.
-            // An artifact other code loads is what `--mode library` produces.
-            if wasi_kwargs {
-                // Parse the standalone runtime interface.
-                // A leading run of `--dir HOST::GUEST` flags mounts host directories.
-                // Each lands at a guest path.
-                // `--env NAME=VAL` flags in that run give the guest its only variables.
-                // `--env NAME` with no value takes the one this process has, when it has one.
-                // This follows Wasmtime; the run stops at `--` or the first non-flag token.
-                // The rest is the guest's `argv[1..]`.
-                w.line("preopens = {}");
-                w.line("env = {}");
-                w.line("argv = ARGV.dup");
-                w.line("while (a = argv.first)");
-                w.indent();
-                w.line("if a == \"--\"");
-                w.indent();
-                w.line("argv.shift");
-                w.line("break");
-                w.dedent();
-                w.line("elsif a == \"--dir\"");
-                w.indent();
-                w.line("argv.shift");
-                w.line("spec = argv.shift or abort(\"--dir requires a HOST::GUEST argument\")");
-                w.line("host, guest = spec.split(\"::\", 2)");
-                w.line("preopens[guest || host] = host");
-                w.dedent();
-                w.line("elsif a.start_with?(\"--dir=\")");
-                w.indent();
-                w.line("host, guest = argv.shift.delete_prefix(\"--dir=\").split(\"::\", 2)");
-                w.line("preopens[guest || host] = host");
-                w.dedent();
-                w.line("elsif a == \"--env\" || a.start_with?(\"--env=\")");
-                w.indent();
-                w.line("argv.shift");
-                w.line("spec = a == \"--env\" ? argv.shift : a.delete_prefix(\"--env=\")");
-                w.line("spec or abort(\"--env requires a NAME[=VAL] argument\")");
-                w.line("name, sep, value = spec.partition(\"=\")");
-                w.line("value = ENV[name] if sep.empty?");
-                w.line("env[name] = value if value");
-                w.dedent();
-                w.line("else");
-                w.indent();
-                w.line("break");
-                w.dedent();
-                w.line("end");
-                w.dedent();
-                w.line("end");
-                w.line(format!(
-                    "inst = {class_name}.new({{}}, args: [File.basename($PROGRAM_NAME), *argv], env: env, preopens: preopens)"
-                ));
-            } else {
-                w.line(format!("inst = {class_name}.new"));
-            }
-            w.line("begin");
+        // Standalone output is a program, not a library: it runs on load, behind no main guard.
+        // An artifact other code loads is what `--mode library` produces.
+        if wasi_kwargs {
+            // Parse the standalone runtime interface.
+            // A leading run of `--dir HOST::GUEST` flags mounts host directories.
+            // Each lands at a guest path.
+            // `--env NAME=VAL` flags in that run give the guest its only variables.
+            // `--env NAME` with no value takes the one this process has, when it has one.
+            // This follows Wasmtime; the run stops at `--` or the first non-flag token.
+            // The rest is the guest's `argv[1..]`.
+            w.line("preopens = {}");
+            w.line("env = {}");
+            w.line("argv = ARGV.dup");
+            w.line("while (a = argv.first)");
             w.indent();
-            w.line("inst.invoke(\"_start\")");
-            w.line("exit 0");
+            w.line("if a == \"--\"");
+            w.indent();
+            w.line("argv.shift");
+            w.line("break");
             w.dedent();
-            w.line(format!("rescue {class_name}::Rt::Exit => e"));
+            w.line("elsif a == \"--dir\"");
             w.indent();
-            w.line("exit e.code");
+            w.line("argv.shift");
+            w.line("spec = argv.shift or abort(\"--dir requires a HOST::GUEST argument\")");
+            w.line("host, guest = spec.split(\"::\", 2)");
+            w.line("preopens[guest || host] = host");
             w.dedent();
-            w.line(format!("rescue {class_name}::Rt::Trap => e"));
+            w.line("elsif a.start_with?(\"--dir=\")");
             w.indent();
-            w.line("warn \"trap: #{e.message}\"");
-            w.line("exit 134");
+            w.line("host, guest = argv.shift.delete_prefix(\"--dir=\").split(\"::\", 2)");
+            w.line("preopens[guest || host] = host");
+            w.dedent();
+            w.line("elsif a == \"--env\" || a.start_with?(\"--env=\")");
+            w.indent();
+            w.line("argv.shift");
+            w.line("spec = a == \"--env\" ? argv.shift : a.delete_prefix(\"--env=\")");
+            w.line("spec or abort(\"--env requires a NAME[=VAL] argument\")");
+            w.line("name, sep, value = spec.partition(\"=\")");
+            w.line("value = ENV[name] if sep.empty?");
+            w.line("env[name] = value if value");
+            w.dedent();
+            w.line("else");
+            w.indent();
+            w.line("break");
             w.dedent();
             w.line("end");
+            w.dedent();
+            w.line("end");
+            w.line(format!(
+                    "inst = {class_name}.new({{}}, args: [File.basename($PROGRAM_NAME), *argv], env: env, preopens: preopens)"
+                ));
+        } else {
+            w.line(format!("inst = {class_name}.new"));
         }
-
-        let mut files = vec![OutputFile {
-            name: format!("{}.rb", opts.module_name),
-            contents: w.finish().into_bytes(),
-        }];
-        // The data file: every segment's bytes concatenated in segment order.
-        // It matches the `data_offsets` prefix sums written into the `DATA_BLOB.byteslice` calls.
-        // Only emitted when there is data to put in the separate file.
-        // Otherwise the generated code never reads it.
-        if let Some(cfg) = &opts.data_file {
-            if !module.datas.is_empty() {
-                let mut blob = Vec::new();
-                for data in &module.datas {
-                    blob.extend_from_slice(&data.data);
-                }
-                files.push(OutputFile {
-                    name: cfg.data_file_name.clone(),
-                    contents: blob,
-                });
-            }
-        }
-        Ok(files)
+        w.line("begin");
+        w.indent();
+        w.line("inst.invoke(\"_start\")");
+        w.line("exit 0");
+        w.dedent();
+        w.line(format!("rescue {class_name}::Rt::Exit => e"));
+        w.indent();
+        w.line("exit e.code");
+        w.dedent();
+        w.line(format!("rescue {class_name}::Rt::Trap => e"));
+        w.indent();
+        w.line("warn \"trap: #{e.message}\"");
+        w.line("exit 134");
+        w.dedent();
+        w.line("end");
     }
+
+    let mut files = vec![OutputFile {
+        name: format!("{}.rb", opts.module_name),
+        contents: w.finish().into_bytes(),
+    }];
+    // The data file: every segment's bytes concatenated in segment order.
+    // It matches the `data_offsets` prefix sums written into the `DATA_BLOB.byteslice` calls.
+    // Only emitted when there is data to put in the separate file.
+    // Otherwise the generated code never reads it.
+    if let Some(cfg) = &opts.data_file {
+        if !module.datas.is_empty() {
+            let mut blob = Vec::new();
+            for data in &module.datas {
+                blob.extend_from_slice(&data.data);
+            }
+            files.push(OutputFile {
+                name: cfg.data_file_name.clone(),
+                contents: blob,
+            });
+        }
+    }
+    Ok(files)
 }
 
 /// The class a `--mode standalone` program defines.
@@ -711,6 +799,7 @@ fn transformed_funcs(module: &Module) -> extract::Extracted {
 }
 
 struct Gen<'a> {
+    dialect: &'a Dialect<'a>,
     module: &'a Module,
     /// The function list actually emitted, with `types` extended to match.
     /// It holds the module's functions with extracted loop bodies replaced by calls.
@@ -984,7 +1073,7 @@ impl<'a> Gen<'a> {
         }
         w.line("");
 
-        let wasi_fallback = wasi_bundled(m, self.default_wasi, bundler());
+        let wasi_fallback = wasi_bundled(m, self.default_wasi, self.dialect.bundler);
         let header = if wasi_fallback {
             "def initialize(imports = {}, args: [], env: {}, preopens: {})"
         } else {
@@ -1041,7 +1130,7 @@ impl<'a> Gen<'a> {
                 // Non-WASI imports stay required.
                 let fallback = if is_wasi_module(&import.module) && self.default_wasi {
                     let unit = format!("wasi/{}", import.name);
-                    if bundler().has_unit(&unit) {
+                    if self.dialect.bundler.has_unit(&unit) {
                         self.use_unit(&unit);
                         self.use_unit("wasi/_class");
                         format!(
@@ -1959,7 +2048,7 @@ impl<'a> Gen<'a> {
     fn expr(&self, expr: &Expr, ctx: MaskContext) -> Rendered {
         match expr {
             Expr::I32Const(v) => number(v.to_string()),
-            Expr::I64Const(v) => number(v.to_string()),
+            Expr::I64Const(v) => self.int_lit(i128::from(*v)),
             Expr::F32Const(bits) => {
                 let v = f32::from_bits(*bits);
                 if v.is_finite() {
@@ -1973,7 +2062,11 @@ impl<'a> Gen<'a> {
                 if v.is_finite() {
                     number(format!("{v:?}"))
                 } else {
-                    self.call1("f64_from_bits", Rendered::atom(format!("0x{bits:x}")))
+                    let bits = match self.dialect.i64 {
+                        I64Repr::MaskedUnsigned => Rendered::atom(format!("0x{bits:x}")),
+                        I64Repr::SignedWord => self.int_lit(i128::from(*bits)),
+                    };
+                    self.call1("f64_from_bits", bits)
                 }
             }
             Expr::Temp(t) => Rendered::atom(temp(*t)),
@@ -1995,7 +2088,7 @@ impl<'a> Gen<'a> {
                 if matches!(op, BinOp::I32And | BinOp::I64And) {
                     if let Some((e, c)) = fold_and_chain(a, b) {
                         let re = self.expr(e, MaskContext::Reducing);
-                        return infix(re, "&", number(c.to_string()), BIT_AND);
+                        return infix(re, "&", self.int_lit(i128::from(c)), BIT_AND);
                     }
                 }
                 if let Some((ra, rb)) = self.eq_rewrite_operands(*op, a, b) {
@@ -2056,7 +2149,7 @@ impl<'a> Gen<'a> {
                     let (ra, rb) = self
                         .eq_rewrite_operands(*op, a, b)
                         .unwrap_or_else(|| (self.masked(a), self.masked(b)));
-                    self.rel(rel, ra, rb)
+                    self.rel(*op, rel, ra, rb)
                 }
                 None => self.zero_test("!=", e),
             },
@@ -2084,7 +2177,7 @@ impl<'a> Gen<'a> {
     fn zero_test(&self, op: &'static str, e: &Expr) -> Rendered {
         let rewrite = self.elision.borrow().eq_const_rewrite(e, 0);
         let (lhs, rhs) = match rewrite {
-            Some((x, ctx, t)) => (self.expr(x, ctx), number(t.to_string())),
+            Some((x, ctx, t)) => (self.expr(x, ctx), self.int_lit(t)),
             None => (self.masked(e), Rendered::atom("0".to_string())),
         };
         compare(lhs, op, rhs, EQ)
@@ -2105,7 +2198,24 @@ impl<'a> Gen<'a> {
             _ => return None,
         };
         let (x, ctx, t) = self.elision.borrow().eq_const_rewrite(e, c)?;
-        Some((self.expr(x, ctx), number(t.to_string())))
+        Some((self.expr(x, ctx), self.int_lit(t)))
+    }
+
+    /// An integer literal for the value `v` of the mask analysis's arithmetic.
+    ///
+    /// A signed word holds a value modulo 2^64, so the literal is the word congruent to `v`.
+    /// That keeps a rewritten equality exact.
+    /// The analysis proves one candidate modulo the type's width in the raw interval.
+    /// 2^64 is a multiple of that width, so no second value there is congruent modulo 2^64.
+    fn int_lit(&self, v: i128) -> Rendered {
+        match self.dialect.i64 {
+            I64Repr::MaskedUnsigned => number(v.to_string()),
+            I64Repr::SignedWord => number((v as i64).to_string()),
+        }
+    }
+
+    fn signed_words(&self) -> bool {
+        self.dialect.i64 == I64Repr::SignedWord
     }
 
     /// A one-argument call to a runtime helper, recording its unit.
@@ -2119,8 +2229,9 @@ impl<'a> Gen<'a> {
 
     /// The i64 result mask (`Rt.m64`), skipped when the consumer restores it.
     /// An elided site also keeps the `rt/m64` unit out of the bundle.
+    /// A signed word has no mask: the host's wrap is the result.
     fn m64_unless(&self, elide: bool, a: Rendered) -> Rendered {
-        if elide {
+        if elide || self.signed_words() {
             a
         } else {
             self.call1("m64", a)
@@ -2170,16 +2281,18 @@ impl<'a> Gen<'a> {
             }
             F32ConvertI32U => self.call1("f32", to_f(a)),
             F32ConvertI64S => {
-                let s = self.call1("s64", a);
+                let s = self.signed64(a);
                 self.call1("cvt_f32_i", s)
             }
+            F32ConvertI64U if self.signed_words() => self.call1("cvt_f32_u", a),
             F32ConvertI64U => self.call1("cvt_f32_i", a),
             F64ConvertI32S => to_f(self.call1("s32", a)),
             F64ConvertI32U => to_f(a),
             F64ConvertI64S => {
-                let s = self.call1("s64", a);
+                let s = self.signed64(a);
                 self.call1("cvt_f64_i", s)
             }
+            F64ConvertI64U if self.signed_words() => self.call1("cvt_f64_u", a),
             F64ConvertI64U => self.call1("cvt_f64_i", a),
             F32DemoteF64 => self.call1("f32_demote", a),
             F64PromoteF32 => self.call1("f64_promote", a),
@@ -2201,7 +2314,7 @@ impl<'a> Gen<'a> {
         // Outside condition position it needs the ternary back to the i32 0 or 1 wasm expects.
         if let Some(rel) = signed_view_rel_op(op) {
             return ternary(
-                self.rel(rel, a, b),
+                self.rel(op, rel, a, b),
                 Rendered::atom("1".to_string()),
                 Rendered::atom("0".to_string()),
             );
@@ -2229,9 +2342,10 @@ impl<'a> Gen<'a> {
             I32ShrU => infix(a, ">>", b, SHIFT),
             I32ShrS => mask32_unless(elide_mask, infix(self.call1("s32", a), ">>", b, SHIFT)),
             I64Shl => self.m64_unless(elide_mask, infix(a, "<<", b, SHIFT)),
+            I64ShrU if self.signed_words() => self.logical_shr(a, b),
             I64ShrU => infix(a, ">>", b, SHIFT),
             I64ShrS => {
-                let s = self.call1("s64", a);
+                let s = self.signed64(a);
                 self.m64_unless(elide_mask, infix(s, ">>", b, SHIFT))
             }
             I32Rotl => self.call2("i32_rotl", a, b),
@@ -2242,7 +2356,10 @@ impl<'a> Gen<'a> {
             F32Sub => self.call1("f32", infix(a, "-", b, ADD)),
             F32Mul => self.call1("f32", infix(a, "*", b, MUL)),
             F32Div => self.call1("f32", infix(a, "/", b, MUL)),
-            F64Add => infix(a, "+", b, ADD),
+            F64Add => {
+                let constant = self.folds_with_constant(&a, &b);
+                self.quieted_if(constant, infix(a, "+", b, ADD))
+            }
             // GCC-built MRI leaves a signaling NaN unquieted, on any architecture.
             // Every version probed does so.
             // This happens when the RHS is +0.0.
@@ -2252,18 +2369,15 @@ impl<'a> Gen<'a> {
             // Quiet any NaN result explicitly; the `== r` self-compare is false only for NaN.
             // That keeps the common finite path allocation- and call-free.
             // See issue #11.
-            F64Sub => {
-                let r = Rendered::atom("r".to_string());
-                // The assignment needs its parentheses: `=` binds looser than everything around it.
-                let store = Rendered::atom(format!("(r = {})", infix(a, "-", b, ADD).free()));
-                ternary(
-                    compare(store, "==", r.clone(), EQ),
-                    r.clone(),
-                    self.call1("quiet_nan", r),
-                )
+            F64Sub => self.quieted_if(true, infix(a, "-", b, ADD)),
+            F64Mul => {
+                let constant = self.folds_with_constant(&a, &b);
+                self.quieted_if(constant, infix(a, "*", b, MUL))
             }
-            F64Mul => infix(a, "*", b, MUL),
-            F64Div => infix(a, "/", b, MUL),
+            F64Div => {
+                let constant = self.folds_with_constant(&a, &b);
+                self.quieted_if(constant, infix(a, "/", b, MUL))
+            }
             F32Min | F64Min => self.call2("fmin", a, b),
             F32Max | F64Max => self.call2("fmax", a, b),
             F32Copysign => self.call2("f32_copysign", a, b),
@@ -2274,8 +2388,24 @@ impl<'a> Gen<'a> {
 
     /// A comparison as a Ruby boolean.
     /// It is built from a [`signed_view_rel_op`] mapping and the already rendered operands.
-    fn rel(&self, (r, sign): (&'static str, Option<&str>), a: Rendered, b: Rendered) -> Rendered {
+    fn rel(
+        &self,
+        op: BinOp,
+        (r, sign): (&'static str, Option<&str>),
+        a: Rendered,
+        b: Rendered,
+    ) -> Rendered {
         let prec = if r == "==" || r == "!=" { EQ } else { CMP };
+        if self.signed_words() {
+            use BinOp::*;
+            match op {
+                I64LtS | I64GtS | I64LeS | I64GeS => return compare(a, r, b, prec),
+                I64LtU | I64GtU | I64LeU | I64GeU => {
+                    return compare(flip_sign_bit(a), r, flip_sign_bit(b), prec)
+                }
+                _ => {}
+            }
+        }
         match sign {
             None => compare(a, r, b, prec),
             Some(sign) => {
@@ -2288,6 +2418,65 @@ impl<'a> Gen<'a> {
                 )
             }
         }
+    }
+}
+
+impl Gen<'_> {
+    /// The signed view of a stored i64, which a signed word already is.
+    fn signed64(&self, a: Rendered) -> Rendered {
+        if self.signed_words() {
+            a
+        } else {
+            self.call1("s64", a)
+        }
+    }
+
+    /// Whether the host folds an f64 operation over these operands: one of them is a literal.
+    fn folds_with_constant(&self, a: &Rendered, b: &Rendered) -> bool {
+        self.dialect.folds_float_identities && [a, b].iter().any(|x| x.src.parse::<f64>().is_ok())
+    }
+
+    /// `value`, with a NaN result quieted when `quiet` is set.
+    /// The `== r` self-compare is false only for a NaN.
+    /// That keeps the common finite path free of calls and allocations.
+    fn quieted_if(&self, quiet: bool, value: Rendered) -> Rendered {
+        if !quiet {
+            return value;
+        }
+        let r = Rendered::atom("r".to_string());
+        // The assignment needs its parentheses: `=` binds looser than everything around it.
+        let store = Rendered::atom(format!("(r = {})", value.free()));
+        ternary(
+            compare(store, "==", r.clone(), EQ),
+            r.clone(),
+            self.call1("quiet_nan", r),
+        )
+    }
+
+    /// `a >> b` with zeros shifted in, for a signed word.
+    /// The host's `>>` copies the sign bit, so the copies are masked off.
+    /// A constant count gives the mask at conversion time.
+    fn logical_shr(&self, a: Rendered, b: Rendered) -> Rendered {
+        match b.src.parse::<u32>() {
+            Ok(0) => a,
+            Ok(count) => infix(
+                infix(a, ">>", b, SHIFT),
+                "&",
+                number((u64::MAX >> count).to_string()),
+                BIT_AND,
+            ),
+            Err(_) => self.call2("i64_shr_u", a, b),
+        }
+    }
+}
+
+/// `a` with its sign bit flipped.
+/// The signed order of two flipped words is the unsigned order of the words.
+/// A literal folds at conversion time.
+fn flip_sign_bit(a: Rendered) -> Rendered {
+    match a.src.parse::<i64>() {
+        Ok(v) => number((v ^ i64::MIN).to_string()),
+        Err(_) => infix(a, "^", number(i64::MIN.to_string()), BIT_OR),
     }
 }
 

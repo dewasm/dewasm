@@ -27,6 +27,7 @@ dewasm-backend-perl.workspace = true
 dewasm-backend-go.workspace = true
 dewasm-backend-java.workspace = true
 dewasm-backend-codon.workspace = true
+dewasm-backend-spinel.workspace = true
 # The machine-readable records.
 # Timings are not reproducible, so a record is a data drop, not a compared snapshot.
 serde.workspace = true

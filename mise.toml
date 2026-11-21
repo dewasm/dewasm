@@ -5,6 +5,7 @@ ruby.compile = true
 
 [tool_alias]
 binaryen = "aqua:WebAssembly/binaryen"
+spinel = "http:spinel"
 wasi-sdk = "github:WebAssembly/wasi-sdk"
 wasi-vfs = "github:kateinoigakukun/wasi-vfs"
 wizer = "github:bytecodealliance/wizer"
@@ -28,6 +29,21 @@ version_prefix = "wasi-sdk-"
 # On `PATH` they would hide the host's own, which `cargo` needs for the host build.
 # So no binary of `wasi-sdk` goes on `PATH`; the build scripts reach it through `WASI_SDK_PATH`.
 filter_bins = ["none"]
+
+# Spinel has no prebuilt release, and the Spinel backend needs a commit newer than its last one.
+# So this is the source archive of one commit, built by `make` after it is unpacked.
+# `.spinel-dist` gives the build its revision, which `spinel --version` then prints.
+[tools.spinel]
+version = "b1354828a189b02d900d15f64c05b5b96b0e5dc2"
+url = "https://github.com/matz/spinel/archive/{{version}}.tar.gz"
+strip_components = 1
+bin_path = "bin"
+postinstall = """
+cd "$MISE_TOOL_INSTALL_PATH"
+printf '%s\n\n' "$(printf '%s' "$MISE_TOOL_VERSION" | cut -c1-9)" > .spinel-dist
+make deps
+make
+"""
 
 [env]
 # Before the first `mise install`, `tools` has no entry for `wasi-sdk`.

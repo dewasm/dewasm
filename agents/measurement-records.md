@@ -18,10 +18,11 @@ This file holds what a user of the numbers never needs and whoever takes them al
   A shell where `mise` is not active needs `mise exec --` in front of each command.
 - The JIT-enabled CPython is the `python3` of `mise.toml`.
   That prebuilt CPython turns its JIT on under `PYTHON_JIT=1`, except on an x86-64 macOS host.
-- `mise` installs no engine that is a build from source.
-  `monoruby` and Spinel are built from their repositories.
-  A `mise.local.toml`, which Git ignores, can name them in its `[env]` table.
-  The variables are `$DEWASM_MONORUBY` and `$DEWASM_SPINEL`.
+- `mise` builds one engine from source, Spinel, and no other.
+  `monoruby` is built from its repository.
+  A `mise.local.toml`, which Git ignores, can name it in its `[env]` table.
+  The variable is `$DEWASM_MONORUBY`.
+  Spinel is the fixed commit of `mise.toml`; `$DEWASM_SPINEL` names another build.
 - The caches match their fixed versions: `examples/apps/setup.sh --check` reports every app matching.
   `benchmarks/setup.sh` provisions the rest.
 - Measure on mains power.

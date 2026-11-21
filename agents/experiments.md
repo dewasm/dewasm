@@ -117,6 +117,8 @@ Typing i64 as `bigint` and compile-time scaling defeat Spinel today.
 - **Invalidated when**: Spinel's compile-time scaling improves, and a Spinel output profile exists.
   Spinel is pre-0.1 and moving fast.
   That profile is signed i64 (the `i64-signed` branch) plus an `IO::Buffer` replacement.
+  Invalidated 2026-11-21: the Spinel backend is that profile (decision 106).
+  Spinel now has `IO::Buffer`, and builds 56,000 lines of output in 41 s.
 - **Details**: #205.
 
 ## `jvm-ruby-runtimes` (2026-08-13)
