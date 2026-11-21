@@ -69,7 +69,7 @@ There are some features for testing:
 
 | Feature | Description |
 | --- | --- |
-| `slow_test` | CI's main run: the slow app cases and the full specification testsuite (Codon, whose per-file cost is a compile, runs a selected specification list here and its full run only under `ultra_slow_test`; Spinel runs a selected list by default and the full testsuite here). |
+| `slow_test` | CI's main run: the slow app cases and the full specification testsuite (Codon and Spinel, whose per-file cost is a compile, run a selected specification list here and the full one only under `ultra_slow_test`). |
 | `ultra_slow_test` | Implies `slow_test`; the cases CI cannot afford by wall time or memory, run in local pre-release verification. |
 | `wasmtime_test` | The snapshot freshness checks, which need the `xtask` binary built; see below. |
 

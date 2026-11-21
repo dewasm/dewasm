@@ -108,6 +108,7 @@ The output is built with `--int-overflow=wrap`.
   `wat/i64_alu` and `wat/i32_alu` now run at Wasmtime's speed.
 - Positive: the whole specification testsuite runs for the backend in about one minute.
   Each file is one `spinel` build at `-O 0`.
+  A CI runner needs 433 s for it, so CI runs a selected list, and the whole one runs by hand.
   At `-O 2` the same run passes too, except the two assertions of `call.wast` below.
 - Negative: the output runs on Spinel only, with one build flag.
   The load-time check turns a wrong build into an error.

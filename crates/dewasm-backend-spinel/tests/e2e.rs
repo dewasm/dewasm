@@ -45,12 +45,14 @@ dewasm_test_helper::deep_recursion_e2e!(Spinel);
 dewasm_test_helper::folded_temp_reuse_e2e!(Spinel);
 
 // The category criterion is the build cost of the case's own artifact, as for Codon.
-// `cowsay` builds in seconds, and `mruby` and `minigzip` in about a minute.
+// CI keeps no `spinel` build between runs, so every run pays it.
+// `cowsay` builds in seconds and stays in every run.
 dewasm_test_helper::cowsay_args_e2e!(Spinel);
 dewasm_test_helper::cowsay_stdin_e2e!(Spinel);
-dewasm_test_helper::mruby_eh_e2e!(Spinel, slow);
-dewasm_test_helper::gzip_e2e!(Spinel, slow);
-// The `ultra` category: each of these builds takes three minutes or more.
-// Both run at `slow` on the Ruby backend.
+// The `ultra` category: on a CI runner, `mruby` and `minigzip` took 380 s together.
+// `qjs` and `sqlite3-shell` each build for three minutes or more on a faster host.
+// All four run at `slow` on the Ruby backend, whose output this backend shares.
+dewasm_test_helper::mruby_eh_e2e!(Spinel, ultra);
+dewasm_test_helper::gzip_e2e!(Spinel, ultra);
 dewasm_test_helper::qjs_eval_e2e!(Spinel, ultra);
 dewasm_test_helper::sqlite3_shell_e2e!(Spinel, ultra);

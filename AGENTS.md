@@ -41,7 +41,7 @@ That covers the interpreters, the submodules, the apps cache, and the fail-loud-
 After any non-trivial change, run the first three commands of the table: `fmt`, `clippy`, and `test`.
 The slower test categories are optional Cargo features.
 `--features slow_test`, CI's main run, adds the slow app cases and the full specification testsuite.
-Codon, whose per-file cost is a compile, runs a selected specification list there instead.
+Codon and Spinel, whose per-file cost is a compile, run a selected specification list there instead.
 `--features ultra_slow_test` adds the cases CI cannot afford, run in local pre-release verification.
 Do not use `-- --include-ignored`; enable the features instead.
 The set it selects is not a designed configuration, so what it runs can change without notice.
