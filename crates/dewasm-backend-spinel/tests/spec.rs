@@ -71,6 +71,38 @@ const FAST_SPEC_FILES: &[&str] = &[
     "traps",
 ];
 
+/// What `slow_test` adds on top of [`FAST_SPEC_FILES`].
+/// The union is built in `curated_files`, so the slow category holds the fast one.
+/// The added files cover this backend's own risk areas:
+/// - the i32 lowering under a wrapping host (`i32`);
+/// - integer literals as signed words (`int_literals`);
+/// - 64-bit loads and stores (`address`, `align`, `load`, `memory`, `store`);
+/// - the f64 bit paths, and the f64 operations a C compiler folds (the `f64` and `float` files);
+/// - wide signatures, which one Spinel fix was for (`func`);
+/// - the library boundary (`call_indirect`, `global`).
+///
+/// The list is sized to keep CI's job under 5 minutes.
+/// A CI runner takes about twice the time one file needs alone on the measured host.
+/// `f32`, `f64_cmp`, `const` and `imports` need 7 s to 13 s each there, a third of the whole list.
+/// So they run only under `ultra_slow_test`, with the rest of the testsuite.
+const SLOW_EXTRA_SPEC_FILES: &[&str] = &[
+    "address",
+    "align",
+    "call_indirect",
+    "f32_bitwise",
+    "f64",
+    "f64_bitwise",
+    "float_exprs",
+    "float_memory",
+    "func",
+    "global",
+    "i32",
+    "int_literals",
+    "load",
+    "memory",
+    "store",
+];
+
 pub struct SpinelSpec;
 
 impl BackendUnderTest for SpinelSpec {
@@ -92,10 +124,28 @@ impl dewasm_test_helper::SpecBackend for SpinelSpec {
         EXPECTED_FAILURES
     }
 
-    /// Each file costs one `spinel` build, so a plain `cargo test` runs a selected list.
-    /// `--features slow_test` runs the whole testsuite.
+    /// Each file costs one `spinel` build, so the testsuite runs in three sizes.
+    /// - a plain `cargo test` runs [`FAST_SPEC_FILES`];
+    /// - `--features slow_test` (CI's run on `main`) adds [`SLOW_EXTRA_SPEC_FILES`];
+    ///   it also adds the exception-handling and tail-call files;
+    /// - the whole testsuite runs only under `--features ultra_slow_test`.
     fn curated_files(&self) -> Option<&'static [&'static str]> {
-        Some(FAST_SPEC_FILES)
+        if cfg!(feature = "ultra_slow_test") {
+            None
+        } else if cfg!(feature = "slow_test") {
+            static SLOW: std::sync::OnceLock<Vec<&'static str>> = std::sync::OnceLock::new();
+            Some(SLOW.get_or_init(|| {
+                FAST_SPEC_FILES
+                    .iter()
+                    .chain(SLOW_EXTRA_SPEC_FILES)
+                    .chain(dewasm_test_helper::EXCEPTION_HANDLING_SPEC_FILES)
+                    .chain(dewasm_test_helper::TAIL_CALL_SPEC_FILES)
+                    .copied()
+                    .collect()
+            }))
+        } else {
+            Some(FAST_SPEC_FILES)
+        }
     }
 
     fn seed_units(&self) -> &'static [&'static str] {
@@ -458,4 +508,7 @@ const POSTAMBLE: &str = r#"
 puts "RESULT pass=#{$pass} fail=#{$fail}"
 "#;
 
-dewasm_test_helper::spec_suite!(SpinelSpec);
+// Not `spec_suite!`: that runs every file under `slow_test`, and here only `ultra_slow_test` does.
+fn main() {
+    dewasm_test_helper::spec_main(&SpinelSpec, cfg!(feature = "ultra_slow_test"));
+}
