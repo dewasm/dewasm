@@ -15,6 +15,7 @@ use dewasm_backend_java::JavaBackend;
 use dewasm_backend_perl::PerlBackend;
 use dewasm_backend_python::PythonBackend;
 use dewasm_backend_ruby::RubyBackend;
+use dewasm_backend_spinel::SpinelBackend;
 use dewasm_core::feature::Feature;
 
 /// The features a backend can meaningfully differ on.
@@ -56,6 +57,7 @@ fn render_support_docs() -> String {
         &GoBackend,
         &JavaBackend,
         &CodonBackend,
+        &SpinelBackend,
     ];
 
     let mut out = String::new();

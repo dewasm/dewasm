@@ -419,20 +419,19 @@ impl Target {
     fn artifact_tag(&self) -> &'static str {
         match self {
             Target::TinyGo => "tinygo",
-            Target::Spinel => "spinel",
             _ => self.backend().name(),
         }
     }
 
     /// The dewasm backend behind this target.
     /// Ruby's three JIT modes with `monoruby` and JRuby share one backend.
+    /// Spinel has its own: it takes the Ruby backend's output in another i64 representation.
     /// Python and PyPy share one too.
     /// Each group then also shares one generated artifact.
     fn backend(&self) -> &'static (dyn Backend + Sync) {
         match self {
-            Target::Ruby(_) | Target::Monoruby | Target::JRuby | Target::Spinel => {
-                &dewasm_backend_ruby::RubyBackend
-            }
+            Target::Ruby(_) | Target::Monoruby | Target::JRuby => &dewasm_backend_ruby::RubyBackend,
+            Target::Spinel => &dewasm_backend_spinel::SpinelBackend,
             Target::Python | Target::PythonJit | Target::PyPy | Target::GraalPy => {
                 &dewasm_backend_python::PythonBackend
             }
@@ -840,12 +839,11 @@ fn build_artifact(target: Target, bytes: &[u8]) -> Result<Artifact> {
                     spinel_bin().context("spinel not found on PATH (or $DEWASM_SPINEL)")?;
                 let tmp = cache.join(format!("{stem}.bin.tmp"));
                 // -O 2 is two arguments: a joined -O2 is silently ignored.
-                // Wrapping i64 overflow is refused for a masked-unsigned Integer up to 2**64-1.
-                // So the promoting mode is the only one that runs.
                 run_build(
                     "spinel build",
                     Command::new(spinel)
-                        .args(["-O", "2", "--int-overflow=promote"])
+                        .args(["-O", "2"])
+                        .args(dewasm_backend_spinel::SPINEL_FLAGS)
                         .arg(&src)
                         .arg("-o")
                         .arg(&tmp),

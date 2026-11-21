@@ -22,3 +22,4 @@ dewasm-backend-perl.workspace = true
 dewasm-backend-go.workspace = true
 dewasm-backend-java.workspace = true
 dewasm-backend-codon.workspace = true
+dewasm-backend-spinel.workspace = true

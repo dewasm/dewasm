@@ -467,6 +467,7 @@ dependencies = [
  "dewasm-backend-perl",
  "dewasm-backend-python",
  "dewasm-backend-ruby",
+ "dewasm-backend-spinel",
  "dewasm-core",
  "wat",
 ]
@@ -563,6 +564,20 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "dewasm-backend",
+ "dewasm-core",
+ "dewasm-test-helper",
+ "regex",
+ "wast 263.0.0",
+ "wat",
+]
+
+[[package]]
+name = "dewasm-backend-spinel"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dewasm-backend",
+ "dewasm-backend-ruby",
  "dewasm-core",
  "dewasm-test-helper",
  "regex",
@@ -2294,6 +2309,7 @@ dependencies = [
  "dewasm-backend-perl",
  "dewasm-backend-python",
  "dewasm-backend-ruby",
+ "dewasm-backend-spinel",
  "dewasm-core",
  "dewasm-test-helper",
  "serde",
@@ -2325,6 +2341,7 @@ dependencies = [
  "dewasm-backend-perl",
  "dewasm-backend-python",
  "dewasm-backend-ruby",
+ "dewasm-backend-spinel",
  "dewasm-core",
 ]
 

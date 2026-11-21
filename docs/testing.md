@@ -16,13 +16,15 @@ The following tools and set-up steps are required to run all tests correctly:
 - **Every other tool at a fixed version**: [`mise`](https://mise.jdx.dev) installs them with `mise install`.
   `mise.toml` states each version, and `mise.lock` holds the URL and checksum of each fetched file.
   CI installs from the same two files.
-  * They are Ruby, Python, Go, Java, Codon, `wasi-sdk`, Binaryen, `wasi-vfs`, Wizer, and Wasmtime.
+  * They are Ruby, Python, Go, Java, Codon, Spinel, `wasi-sdk`, Binaryen, `wasi-vfs`, Wizer, and Wasmtime.
     `shellcheck` is one more.
     The host provides Bash and Perl.
   * Run the commands in a shell where `mise` is active, or put `mise exec --` in front of each.
     Each tool is then on `PATH`, and `WASI_SDK_PATH` is set.
   * Ruby is built from source, so the first install takes about 3 minutes.
     It needs a C compiler, and `rustc` on `PATH` for the two JIT compilers.
+  * Spinel is built from source too, from one fixed commit, in about 1 minute.
+    It needs a C compiler, `make`, and `git`.
   * `mise` is not required.
     Without it, install each tool yourself at the version `mise.toml` states.
 - **Each backend's interpreter or toolchain**, at the version its page under [`docs/backends/`](backends/) states.
@@ -36,6 +38,7 @@ The following tools and set-up steps are required to run all tests correctly:
     - `go`: `$DEWASM_GO`
     - `java`: `$DEWASM_JAVA`, `$DEWASM_JAVAC`
     - `codon`: `$DEWASM_CODON`
+    - `spinel`: `$DEWASM_SPINEL`
 - **Testsuite submodules**: initialize them once with `git submodule update --init`.
 - **The `.wasm` apps cache**: initialize it once with `examples/apps/setup.sh`.
   Re-run it after pulling a change that moves an app to a new version.
@@ -66,7 +69,7 @@ There are some features for testing:
 
 | Feature | Description |
 | --- | --- |
-| `slow_test` | CI's main run: the slow app cases and the full specification testsuite (Codon, whose per-file cost is a compile, runs a selected specification list here and its full run only under `ultra_slow_test`). |
+| `slow_test` | CI's main run: the slow app cases and the full specification testsuite (Codon, whose per-file cost is a compile, runs a selected specification list here and its full run only under `ultra_slow_test`; Spinel runs a selected list by default and the full testsuite here). |
 | `ultra_slow_test` | Implies `slow_test`; the cases CI cannot afford by wall time or memory, run in local pre-release verification. |
 | `wasmtime_test` | The snapshot freshness checks, which need the `xtask` binary built; see below. |
 

@@ -132,6 +132,7 @@ An entry is numbered: `<N>-<slug>.md`, cited as "decision N".
 | 103 | [Function Names From the Name Section Are an Option, After the Index](103-function-names-option.md) | Accepted |
 | 104 | [Pygments Runs on a CPython Reactor That Wizer Pre-Initializes](104-pygments-on-a-pre-initialized-cpython.md) | Accepted |
 | 105 | [A Standalone Program Takes Its Environment From `--env` Flags](105-standalone-environment-from-env-flags.md) | Accepted |
+| 106 | [Spinel Backend, the Ruby Output with a Signed-Word i64](106-spinel-backend-signed-word-i64.md) | Accepted |
 
 ## Adding a new decision
 

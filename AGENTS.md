@@ -132,6 +132,7 @@ Each rule is stated here in full; the cited decision holds its reasons and rejec
   - the conformance suite does not assert `wasmtime`'s shape.
 - Numeric representation conventions are shared across backends (decision 2).
   Those are masked-unsigned integers, f32 re-rounding, and NaN bit paths.
+  The Spinel backend holds an i64 as a signed 64-bit word instead (decision 106).
   A backend skips a result mask only through the shared analyses in `dewasm_backend::masking`.
   One is the consumption-context and bound analysis inside one expression tree (decision 71).
   The other is the per-function variable dataflow for unmasked local and temp stores (decision 73).
@@ -153,6 +154,7 @@ Each rule is stated here in full; the cited decision holds its reasons and rejec
   | Java | 18, 30 |
   | Perl | 18, 55, 91 |
   | Codon | 94 |
+  | Spinel | 106, with the Ruby rows |
 
 - Generated output must survive ahead-of-time compilation (decision 96).
   A name-to-member step over a table fixed at conversion time is emitted as a literal dispatch.

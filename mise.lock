@@ -162,6 +162,30 @@ checksum = "sha256:3c89db4edcab7cf1c27bff178882e0f6f27f7afdf54e859fa041fca10febe
 url = "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.darwin.x86_64.tar.xz"
 url_api = "https://api.github.com/repos/koalaman/shellcheck/releases/assets/279056930"
 
+[[tools.spinel]]
+version = "b1354828a189b02d900d15f64c05b5b96b0e5dc2"
+backend = "http:spinel"
+specifiers = ["b1354828a189b02d900d15f64c05b5b96b0e5dc2"]
+
+[tools.spinel.options]
+strip_components = "1"
+
+[tools.spinel."platforms.linux-arm64"]
+checksum = "sha256:055242cf4d39663445b0857512e5e64eff3ad3755a1fe370dac401515b17e194"
+url = "https://github.com/matz/spinel/archive/b1354828a189b02d900d15f64c05b5b96b0e5dc2.tar.gz"
+
+[tools.spinel."platforms.linux-x64"]
+checksum = "sha256:055242cf4d39663445b0857512e5e64eff3ad3755a1fe370dac401515b17e194"
+url = "https://github.com/matz/spinel/archive/b1354828a189b02d900d15f64c05b5b96b0e5dc2.tar.gz"
+
+[tools.spinel."platforms.macos-arm64"]
+checksum = "blake3:31604ce50decd0e2ac68de583f3b2e567e76de85283f9cdbf0d40808b613f302"
+url = "https://github.com/matz/spinel/archive/b1354828a189b02d900d15f64c05b5b96b0e5dc2.tar.gz"
+
+[tools.spinel."platforms.macos-x64"]
+checksum = "sha256:055242cf4d39663445b0857512e5e64eff3ad3755a1fe370dac401515b17e194"
+url = "https://github.com/matz/spinel/archive/b1354828a189b02d900d15f64c05b5b96b0e5dc2.tar.gz"
+
 [[tools.wasi-sdk]]
 version = "34"
 backend = "github:WebAssembly/wasi-sdk"
