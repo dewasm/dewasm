@@ -76,6 +76,10 @@ pub enum Driver {
     /// `benchmarks/drivers/wardite.rb` with the given Ruby JIT flag.
     /// It runs against the `GEM_HOME` under `benchmarks/cache/`.
     Wardite(&'static str),
+    /// `wardite`'s own command line, compiled to a native executable by a host Spinel.
+    /// The build is the gem's own recipe (`make spinel`), over the gem under `benchmarks/cache/`.
+    /// No driver script is involved, so the guest's `argv[0]` is `wardite`.
+    WarditeSpinel,
 }
 
 /// A third-party wasm runtime that consumes the `.wasm` directly.
@@ -187,12 +191,14 @@ pub fn runners() -> Vec<Runner> {
             "wasm3-ruby-yjit",
             Kind::ConvertedInterpreter(Target::Ruby("--yjit")),
         ),
+        r("wasm3-spinel", Kind::ConvertedInterpreter(Target::Spinel)),
         r("wasm3-python", Kind::ConvertedInterpreter(Target::Python)),
         r("wasm3-pypy", Kind::ConvertedInterpreter(Target::PyPy)),
         r("pywasm-cpython", Kind::Driver(Driver::PywasmCPython)),
         r("pywasm-pypy", Kind::Driver(Driver::PywasmPyPy)),
         r("wardite", Kind::Driver(Driver::Wardite("--disable-yjit"))),
         r("wardite-yjit", Kind::Driver(Driver::Wardite("--yjit"))),
+        r("wardite-spinel", Kind::Driver(Driver::WarditeSpinel)),
     ]
 }
 
@@ -441,12 +447,13 @@ impl Target {
 
 impl Driver {
     fn availability(&self) -> Result<(), String> {
-        let script = self.script();
-        if !script.is_file() {
-            return Err(format!(
-                "{} missing: it ships with the repo",
-                display_path(&script)
-            ));
+        if let Some(script) = self.script() {
+            if !script.is_file() {
+                return Err(format!(
+                    "{} missing: it ships with the repo",
+                    display_path(&script)
+                ));
+            }
         }
         match self {
             Driver::PywasmCPython => {
@@ -494,6 +501,15 @@ impl Driver {
                     )
                 })
             }
+            Driver::WarditeSpinel => {
+                spinel_bin().ok_or_else(|| {
+                    "spinel not found on PATH (or $DEWASM_SPINEL); benchmarks/setup.sh does not install it"
+                        .to_string()
+                })?;
+                wardite_gem_dir().map(|_| ()).ok_or_else(|| {
+                    "no wardite gem under benchmarks/cache/: run benchmarks/setup.sh".to_string()
+                })
+            }
         }
     }
 
@@ -517,13 +533,20 @@ impl Driver {
                 let v = String::from_utf8_lossy(&out.stdout).trim().to_string();
                 (!v.is_empty()).then(|| format!("wardite {v}"))
             }
+            Driver::WarditeSpinel => {
+                let gem = wardite_gem_dir()?;
+                let spinel = capture_version(&spinel_bin()?, &["--version"])?;
+                Some(format!("{} on {spinel}", gem_label(&gem)))
+            }
         }
     }
 
-    fn script(&self) -> PathBuf {
+    /// The driver script of this repository, for the runners that go through one.
+    fn script(&self) -> Option<PathBuf> {
         match self {
-            Driver::PywasmCPython | Driver::PywasmPyPy => drivers_dir().join("pywasm.py"),
-            Driver::Wardite(_) => drivers_dir().join("wardite.rb"),
+            Driver::PywasmCPython | Driver::PywasmPyPy => Some(drivers_dir().join("pywasm.py")),
+            Driver::Wardite(_) => Some(drivers_dir().join("wardite.rb")),
+            Driver::WarditeSpinel => None,
         }
     }
 }
@@ -926,16 +949,16 @@ fn write_if_absent(path: &Path, contents: &str) -> Result<()> {
 /// It holds its host interpreter, the driver script, and the module path.
 /// The caller appends guest arguments per the drivers' `<module.wasm> [guest-args...]` contract.
 fn driver_launch(driver: Driver, wasm: &Path) -> Result<Launch> {
-    let script = path_arg(&driver.script());
+    let script = || driver.script().map(|script| path_arg(&script));
     Ok(match driver {
         Driver::PywasmCPython => Launch {
             program: venv_python().context("benchmarks/cache/venv missing")?,
-            args: vec![script, path_arg(wasm)],
+            args: script().into_iter().chain([path_arg(wasm)]).collect(),
             env: Vec::new(),
         },
         Driver::PywasmPyPy => Launch {
             program: pypy_bin().context("pypy3 not found")?,
-            args: vec![script, path_arg(wasm)],
+            args: script().into_iter().chain([path_arg(wasm)]).collect(),
             env: Vec::new(),
         },
         Driver::Wardite(flag) => {
@@ -943,14 +966,54 @@ fn driver_launch(driver: Driver, wasm: &Path) -> Result<Launch> {
                 wardite_gem_home().context("no GEM_HOME with wardite under benchmarks/cache/")?;
             Launch {
                 program: dewasm_backend_ruby::find_ruby().context("ruby not found")?,
-                args: vec![flag.to_string(), script, path_arg(wasm)],
+                args: [flag.to_string()]
+                    .into_iter()
+                    .chain(script())
+                    .chain([path_arg(wasm)])
+                    .collect(),
                 env: vec![
                     ("GEM_HOME".to_string(), path_arg(&gem_home)),
                     ("GEM_PATH".to_string(), path_arg(&gem_home)),
                 ],
             }
         }
+        // Without the leading `--`, `wardite` parses the guest's arguments as its own.
+        Driver::WarditeSpinel => Launch {
+            program: build_wardite_spinel()?,
+            args: vec!["--".to_string(), path_arg(wasm)],
+            env: Vec::new(),
+        },
     })
+}
+
+/// The native `wardite` executable, built by the host Spinel and kept in the artifact cache.
+/// The command is the gem's `make spinel`: its library directory, strict requires, and `-O 2`.
+/// It takes Spinel's default integer overflow checks, which the gem is written for.
+/// The cache key holds the gem's version and Spinel's, so a new one of either builds again.
+fn build_wardite_spinel() -> Result<PathBuf> {
+    let gem = wardite_gem_dir().context("no wardite gem under benchmarks/cache/")?;
+    let spinel = spinel_bin().context("spinel not found on PATH (or $DEWASM_SPINEL)")?;
+    let version = capture_version(&spinel, &["--version"]);
+    let bin = bench_tmp_dir()?.join(format!(
+        "{}.bin",
+        artifact_stem("wardite-spinel", &gem_label(&gem), version)
+    ));
+    if !bin.is_file() {
+        let tmp = bin.with_extension("bin.tmp");
+        run_build(
+            "spinel build",
+            Command::new(spinel)
+                .arg("-I")
+                .arg(gem.join("lib"))
+                .args(["--strict-require", "-O", "2"])
+                .arg(gem.join("exe/wardite"))
+                .arg("-o")
+                .arg(&tmp),
+            build_timeout()?,
+        )?;
+        std::fs::rename(&tmp, &bin).context("install the built wardite binary")?;
+    }
+    Ok(bin)
 }
 
 /// `wasmtime` on PATH, if it runs at all.
@@ -1122,6 +1185,23 @@ fn wardite_gem_home() -> Option<PathBuf> {
                 .any(|gem| gem.file_name().to_string_lossy().starts_with("wardite-"))
         })
     })
+}
+
+/// The `wardite` gem directory under that `GEM_HOME`, the root of the Spinel build's sources.
+fn wardite_gem_dir() -> Option<PathBuf> {
+    let gems = std::fs::read_dir(wardite_gem_home()?.join("gems")).ok()?;
+    gems.flatten()
+        .map(|gem| gem.path())
+        .find(|gem| gem_label(gem).starts_with("wardite ") && gem.join("exe/wardite").is_file())
+}
+
+/// A gem directory's name as `name version`: `wardite-1.3.1` reads `wardite 1.3.1`.
+fn gem_label(gem: &Path) -> String {
+    let name = gem.file_name().unwrap_or_default().to_string_lossy();
+    match name.rsplit_once('-') {
+        Some((name, version)) => format!("{name} {version}"),
+        None => name.into_owned(),
+    }
 }
 
 /// The `pywasm` version as `importlib.metadata` reports it for the installed distribution.

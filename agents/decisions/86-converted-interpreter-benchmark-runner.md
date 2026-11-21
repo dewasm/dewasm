@@ -7,6 +7,10 @@ They take the MetaWASI wasm3 build from the app cache (fixed at v0.9.0).
 The Ruby and Python backends convert it standalone.
 The converted builds interpret each workload on Ruby, Ruby with YJIT, CPython, and PyPy.
 
+**Revision, 2026-11-21:** A fifth runner, `wasm3-spinel`, compiles the Ruby conversion with Spinel.
+It measured about 2.2 times faster than `wasm3-ruby-yjit`, and it finishes the two apps they skip.
+The `wardite-spinel` runner is its hand-written pair: the gem's own Spinel build, with no driver.
+
 ## Context
 
 The suite compares dewasm's converted output against wasm interpreters.
